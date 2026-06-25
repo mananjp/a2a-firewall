@@ -14,6 +14,38 @@ from a2a_firewall.db.models import Task, TraceEvent, Violation, Workspace
 router = APIRouter()
 
 
+@router.get("/by-trace/{trace_id}")
+async def trace_events(
+    trace_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return all trace_events for a given trace_id, scoped to current workspace.
+
+    Each event carries event_name, span_id, parent_span_id, attributes, duration_ms.
+    Ordered by created_at so the dashboard can render a timeline.
+    """
+    result = await db.execute(
+        select(TraceEvent)
+        .where(TraceEvent.workspace_id == ws.id, TraceEvent.trace_id == trace_id)
+        .order_by(TraceEvent.created_at)
+    )
+    events = result.scalars().all()
+    return [
+        {
+            "id": str(e.id),
+            "event_name": e.event_name,
+            "span_id": e.span_id,
+            "parent_span_id": e.parent_span_id,
+            "duration_ms": e.duration_ms,
+            "task_id": str(e.task_id) if e.task_id else None,
+            "attributes": e.attributes,
+            "created_at": str(e.created_at),
+        }
+        for e in events
+    ]
+
+
 @router.get("/{task_id}")
 async def get_task(
     task_id: str,
@@ -57,6 +89,19 @@ async def task_lineage(
     ws: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
+    """Return the lineage (ancestor chain) for a task, scoped to the current workspace.
+
+    Returns 404 if the task does not belong to this workspace — prevents
+    cross-tenant lineage leakage.
+    """
+    # Tenant isolation: confirm the task belongs to this workspace before
+    # walking the lineage. The CTE itself also filters by workspace_id.
+    task_check = await db.execute(
+        select(Task.id).where(Task.id == uuid.UUID(task_id), Task.workspace_id == ws.id)
+    )
+    if task_check.scalar_one_or_none() is None:
+        raise HTTPException(404, "Task not found")
+
     lineage_sql = """
         WITH RECURSIVE lineage AS (
             SELECT id, parent_task_id, sender_id, receiver_id, task_type, decision, depth
@@ -71,35 +116,3 @@ async def task_lineage(
     result = await db.execute(text(lineage_sql), {"task_id": task_id, "ws_id": str(ws.id)})
     rows = result.fetchall()
     return [dict(r._mapping) for r in rows]
-
-
-@router.get("/by-trace/{trace_id}")
-async def trace_events(
-    trace_id: str,
-    ws: Workspace = Depends(get_current_workspace),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict[str, Any]]:
-    """Return all trace_events for a given trace_id, scoped to current workspace.
-
-    Each event carries event_name, span_id, parent_span_id, attributes, duration_ms.
-    Ordered by created_at so the dashboard can render a timeline.
-    """
-    result = await db.execute(
-        select(TraceEvent)
-        .where(TraceEvent.workspace_id == ws.id, TraceEvent.trace_id == trace_id)
-        .order_by(TraceEvent.created_at)
-    )
-    events = result.scalars().all()
-    return [
-        {
-            "id": str(e.id),
-            "event_name": e.event_name,
-            "span_id": e.span_id,
-            "parent_span_id": e.parent_span_id,
-            "duration_ms": e.duration_ms,
-            "task_id": str(e.task_id) if e.task_id else None,
-            "attributes": e.attributes,
-            "created_at": str(e.created_at),
-        }
-        for e in events
-    ]

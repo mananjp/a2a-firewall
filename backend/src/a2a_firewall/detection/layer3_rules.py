@@ -40,7 +40,7 @@ async def run_rules(
                     "details": {"pattern": pattern},
                 }
             )
-            risk_delta = min(1.0, risk_delta + 0.4)
+            risk_delta = min(1.0, risk_delta + 0.8)
 
     result = await db.execute(
         select(PolicyRule)

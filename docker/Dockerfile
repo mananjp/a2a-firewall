@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,6 +13,8 @@ COPY src/ ./src/
 COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
+COPY alembic.ini .
+COPY src/a2a_firewall/db/migrations/ ./src/a2a_firewall/db/migrations/
 COPY db/init.sql ./db/init.sql
 COPY scripts/ ./scripts/
 COPY entrypoint.sh /entrypoint.sh
