@@ -1,6 +1,8 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from app.main import app
+from httpx import ASGITransport, AsyncClient
+
+from a2a_firewall.main import app
+
 
 @pytest.fixture
 async def client():
