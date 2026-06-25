@@ -13,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-a2a} -d ${POSTGRES_DB:-a2afirewall}"]
       interval: 10s
@@ -52,6 +51,20 @@ services:
         condition: service_started
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: a2a_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_URL: "http://localhost:8000"
+    depends_on:
+      backend:
+        condition: service_started
 
 volumes:
   pgdata:

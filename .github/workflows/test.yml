@@ -1,0 +1,198 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  backend-lint-typecheck-unit:
+    name: Backend lint / typecheck / unit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install runtime + dev deps
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e .
+
+      - name: Ruff lint
+        run: .venv/bin/ruff check src tests
+
+      - name: Ruff format check
+        run: .venv/bin/ruff format --check src tests
+
+      - name: mypy strict
+        run: .venv/bin/mypy src
+
+      - name: pytest unit + coverage
+        run: .venv/bin/pytest tests/unit -v --cov=src/a2a_firewall --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          fail_ci_if_error: false
+
+  backend-integration:
+    name: Backend integration (postgres + jaeger)
+    runs-on: ubuntu-latest
+    needs: backend-lint-typecheck-unit
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: a2a
+          POSTGRES_PASSWORD: a2apassword
+          POSTGRES_DB: a2afirewall
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U a2a -d a2afirewall"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      jaeger:
+        image: jaegertracing/all-in-one:latest
+        ports:
+          - 4318:4318
+          - 16686:16686
+    env:
+      DATABASE_URL: postgresql+asyncpg://a2a:a2apassword@localhost:5432/a2afirewall
+      GROQ_API_KEY: test-key
+      SECRET_KEY: test-secret
+      API_KEY_SALT: test-salt
+      DEBUG: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+      OTEL_SDK_DISABLED: "true"
+      RATE_LIMIT_ENABLED: "false"
+      TEST_DATABASE_URL: postgresql+asyncpg://a2a:a2apassword@localhost:5432/a2afirewall
+      TEST_BACKEND_URL: http://localhost:8000
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e .
+
+      - name: Apply Alembic migrations
+        run: .venv/bin/alembic upgrade head
+
+      - name: Start backend in background
+        run: |
+          .venv/bin/uvicorn a2a_firewall.main:app --host 127.0.0.1 --port 8000 &
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "backend healthy"; break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8000/health || (echo "backend failed to start"; exit 1)
+
+      - name: Run integration tests
+        run: .venv/bin/pytest tests/integration -v
+
+      - name: Run e2e tests
+        run: .venv/bin/pytest tests/e2e -v
+
+  backend-security:
+    name: Backend security audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: pip-audit
+        run: .venv/bin/python -m pip_audit -r requirements.txt -r requirements-dev.txt
+
+  backend-build:
+    name: Backend docker build
+    runs-on: ubuntu-latest
+    needs: backend-lint-typecheck-unit
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./docker/Dockerfile
+          push: false
+          tags: a2a-firewall-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  frontend-build:
+    name: Frontend build + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:8000
+
+      - name: Test
+        run: npm test -- --run
+        env:
+          VITE_API_URL: http://localhost:8000

@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from a2a_firewall.api.routes import (
     agents,
+    auth,
     firewall,
     policies,
     review,
@@ -98,6 +99,7 @@ app.add_middleware(
 setup_telemetry(app)
 
 app.include_router(workspaces.router, prefix="/v1/workspaces", tags=["workspaces"])
+app.include_router(auth.router, prefix="/v1/auth", tags=["auth"])
 app.include_router(agents.router, prefix="/v1/agents", tags=["agents"])
 app.include_router(schemas.router, prefix="/v1/schemas", tags=["schemas"])
 app.include_router(firewall.router, prefix="/v1/firewall", tags=["firewall"])

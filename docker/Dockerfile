@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir .
 
 COPY db/init.sql ./db/init.sql
 COPY scripts/ ./scripts/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "a2a_firewall.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/entrypoint.sh"]

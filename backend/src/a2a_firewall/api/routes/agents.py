@@ -111,6 +111,67 @@ async def create_permission(
     }
 
 
+@router.post("/{agent_id}/suspend")
+async def suspend_agent(
+    agent_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark an agent as suspended (cannot send/receive tasks)."""
+    result = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Agent not found")
+    agent.status = "suspended"  # type: ignore[assignment]
+    await db.commit()
+    return {"id": str(agent.id), "status": agent.status}
+
+
+@router.post("/{agent_id}/reactivate")
+async def reactivate_agent(
+    agent_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark a suspended agent as active."""
+    result = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Agent not found")
+    agent.status = "active"  # type: ignore[assignment]
+    await db.commit()
+    return {"id": str(agent.id), "status": agent.status}
+
+
+@router.post("/{agent_id}/rotate-key")
+async def rotate_agent_key(
+    agent_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Rotate the API key for an agent. Old key becomes invalid immediately."""
+    result = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Agent not found")
+    new_raw, new_hash = generate_api_key("agt")
+    agent.api_key_hash = new_hash  # type: ignore[assignment]
+    await db.commit()
+    return {"id": str(agent.id), "api_key": new_raw}
+
+
 @router.get("")
 async def list_agents(
     ws: Workspace = Depends(get_current_workspace),
