@@ -48,11 +48,13 @@ def alembic_upgrade(require_stack: None) -> None:
     assert TEST_DATABASE_URL is not None
     env = os.environ.copy()
     env["DATABASE_URL"] = TEST_DATABASE_URL
+    venv_bin = "Scripts" if os.name == "nt" else "bin"
+    venv_python_name = "python.exe" if os.name == "nt" else "python"
     venv_python = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
         ".venv",
-        "Scripts",
-        "python.exe",
+        venv_bin,
+        venv_python_name,
     )
     subprocess.run(
         [venv_python, "-m", "alembic", "upgrade", "head"],
