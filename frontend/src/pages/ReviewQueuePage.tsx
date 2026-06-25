@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { review } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
 import type { ReviewItem } from "../api/types";
@@ -10,7 +10,7 @@ export default function ReviewQueuePage() {
     loading,
     error: loadErr,
     refresh,
-  } = usePolling<ReviewItem[]>(() => review.list() as Promise<ReviewItem[]>, 5000);
+  } = usePolling<ReviewItem[]>(useCallback((_signal) => review.list() as Promise<ReviewItem[]>, []), 5000);
 
   async function onDecide(token: string, action: "approve" | "reject") {
     setError(null);

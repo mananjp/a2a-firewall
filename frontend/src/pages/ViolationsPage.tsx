@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { tasks, violations } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
@@ -9,7 +9,7 @@ export default function ViolationsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, loading, error } = usePolling<Violation[]>(
-    (_signal) => violations.list(severity) as Promise<Violation[]>,
+    useCallback((_signal) => violations.list(severity) as Promise<Violation[]>, [severity]),
     5000,
   );
 
@@ -91,7 +91,10 @@ export default function ViolationsPage() {
 
 function ViolationDetail({ taskId }: { taskId: string | null }) {
   const { data: task, loading } = usePolling<TaskDetail | null>(
-    (_signal) => (taskId ? tasks.get(taskId).then((t) => t as TaskDetail) : Promise.resolve(null)),
+    useCallback(
+      (_signal) => (taskId ? tasks.get(taskId).then((t) => t as TaskDetail) : Promise.resolve(null)),
+      [taskId],
+    ),
     5000,
     !!taskId,
   );

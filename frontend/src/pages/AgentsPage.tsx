@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useCallback, type FormEvent } from "react";
 import { agents } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
 import type { Agent, AgentWithKey } from "../api/types";
@@ -15,7 +15,7 @@ export default function AgentsPage() {
     loading,
     error: loadErr,
     refresh,
-  } = usePolling<Agent[]>(() => agents.list() as Promise<Agent[]>, 10000);
+  } = usePolling<Agent[]>(useCallback((_signal) => agents.list() as Promise<Agent[]>, []), 10000);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useCallback, type FormEvent } from "react";
 import { policies } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
 import type { Policy, PolicyAction } from "../api/types";
@@ -18,7 +18,7 @@ export default function PoliciesPage() {
     loading,
     error: loadErr,
     refresh,
-  } = usePolling<Policy[]>(() => policies.list() as Promise<Policy[]>, 10000);
+  } = usePolling<Policy[]>(useCallback((_signal) => policies.list() as Promise<Policy[]>, []), 10000);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

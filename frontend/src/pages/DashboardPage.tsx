@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { Link } from "react-router-dom";
 import { violations } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
@@ -9,7 +10,7 @@ export default function DashboardPage() {
     loading,
     error,
   } = usePolling<Violation[]>(
-    (_signal) => violations.list(undefined).then((r) => r as unknown as Violation[]),
+    useCallback((_signal) => violations.list(undefined).then((r) => r as unknown as Violation[]), []),
     5000,
     true,
   );
