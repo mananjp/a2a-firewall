@@ -50,6 +50,7 @@ services:
       jaeger:
         condition: service_started
     environment:
+      DATABASE_URL: "postgresql+asyncpg://a2a:a2apassword@db:5432/a2afirewall"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
 
   frontend:

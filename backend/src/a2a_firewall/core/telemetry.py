@@ -12,6 +12,33 @@ from opentelemetry.trace import get_tracer_provider
 
 from a2a_firewall.core.config import settings
 
+# Monkeypatch opentelemetry-instrumentation-fastapi to tolerate starlette _IncludedRouter lacking path attribute.
+try:
+    import opentelemetry.instrumentation.fastapi as otel_fastapi
+    from starlette.routing import Match
+
+    def patched_get_route_details(scope):
+        try:
+            app = scope["app"]
+            route = None
+            for starlette_route in app.routes:
+                try:
+                    match, _ = starlette_route.matches(scope)
+                    if match == Match.FULL:
+                        route = getattr(starlette_route, "path", getattr(starlette_route, "path_format", None))
+                        break
+                    if match == Match.PARTIAL:
+                        route = getattr(starlette_route, "path", getattr(starlette_route, "path_format", None))
+                except Exception:
+                    pass
+            return route
+        except Exception:
+            return None
+
+    otel_fastapi._get_route_details = patched_get_route_details
+except Exception:
+    pass
+
 
 def setup_telemetry(app: FastAPI) -> None:
     """Initialize OpenTelemetry tracing and instrument the FastAPI app.
