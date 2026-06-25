@@ -226,6 +226,19 @@ async def run_inspection(
     risk_score = min(1.0, risk_score + rule_result["risk_delta"])
     matched_rule_id = rule_result.get("matched_rule_id")
     if risk_score >= workspace.block_threshold:
+        trace_events.append(
+            {
+                "name": "firewall.decision",
+                "span_id": uuid.uuid4().hex,
+                "parent_span_id": parent_span_id,
+                "duration_ms": 0,
+                "attributes": {
+                    "decision": "block",
+                    "risk_score": risk_score,
+                    "final_reason": "rule_threshold_exceeded",
+                },
+            }
+        )
         return await _save_and_return(
             "block",
             "rule_threshold_exceeded",

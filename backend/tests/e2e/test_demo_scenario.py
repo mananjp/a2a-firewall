@@ -188,10 +188,10 @@ def test_clean_3_agent_pipeline() -> None:
         assert r.status_code == 200
         lineage = r.json()
         assert len(lineage) == 2
-        assert lineage[0]["id"] == t2["task_id"]
-        assert lineage[1]["id"] == t1["task_id"]
-        assert lineage[0]["depth"] == 1
-        assert lineage[1]["depth"] == 0
+        assert lineage[0]["id"] == t1["task_id"]
+        assert lineage[1]["id"] == t2["task_id"]
+        assert lineage[0]["depth"] == 0
+        assert lineage[1]["depth"] == 1
         # Sanity check: ids are not the workspace agent id
         for node in lineage:
             assert node["sender_id"] != root
