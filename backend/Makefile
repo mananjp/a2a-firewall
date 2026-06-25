@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck test test-unit test-int test-e2e build audit pipeline clean run dev docker-up docker-down
+.PHONY: help install lint format typecheck test test-unit test-int test-e2e migrate build audit pipeline clean run dev docker-up docker-down
 
 PYTHON ?= python
 VENV ?= .venv
@@ -19,8 +19,9 @@ help:
 	@echo "  make typecheck    mypy --strict"
 	@echo "  make test         All tests"
 	@echo "  make test-unit    Unit tests only"
-	@echo "  make test-int     Integration tests (requires running services)"
+	@echo "  make test-int     Integration tests (requires TEST_DATABASE_URL)"
 	@echo "  make test-e2e     E2E tests (requires running services)"
+	@echo "  make migrate      Apply Alembic migrations to DATABASE_URL"
 	@echo "  make build        Docker image build"
 	@echo "  make audit        pip-audit dependency vulnerability scan"
 	@echo "  make pipeline     Run steps 1-6 (lint, format, typecheck, test, build, audit)"
@@ -56,6 +57,9 @@ test-int:
 
 test-e2e:
 	$(PYTEST) tests/e2e -v
+
+migrate:
+	$(PY) -m alembic upgrade head
 
 build:
 	docker build -t a2a-firewall-backend:test -f ../docker/Dockerfile .
