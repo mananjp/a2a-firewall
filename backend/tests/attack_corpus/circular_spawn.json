@@ -1,0 +1,13 @@
+{
+  "name": "circular_spawn",
+  "description": "Agent attempts to send a task to itself, creating a circular reference. Caught at layer 0 preflight.",
+  "task_type": "research",
+  "depth": 0,
+  "payload": {
+    "query": "self-loop test"
+  },
+  "use_sender_as_receiver": true,
+  "expected_decision": "block",
+  "expected_violation_types": ["circular_reference"],
+  "expected_block_reason": "circular_reference"
+}

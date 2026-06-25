@@ -1,0 +1,12 @@
+{
+  "name": "deep_chain",
+  "description": "Task arriving at depth 11 (limit is 10). Caught at layer 0 preflight before any expensive work.",
+  "task_type": "research",
+  "depth": 11,
+  "payload": {
+    "query": "test"
+  },
+  "expected_decision": "block",
+  "expected_violation_types": ["max_depth_exceeded"],
+  "expected_block_reason": "max_depth_exceeded"
+}

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     GROQ_THRESHOLD: float = 0.3
     BLOCK_THRESHOLD: float = 0.8
     REVIEW_THRESHOLD: float = 0.5
+    WORKSPACE_RATE_LIMIT_PER_MIN: int = 1000
+    AGENT_INSPECT_RATE_LIMIT_PER_MIN: int = 60
+    RATE_LIMIT_ENABLED: bool = True
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4318"
     OTEL_SERVICE_NAME: str = "a2a-firewall"
 
