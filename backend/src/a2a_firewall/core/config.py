@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +8,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     DATABASE_URL: str = "postgresql+asyncpg://test:test@localhost:5432/test"
+
+    @model_validator(mode="after")
+    def _fix_database_url_scheme(self) -> Settings:
+        """Render (and many PaaS providers) supply ``postgresql://`` URLs.
+
+        SQLAlchemy's async engine requires the ``+asyncpg`` dialect suffix,
+        so we transparently rewrite the scheme when it is missing.
+        """
+        url = self.DATABASE_URL
+        if url.startswith("postgresql://"):
+            self.DATABASE_URL = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self
+
     GROQ_API_KEY: str = "test_key"
     GROQ_MODEL: str = "llama-3.1-8b-instant"
     GROQ_TIMEOUT_SECONDS: float = 2.0
