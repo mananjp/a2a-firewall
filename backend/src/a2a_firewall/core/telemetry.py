@@ -57,7 +57,14 @@ def setup_telemetry(app: FastAPI) -> None:
 
     provider = TracerProvider()
     try:
-        exporter = OTLPSpanExporter(endpoint=f"{settings.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces")
+        _raw_headers = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+        _headers = dict(
+            pair.split("=", 1) for pair in _raw_headers.split(",") if "=" in pair
+        )
+        exporter = OTLPSpanExporter(
+            endpoint=f"{settings.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces",
+            headers=_headers or None,
+        )
         provider.add_span_processor(BatchSpanProcessor(exporter))
     except Exception:
         pass  # OTLP endpoint unreachable at startup; continue without export.
