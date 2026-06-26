@@ -155,7 +155,6 @@ def _inspect(
 def test_clean_3_agent_pipeline() -> None:
     """Planner -> Researcher -> Summarizer chain runs end-to-end with all allows."""
     stack = _register_stack()
-    root = stack["planner"]["agent_id"]
 
     # Hop 1: planner -> researcher
     t1 = _inspect(
@@ -192,9 +191,9 @@ def test_clean_3_agent_pipeline() -> None:
         assert lineage[1]["id"] == t2["task_id"]
         assert lineage[0]["depth"] == 0
         assert lineage[1]["depth"] == 1
-        # Sanity check: ids are not the workspace agent id
-        for node in lineage:
-            assert node["sender_id"] != root
+        # Sanity check: sender_id is the sender agent of the hop.
+        assert lineage[0]["sender_id"] == stack["planner"]["agent_id"]
+        assert lineage[1]["sender_id"] == stack["researcher"]["agent_id"]
 
 
 def test_attack_pipeline_blocks_at_researcher() -> None:
