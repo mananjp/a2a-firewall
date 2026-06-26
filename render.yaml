@@ -35,7 +35,6 @@ services:
     branch: main
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: frontend/dist
-    plan: free
     envVars:
       - key: VITE_API_URL
         value: https://a2a-firewall-backend.onrender.com
