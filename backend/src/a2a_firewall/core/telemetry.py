@@ -25,10 +25,14 @@ try:
                 try:
                     match, _ = starlette_route.matches(scope)
                     if match == Match.FULL:
-                        route = getattr(starlette_route, "path", getattr(starlette_route, "path_format", None))
+                        route = getattr(
+                            starlette_route, "path", getattr(starlette_route, "path_format", None)
+                        )
                         break
                     if match == Match.PARTIAL:
-                        route = getattr(starlette_route, "path", getattr(starlette_route, "path_format", None))
+                        route = getattr(
+                            starlette_route, "path", getattr(starlette_route, "path_format", None)
+                        )
                 except Exception:
                     pass
             return route
