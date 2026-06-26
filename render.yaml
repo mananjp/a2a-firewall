@@ -1,11 +1,13 @@
 services:
   - type: web
     name: a2a-firewall-backend
-    runtime: image
+    env: docker
     repo: https://github.com/mananjp/a2a-firewall
+    branch: main
     dockerfilePath: ./docker/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
+    plan: free
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -28,11 +30,12 @@ services:
 
   - type: web
     name: a2a-firewall-frontend
-    runtime: static
+    env: static
     repo: https://github.com/mananjp/a2a-firewall
+    branch: main
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: frontend/dist
-    pullRequestPreviewsEnabled: true
+    plan: free
     envVars:
       - key: VITE_API_URL
         value: https://a2a-firewall-backend.onrender.com
