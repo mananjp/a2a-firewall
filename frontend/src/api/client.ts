@@ -25,10 +25,12 @@ export function getApiKey(): string | null {
 
 export function setApiKey(key: string): void {
   localStorage.setItem(KEY_STORAGE, key);
+  window.dispatchEvent(new Event("apikey-change"));
 }
 
 export function clearApiKey(): void {
   localStorage.removeItem(KEY_STORAGE);
+  window.dispatchEvent(new Event("apikey-change"));
 }
 
 async function request<T>(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {

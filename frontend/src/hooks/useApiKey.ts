@@ -8,11 +8,17 @@ export function useApiKey(): {
 } {
   const [apiKey, setApiKeyState] = useState<string | null>(getApiKey());
 
-  // Keep state in sync if another tab changes localStorage.
+  // Keep state in sync when the key changes — covers both cross-tab
+  // (storage event) and same-tab updates (custom apikey-change event
+  // dispatched by setApiKey / clearApiKey in client.ts).
   useEffect(() => {
-    const onStorage = () => setApiKeyState(getApiKey());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const sync = () => setApiKeyState(getApiKey());
+    window.addEventListener("storage", sync);
+    window.addEventListener("apikey-change", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("apikey-change", sync);
+    };
   }, []);
 
   const setKey = useCallback((key: string) => {
