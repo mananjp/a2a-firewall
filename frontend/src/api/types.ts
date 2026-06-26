@@ -129,3 +129,9 @@ export interface LoginResponse {
   api_key: string;
   warning: string;
 }
+
+export interface WorkspaceRegisterResponse {
+  workspace_id: string;
+  api_key: string;
+  name: string;
+}

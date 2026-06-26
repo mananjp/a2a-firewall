@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useApiKey } from "./hooks/useApiKey";
 import Layout from "./components/Layout";
-import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import DashboardPage from "./pages/DashboardPage";
 import ViolationsPage from "./pages/ViolationsPage";
 import TreeViewPage from "./pages/TreeViewPage";
@@ -16,8 +16,10 @@ export default function App() {
   if (!apiKey) {
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<LandingPage />} />
+        {/* Backwards-compat: legacy /login redirects to the new landing hub. */}
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }

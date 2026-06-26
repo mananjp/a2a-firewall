@@ -11,11 +11,12 @@ import type {
   TraceEvent,
   Violation,
   Workspace,
+  WorkspaceRegisterResponse,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-// Keys are stored in localStorage (DEV ONLY — see LoginPage for the warning).
+// Keys are stored in localStorage (DEV ONLY — see LandingPage's auth panel for the warning).
 const KEY_STORAGE = "a2a_workspace_key";
 
 export function getApiKey(): string | null {
@@ -67,6 +68,11 @@ export const auth = {
 
 // ---------- Workspaces ----------
 export const workspaces = {
+  register: (body: { name: string; admin_email: string }) =>
+    request<WorkspaceRegisterResponse>("/v1/workspaces/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   me: () => request<Workspace>("/v1/workspaces/me"),
 };
 
