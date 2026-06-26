@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+from typing import Any
 
 from fastapi import FastAPI
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -17,10 +18,10 @@ try:
     import opentelemetry.instrumentation.fastapi as otel_fastapi
     from starlette.routing import Match
 
-    def patched_get_route_details(scope):
+    def patched_get_route_details(scope: dict[str, Any]) -> str | None:
         try:
             app = scope["app"]
-            route = None
+            route: str | None = None
             for starlette_route in app.routes:
                 try:
                     match, _ = starlette_route.matches(scope)
