@@ -58,6 +58,7 @@ def setup_telemetry(app: FastAPI) -> None:
     provider = TracerProvider()
     try:
         _raw_headers = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+        _raw_headers = _raw_headers.replace("%20", " ")
         _headers = dict(
             pair.split("=", 1) for pair in _raw_headers.split(",") if "=" in pair
         )
