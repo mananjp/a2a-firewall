@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+.git/
+.gitignore
+*.md
+.DS_Store
+.vscode/
+.idea/
+tests/
+scripts/dev.sh
+scripts/run_demo.sh
+requirements-dev.txt
+Makefile

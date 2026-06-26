@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PYTHON_VERSION: "3.12"
 
@@ -24,6 +28,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Create venv and install deps
         run: |
@@ -95,6 +101,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Create venv and install deps
         run: |
@@ -136,6 +144,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Create venv and install deps
         run: |
@@ -167,10 +177,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   frontend-build:
-    name: Frontend build + lint
+    name: Frontend lint / typecheck / test / build
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
     defaults:
       run:
         working-directory: frontend
@@ -181,19 +189,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: Build
-        run: npm run build
+      - name: Test
+        run: npm test -- --run
         env:
           VITE_API_URL: http://localhost:8000
 
-      - name: Test
-        run: npm test -- --run
+      - name: Build
+        run: npm run build
         env:
           VITE_API_URL: http://localhost:8000

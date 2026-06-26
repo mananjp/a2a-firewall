@@ -6,81 +6,51 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
-    inputs:
-      target:
-        description: "Deploy target (backend|frontend|both)"
-        required: true
-        default: "both"
-        type: choice
-        options:
-          - backend
-          - frontend
-          - both
 
 jobs:
-  deploy-backend:
-    name: Deploy backend (Railway)
+  deploy:
+    name: Deploy to Render
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      (inputs.target == 'backend' || inputs.target == 'both')
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
     environment: production
     steps:
-      - uses: actions/checkout@v4
-
-      # STUB: requires RAILWAY_TOKEN secret to be set in repo settings.
-      # Uncomment the step below after adding the secret.
-      #
-      # - name: Install Railway CLI
-      #   run: npm install -g @railway/cli
-      #
-      # - name: Deploy to Railway
-      #   env:
-      #     RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      #   run: railway up --detach
-      #
-      # - name: Run smoke test
-      #   run: |
-      #     sleep 30
-      #     curl -sf ${{ secrets.RAILWAY_URL }}/health || exit 1
-
-      - name: Stub deploy step
+      - name: Deploy backend to Render
         run: |
-          echo "[deploy-stub] RAILWAY_TOKEN not configured — skipping real deploy."
-          echo "[deploy-stub] To enable: add RAILWAY_TOKEN and RAILWAY_URL secrets,"
-          echo "[deploy-stub] then uncomment the steps in .github/workflows/deploy.yml."
+          if [ -n "${{ secrets.RENDER_BACKEND_HOOK }}" ]; then
+            curl -sf -X POST "${{ secrets.RENDER_BACKEND_HOOK }}" && \
+              echo "backend deploy triggered" || echo "backend deploy hook failed"
+          else
+            echo "RENDER_BACKEND_HOOK not set — skipping backend deploy"
+          fi
 
-  deploy-frontend:
-    name: Deploy frontend (Vercel)
-    runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      (inputs.target == 'frontend' || inputs.target == 'both')
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      # STUB: requires VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID secrets.
-      # Uncomment after adding them.
-      #
-      # - name: Install Vercel CLI
-      #   run: npm install -g vercel
-      #
-      # - name: Pull Vercel config
-      #   env:
-      #     VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      #   run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-      #
-      # - name: Build
-      #   run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-      #   env:
-      #     VITE_API_URL: ${{ secrets.VITE_API_URL }}
-      #
-      # - name: Deploy
-      #   run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Stub deploy step
+      - name: Deploy frontend to Render
         run: |
-          echo "[deploy-stub] VERCEL_TOKEN not configured — skipping real deploy."
-          echo "[deploy-stub] To enable: add VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID,"
-          echo "[deploy-stub] and VITE_API_URL secrets, then uncomment the steps in .github/workflows/deploy.yml."
+          if [ -n "${{ secrets.RENDER_FRONTEND_HOOK }}" ]; then
+            curl -sf -X POST "${{ secrets.RENDER_FRONTEND_HOOK }}" && \
+              echo "frontend deploy triggered" || echo "frontend deploy hook failed"
+          else
+            echo "RENDER_FRONTEND_HOOK not set — skipping frontend deploy"
+          fi
+
+      - name: Wait for backend health
+        run: |
+          if [ -z "${{ secrets.RENDER_BACKEND_URL }}" ]; then
+            echo "RENDER_BACKEND_URL not set — skipping health check"
+            exit 0
+          fi
+          for i in {1..60}; do
+            if curl -sf "${{ secrets.RENDER_BACKEND_URL }}/health" >/dev/null 2>&1; then
+              echo "backend healthy"; exit 0
+            fi
+            sleep 5
+          done
+          echo "backend failed to start in 5 minutes" >&2
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "Deploy triggered successfully."
+          echo "Backend: ${{ secrets.RENDER_BACKEND_URL || 'not configured' }}"
+          echo "Frontend: ${{ secrets.RENDER_FRONTEND_URL || 'not configured' }}"

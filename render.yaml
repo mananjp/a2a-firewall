@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: a2a-firewall-backend
+    runtime: image
+    repo: https://github.com/mananjp/a2a-firewall
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: a2a-firewall-db
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: API_KEY_SALT
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://a2a-firewall-frontend.onrender.com
+      - key: OTEL_SDK_DISABLED
+        value: "true"
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: DEBUG
+        value: "false"
+
+  - type: web
+    name: a2a-firewall-frontend
+    runtime: static
+    repo: https://github.com/mananjp/a2a-firewall
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: VITE_API_URL
+        value: https://a2a-firewall-backend.onrender.com
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /.*
+        destination: /index.html
+
+databases:
+  - name: a2a-firewall-db
+    databaseName: a2afirewall
+    user: a2a
+    plan: free
