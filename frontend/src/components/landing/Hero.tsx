@@ -23,7 +23,7 @@ export function Hero({ onSignInClick }: HeroProps) {
           <a href="#pipeline" className="hover:text-white">Pipeline</a>
           <a href="#auth" className="hover:text-white">Sign in</a>
           <a
-            href="https://github.com"
+            href="https://github.com/mananjp/a2a-firewall"
             target="_blank"
             rel="noreferrer"
             className="hover:text-white"

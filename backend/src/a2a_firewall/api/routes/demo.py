@@ -100,8 +100,7 @@ async def demo_run(
     if not scenario:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown scenario '{body.scenario}'. "
-            f"Available: {', '.join(SCENARIOS.keys())}",
+            detail=f"Unknown scenario '{body.scenario}'. Available: {', '.join(SCENARIOS.keys())}",
         )
 
     # Grab the first active agent for this workspace to act as sender+receiver.
