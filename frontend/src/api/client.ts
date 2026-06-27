@@ -143,3 +143,19 @@ export const firewall = {
       body: JSON.stringify(body),
     }),
 };
+
+// ---------- Demo ----------
+export interface DemoRunResponse extends FirewallResponse {
+  demo_scenario: string;
+  demo_label: string;
+  demo_description: string;
+  demo_payload: Record<string, unknown>;
+}
+
+export const demo = {
+  run: (scenario: string) =>
+    request<DemoRunResponse>("/v1/demo/run", {
+      method: "POST",
+      body: JSON.stringify({ scenario }),
+    }),
+};

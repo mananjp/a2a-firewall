@@ -9,6 +9,7 @@ import TraceDetailPage from "./pages/TraceDetailPage";
 import AgentsPage from "./pages/AgentsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 import ReviewQueuePage from "./pages/ReviewQueuePage";
+import LiveDemoPage from "./pages/LiveDemoPage";
 
 export default function App() {
   const { apiKey } = useApiKey();
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/policies" element={<PoliciesPage />} />
         <Route path="/review" element={<ReviewQueuePage />} />
+        <Route path="/demo" element={<LiveDemoPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -12,6 +12,7 @@ const NAV = [
   { to: "/agents", label: "Agents" },
   { to: "/policies", label: "Policies" },
   { to: "/review", label: "Review Queue" },
+  { to: "/demo", label: "🔥 Live Demo" },
 ];
 
 export default function Layout({ children }: LayoutProps) {
