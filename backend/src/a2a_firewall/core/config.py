@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import ssl
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Query-string keys that asyncpg does not accept via the DSN and must
+# be forwarded through ``connect_args`` instead.
+_ASYNCPG_INCOMPATIBLE_PARAMS = frozenset({"sslmode"})
 
 
 class Settings(BaseSettings):
@@ -9,16 +16,38 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+asyncpg://test:test@localhost:5432/test"
 
+    # Populated automatically by the validator below.
+    DATABASE_SSL_REQUIRED: bool = False
+
     @model_validator(mode="after")
     def _fix_database_url_scheme(self) -> Settings:
-        """Render (and many PaaS providers) supply ``postgresql://`` URLs.
+        """Normalise the database URL for asyncpg.
 
-        SQLAlchemy's async engine requires the ``+asyncpg`` dialect suffix,
-        so we transparently rewrite the scheme when it is missing.
+        1. Rewrite ``postgresql://`` → ``postgresql+asyncpg://`` so
+           SQLAlchemy picks the async driver.
+        2. Strip query-string parameters that asyncpg cannot handle
+           (e.g. ``sslmode``).  When ``sslmode`` is set to anything other
+           than ``disable``, we flag ``DATABASE_SSL_REQUIRED`` so that
+           ``database.py`` can pass an ``ssl.SSLContext`` via
+           ``connect_args``.
         """
         url = self.DATABASE_URL
         if url.startswith("postgresql://"):
-            self.DATABASE_URL = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        parts = urlsplit(url)
+        params = parse_qs(parts.query)
+
+        # Detect SSL requirement from sslmode param.
+        sslmode = params.get("sslmode", [None])[0]
+        if sslmode and sslmode != "disable":
+            self.DATABASE_SSL_REQUIRED = True
+
+        # Drop params that asyncpg chokes on.
+        cleaned = {k: v for k, v in params.items() if k not in _ASYNCPG_INCOMPATIBLE_PARAMS}
+        clean_query = urlencode(cleaned, doseq=True)
+
+        self.DATABASE_URL = urlunsplit(parts._replace(query=clean_query))
         return self
 
     GROQ_API_KEY: str = "test_key"
