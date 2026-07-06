@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ssl
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from pydantic import model_validator
