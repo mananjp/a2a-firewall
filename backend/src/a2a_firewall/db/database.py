@@ -21,7 +21,7 @@ class Base(DeclarativeBase):
 # the config validator strips it from the DSN and sets DATABASE_SSL_REQUIRED.
 # We honour that flag by passing an SSLContext through asyncpg's native
 # ``connect_args`` so the connection is still encrypted.
-_connect_args: dict = {}
+_connect_args: dict[str, ssl.SSLContext] = {}
 if settings.DATABASE_SSL_REQUIRED:
     _connect_args["ssl"] = ssl.create_default_context()
 
