@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import ssl
-from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-# Query-string keys that asyncpg does not accept via the DSN and must
-# be forwarded through ``connect_args`` instead.
-_ASYNCPG_INCOMPATIBLE_PARAMS = frozenset({"sslmode"})
 
 
 class Settings(BaseSettings):
@@ -25,11 +21,11 @@ class Settings(BaseSettings):
 
         1. Rewrite ``postgresql://`` → ``postgresql+asyncpg://`` so
            SQLAlchemy picks the async driver.
-        2. Strip query-string parameters that asyncpg cannot handle
-           (e.g. ``sslmode``).  When ``sslmode`` is set to anything other
-           than ``disable``, we flag ``DATABASE_SSL_REQUIRED`` so that
-           ``database.py`` can pass an ``ssl.SSLContext`` via
-           ``connect_args``.
+        2. Strip **all** query-string parameters from the DSN.  asyncpg
+           does not understand libpq-style params (``sslmode``,
+           ``channel_binding``, ``options``, …) and raises ``TypeError``
+           for each one.  SSL is enforced via ``connect_args`` in
+           ``database.py`` instead.
         """
         url = self.DATABASE_URL
         if url.startswith("postgresql://"):
@@ -38,16 +34,13 @@ class Settings(BaseSettings):
         parts = urlsplit(url)
         params = parse_qs(parts.query)
 
-        # Detect SSL requirement from sslmode param.
+        # Detect SSL requirement from sslmode before we strip it.
         sslmode = params.get("sslmode", [None])[0]
         if sslmode and sslmode != "disable":
             self.DATABASE_SSL_REQUIRED = True
 
-        # Drop params that asyncpg chokes on.
-        cleaned = {k: v for k, v in params.items() if k not in _ASYNCPG_INCOMPATIBLE_PARAMS}
-        clean_query = urlencode(cleaned, doseq=True)
-
-        self.DATABASE_URL = urlunsplit(parts._replace(query=clean_query))
+        # Drop *all* query params – asyncpg doesn't accept any of them.
+        self.DATABASE_URL = urlunsplit(parts._replace(query=""))
         return self
 
     GROQ_API_KEY: str = "test_key"
