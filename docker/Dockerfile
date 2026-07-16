@@ -10,12 +10,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
-COPY pyproject.toml .
+COPY pyproject.toml alembic.ini ./
 RUN pip install --no-cache-dir .
 
-COPY alembic.ini .
-COPY src/a2a_firewall/db/migrations/ ./src/a2a_firewall/db/migrations/
-COPY db/init.sql ./db/init.sql
+COPY db/ ./db/
 COPY scripts/ ./scripts/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

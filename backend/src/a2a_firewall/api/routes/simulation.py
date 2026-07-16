@@ -112,6 +112,9 @@ class SimulationStep(BaseModel):
     sender: str
     receiver: str
     task_type: str | None = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    action: str | None = None
     payload: dict[str, Any]
 
 
@@ -200,6 +203,9 @@ async def run_simulation(
             "receiver_agent_id": str(receiver.id),
             "task_type": task_type,
             "schema_version": "v1",
+            "resource_type": step.resource_type,
+            "resource_id": step.resource_id,
+            "action": step.action,
             "payload": step.payload,
             "trace_id": trace_id,
             "parent_span_id": None,

@@ -23,6 +23,9 @@ class InspectRequest(BaseModel):
     task_type: str
     schema_version: str = "v1"
     payload: dict[str, Any]
+    resource_type: str | None = None  # e.g. "account", "payment", "customer_data"
+    resource_id: str | None = None  # e.g. "ACC-42", "TX-100"
+    action: str | None = None  # e.g. "read", "transfer", "delete", "approve"
     trace_id: str | None = None
     parent_span_id: str | None = None
     sdk_version: str | None = None

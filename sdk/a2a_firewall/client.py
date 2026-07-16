@@ -48,13 +48,13 @@ except ImportError:
 @dataclass
 class FirewallConfig:
     firewall_url: str
-    workspace_id: str
-    agent_id: str
     agent_api_key: str
-    agent_private_key: str = ""  # hex-encoded Ed25519 private key (for signing)
-    workspace_root_pubkey: str = ""  # hex-encoded Ed25519 public key (for verification)
+    workspace_id: str = ""
+    agent_id: str = ""
+    agent_private_key: str = ""
+    workspace_root_pubkey: str = ""
     timeout_seconds: float = 5.0
-    fail_mode: str = "closed"  # "open" | "closed"
+    fail_mode: str = "closed"
     review_poll_interval: float = 2.0
     review_max_wait: float = 60.0
 
@@ -234,30 +234,6 @@ class A2AFirewall:
     # OTel helpers
     # ---------------------------------------------------------------------------
 
-    def _start_inspect_span(self, task_type: str, receiver_id: str) -> Any | None:
-        """Start an OTel CLIENT span for the inspect call, or None if OTel unavailable."""
-        if not _OTEL_AVAILABLE:
-            return None
-        tracer = trace.get_tracer("a2a-firewall-sdk", "0.2.0")
-        span = tracer.start_span(
-            "firewall.inspect",
-            kind=SpanKind.CLIENT,
-            attributes={
-                "task_type": task_type,
-                "receiver_agent_id": receiver_id,
-            },
-        )
-        return span
-
-    def _apply_otel_context(self, body: dict[str, Any], span: Any | None) -> None:
-        """Override trace_id/parent_span_id from OTel span context if valid."""
-        if span is None:
-            return
-        sc = span.get_span_context()
-        if sc.is_valid:
-            body["trace_id"] = format(sc.trace_id, "032x")
-            body["parent_span_id"] = format(sc.span_id, "016x")
-
     # -- Core send --
 
     def send(
@@ -265,6 +241,9 @@ class A2AFirewall:
         receiver_agent_id: str,
         task_type: str,
         payload: dict[str, Any],
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        action: str | None = None,
         parent_task_id: str | None = None,
         root_task_id: str | None = None,
         raise_on_block: bool = True,
@@ -282,6 +261,9 @@ class A2AFirewall:
             "receiver_agent_id": receiver_agent_id,
             "task_type": task_type,
             "schema_version": schema_version,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "action": action,
             "payload": payload,
             "trace_id": self._ctx.get("trace_id"),
             "parent_span_id": self._ctx.get("span_id"),
@@ -303,9 +285,17 @@ class A2AFirewall:
         if self._delegation_token:
             body["delegation_token"] = _token_to_compact(self._delegation_token)
 
-        # ── OTel span wrapping ──
-        span = self._start_inspect_span(task_type, receiver_agent_id)
-        self._apply_otel_context(body, span)
+        # ── OTel (auto when opentelemetry-api installed) ──
+        span = None
+        if _OTEL_AVAILABLE:
+            span = trace.get_tracer("a2a-firewall-sdk", "0.2.0").start_span(
+                "firewall.inspect", kind=SpanKind.CLIENT,
+                attributes={"task_type": task_type, "receiver_agent_id": receiver_agent_id},
+            )
+            sc = span.get_span_context()
+            if sc.is_valid:
+                body["trace_id"] = format(sc.trace_id, "032x")
+                body["parent_span_id"] = format(sc.span_id, "016x")
 
         try:
             resp = self._http.post("/v1/firewall/inspect", json=body)

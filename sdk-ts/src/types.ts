@@ -2,9 +2,9 @@
 
 export interface FirewallConfig {
   firewallUrl: string;
-  workspaceId: string;
-  agentId: string;
   agentApiKey: string;
+  workspaceId?: string;
+  agentId?: string;
   /** Hex-encoded Ed25519 private key for signing messages. */
   agentPrivateKey?: string;
   /** Hex-encoded Ed25519 public key for verifying agent cards. */
@@ -61,6 +61,9 @@ export interface SendOptions {
   receiverAgentId: string;
   taskType: string;
   payload: Record<string, unknown>;
+  resourceType?: string;
+  resourceId?: string;
+  action?: string;
   parentTaskId?: string;
   rootTaskId?: string;
   raiseOnBlock?: boolean;
