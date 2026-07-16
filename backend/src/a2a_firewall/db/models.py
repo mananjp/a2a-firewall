@@ -65,6 +65,21 @@ class AgentPermission(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class ResourcePermission(Base):
+    __tablename__ = "resource_permissions"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    resource_type = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    allowed = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class PolicyRule(Base):
     __tablename__ = "policy_rules"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -95,6 +110,9 @@ class Task(Base):
     receiver_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
     task_type = Column(String, nullable=False)
     schema_version = Column(String, default="v1")
+    resource_type = Column(String, nullable=True)
+    resource_id = Column(String, nullable=True)
+    action = Column(String, nullable=True)
     payload = Column(JSONB, nullable=False)
     payload_hash = Column(String, nullable=False)
     payload_size_bytes = Column(Integer, nullable=False)

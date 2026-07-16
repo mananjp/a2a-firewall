@@ -1,17 +1,9 @@
 /**
  * A2A Firewall TypeScript SDK — main client class.
  *
- * Provides the same capabilities as the Python SDK:
- * - Ed25519 message signing
- * - Macaroon delegation token management
- * - Hash-chained provenance
- * - Automatic review polling
- * - Fail-open/closed modes
- *
  * OpenTelemetry integration (optional):
- * Install @opentelemetry/api as a peer dependency to automatically create
- * CLIENT spans for each firewall.inspect call. Trace context is propagated
- * to the backend for end-to-end distributed tracing.
+ * Install @opentelemetry/api — SDK auto-creates CLIENT spans for each
+ * firewall.inspect call with zero additional config.
  */
 
 import type {
@@ -38,38 +30,11 @@ import {
   verifyDelegationToken,
 } from './crypto';
 
-// ---------------------------------------------------------------------------
-// Optional OpenTelemetry integration
-// ---------------------------------------------------------------------------
-
-let _otelModule: any = null;
+// Lazy-loaded OTel module — no-op when @opentelemetry/api is missing
+let _otel: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _otelModule = require('@opentelemetry/api');
-} catch {
-  // @opentelemetry/api not installed — OTel features silently disabled
-  _otelModule = null;
-}
-
-function _createOtelSpan(
-  name: string,
-  kind: any,
-  attributes: Record<string, string>,
-): any | null {
-  if (!_otelModule) return null;
-  const tracer = _otelModule.trace.getTracer('a2a-firewall-sdk', '0.2.0');
-  const span = tracer.startSpan(name, { kind, attributes });
-  return span;
-}
-
-function _applyOtelContext(body: Record<string, any>, span: any | null): void {
-  if (!span || !_otelModule) return;
-  const sc = span.spanContext();
-  if (_otelModule.trace.isSpanContextValid(sc)) {
-    body.trace_id = sc.traceId;
-    body.parent_span_id = sc.spanId;
-  }
-}
+  _otel = require('@opentelemetry/api');
+} catch { /* not installed */ }
 
 export class A2AFirewall {
   private config: Required<Pick<FirewallConfig, 'timeoutMs' | 'failMode' | 'reviewPollIntervalMs' | 'reviewMaxWaitMs'>> & FirewallConfig;
@@ -81,6 +46,8 @@ export class A2AFirewall {
   constructor(config: FirewallConfig) {
     this.config = {
       ...config,
+      workspaceId: config.workspaceId ?? '',
+      agentId: config.agentId ?? '',
       timeoutMs: config.timeoutMs ?? 5000,
       failMode: config.failMode ?? 'closed',
       reviewPollIntervalMs: config.reviewPollIntervalMs ?? 2000,
@@ -120,7 +87,7 @@ export class A2AFirewall {
     signature: string;
   } {
     const now = Date.now() / 1000;
-    const messageHash = computeMessageHash(payload, this.config.agentId, receiverId, now);
+    const messageHash = computeMessageHash(payload, this.config.agentId!, receiverId, now);
     const chainHash = computeChainHash(this.chainHash, messageHash);
 
     let signature = '';
@@ -149,7 +116,7 @@ export class A2AFirewall {
     if (this.delegationToken) {
       token = attenuateToken(this.delegationToken, rootKeyHex, caveats);
     } else {
-      token = mintDelegationToken(rootKeyHex, this.config.workspaceId, this.config.agentId, caveats);
+      token = mintDelegationToken(rootKeyHex, this.config.workspaceId!, this.config.agentId!, caveats);
     }
 
     this.delegationToken = token;
@@ -179,6 +146,9 @@ export class A2AFirewall {
       receiver_agent_id: options.receiverAgentId,
       task_type: options.taskType,
       schema_version: options.schemaVersion ?? 'v1',
+      resource_type: options.resourceType,
+      resource_id: options.resourceId,
+      action: options.action,
       payload: options.payload,
       trace_id: this.ctx.trace_id,
       parent_span_id: this.ctx.span_id,
@@ -192,12 +162,20 @@ export class A2AFirewall {
       body.delegation_token = tokenToCompact(this.delegationToken);
     }
 
-    // ── OTel span wrapping ──
-    const span = _createOtelSpan('firewall.inspect', _otelModule?.SpanKind?.CLIENT, {
-      task_type: options.taskType,
-      receiver_agent_id: options.receiverAgentId,
-    });
-    _applyOtelContext(body, span);
+    // ── OTel (auto when @opentelemetry/api installed) ──
+    let span: any;
+    if (_otel) {
+      const tracer = _otel.trace.getTracer('a2a-firewall-sdk', '0.2.0');
+      span = tracer.startSpan('firewall.inspect', {
+        kind: _otel.SpanKind.CLIENT,
+        attributes: { task_type: options.taskType, receiver_agent_id: options.receiverAgentId },
+      });
+      const sc = span.spanContext();
+      if (_otel.trace.isSpanContextValid(sc)) {
+        body.trace_id = sc.traceId;
+        body.parent_span_id = sc.spanId;
+      }
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -205,10 +183,7 @@ export class A2AFirewall {
     try {
       const res = await fetch(`${this.config.firewallUrl}/v1/firewall/inspect`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.agentApiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.config.agentApiKey}` },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -217,9 +192,7 @@ export class A2AFirewall {
 
       if (!res.ok) {
         const errBody = await res.text();
-        if (span) {
-          span.setStatus({ code: _otelModule.SpanStatusCode.ERROR, message: `HTTP ${res.status}` });
-        }
+        if (span) span.setStatus({ code: 2, message: `HTTP ${res.status}` });
         throw new Error(`Firewall HTTP ${res.status}: ${errBody}`);
       }
 
@@ -239,40 +212,23 @@ export class A2AFirewall {
       if (span) {
         span.setAttribute('decision', data.decision);
         span.setAttribute('risk_score', data.risk_score);
-        span.setStatus({ code: _otelModule?.SpanStatusCode?.OK ?? 1 });
+        span.setStatus({ code: 1 });
       }
 
-      if (fw.decision === 'review') {
-        span?.end();
-        return this.waitForReview(fw);
-      }
+      if (fw.decision === 'review') { span?.end(); return this.waitForReview(fw); }
 
       if (!fw.allowed && (options.raiseOnBlock ?? true)) {
-        if (span) {
-          span.setStatus({ code: _otelModule.SpanStatusCode.ERROR, message: fw.blockReason ?? 'blocked' });
-        }
+        if (span) span.setStatus({ code: 2, message: fw.blockReason ?? 'blocked' });
         throw new FirewallBlockedError(fw.taskId, fw.blockReason ?? 'unknown', fw.riskScore, fw.violations);
       }
 
       return fw;
     } catch (err: any) {
       clearTimeout(timeout);
-      if (span) {
-        span.recordException(err);
-        span.setStatus({ code: _otelModule?.SpanStatusCode?.ERROR ?? 2, message: err.message ?? String(err) });
-      }
+      if (span) { span.recordException(err); span.setStatus({ code: 2, message: err.message ?? String(err) }); }
       if (err.name === 'AbortError') {
-        if (this.config.failMode === 'closed') {
-          throw new FirewallBlockedError(taskId, 'firewall_unreachable', 1.0, []);
-        }
-        return {
-          taskId,
-          decision: 'allow',
-          allowed: true,
-          riskScore: 0.0,
-          violations: [],
-          latencyMs: -1,
-        };
+        if (this.config.failMode === 'closed') throw new FirewallBlockedError(taskId, 'firewall_unreachable', 1.0, []);
+        return { taskId, decision: 'allow', allowed: true, riskScore: 0.0, violations: [], latencyMs: -1 };
       }
       throw err;
     } finally {
