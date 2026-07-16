@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import Agent, Workspace
+from a2a_firewall.db.models import Agent, AgentPermission, Workspace
 from a2a_firewall.detection.orchestrator import run_inspection
 
 router = APIRouter()
@@ -111,11 +111,44 @@ async def demo_run(
         )
     )
     agents = result.scalars().all()
+
+    # Auto-provision demo agents if workspace is empty (dev-only convenience)
     if not agents:
-        raise HTTPException(
-            status_code=400,
-            detail="No active agents in this workspace. Register an agent first.",
-        )
+        from a2a_firewall.core.security import generate_api_key
+
+        demo_agents_data = [
+            ("Planner Agent", "Orchestrates tasks across the mesh", ["task_routing"]),
+            ("Research Agent", "Retrieves and summarises information", ["research", "search"]),
+            ("Compliance Agent", "Validates regulatory constraints", ["policy_check", "compliance"]),
+        ]
+        created = []
+        for agent_name, agent_desc, caps in demo_agents_data:
+            _, agent_key_hash = generate_api_key("agt")
+            agent = Agent(
+                workspace_id=workspace.id,
+                name=agent_name,
+                description=agent_desc,
+                api_key_hash=agent_key_hash,
+                status="active",
+                capabilities=caps,
+            )
+            db.add(agent)
+            created.append(agent)
+        await db.flush()
+        agents = created
+
+        # Create permissions so demo agents can talk to each other
+        for sender_agent in agents:
+            for receiver_agent in agents:
+                if sender_agent.id != receiver_agent.id:
+                    db.add(AgentPermission(
+                        workspace_id=workspace.id,
+                        sender_id=sender_agent.id,
+                        receiver_id=receiver_agent.id,
+                        task_type=None,
+                        allowed=True,
+                    ))
+        await db.flush()
 
     sender = agents[0]
     receiver = agents[1] if len(agents) > 1 else agents[0]

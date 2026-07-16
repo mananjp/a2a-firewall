@@ -39,7 +39,15 @@ async def list_policies(
     )
     rules = result.scalars().all()
     return [
-        {"id": str(r.id), "priority": r.priority, "name": r.name, "action": r.action} for r in rules
+        {
+            "id": str(r.id),
+            "priority": r.priority,
+            "name": r.name,
+            "action": r.action,
+            "task_type": r.task_type,
+            "description": r.description,
+        }
+        for r in rules
     ]
 
 
@@ -64,7 +72,7 @@ async def create_policy(
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
-    return {"id": str(rule.id), "priority": rule.priority, "name": rule.name}
+    return {"id": str(rule.id), "priority": rule.priority, "name": rule.name, "action": rule.action, "task_type": rule.task_type, "description": rule.description}
 
 
 @router.delete("/{rule_id}")

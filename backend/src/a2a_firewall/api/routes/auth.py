@@ -35,7 +35,8 @@ class LoginRequest(BaseModel):
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """DEV ONLY: rotate and return the workspace key for matching admin_email.
 
-    Returns 403 when DEBUG=false. Returns 404 when no workspace matches.
+    If no workspace exists for the email and DEBUG is on, auto-provisions one
+    (first-login provisioning). Returns 403 when DEBUG=false.
     Each successful call rotates the key — old key becomes invalid.
     """
     if not settings.DEBUG:
@@ -45,8 +46,24 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
         )
     result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
     ws = result.scalar_one_or_none()
+
     if not ws:
-        raise HTTPException(status_code=404, detail="No workspace found for that email")
+        # Auto-provision workspace on first login (dev-only convenience)
+        new_raw, new_hash = generate_api_key("ws")
+        ws = Workspace(
+            name=body.email.split("@")[0] + "'s workspace",
+            admin_email=body.email,
+            api_key_hash=new_hash,
+        )
+        db.add(ws)
+        await db.commit()
+        await db.refresh(ws)
+        return {
+            "workspace_id": str(ws.id),
+            "admin_email": ws.admin_email,
+            "api_key": new_raw,
+            "warning": "DEV ONLY: workspace was auto-created on first login.",
+        }
 
     new_raw, new_hash = generate_api_key("ws")
     ws.api_key_hash = new_hash  # type: ignore[assignment]

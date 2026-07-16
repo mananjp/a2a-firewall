@@ -11,12 +11,16 @@ from a2a_firewall.api.routes import (
     agents,
     auth,
     demo,
+    delegation,
     firewall,
+    identity,
     policies,
     review,
     schemas,
+    simulation,
     stats,
     tasks,
+    telemetry,
     violations,
     workspaces,
 )
@@ -110,6 +114,10 @@ app.include_router(review.router, prefix="/v1/review", tags=["review"])
 app.include_router(policies.router, prefix="/v1/policies", tags=["policies"])
 app.include_router(stats.router, prefix="/v1/stats", tags=["stats"])
 app.include_router(demo.router, prefix="/v1/demo", tags=["demo"])
+app.include_router(identity.router, prefix="/v1/identity", tags=["identity"])
+app.include_router(delegation.router, prefix="/v1/delegation", tags=["delegation"])
+app.include_router(telemetry.router, prefix="/v1/telemetry", tags=["telemetry"])
+app.include_router(simulation.router, prefix="/v1/simulation", tags=["simulation"])
 
 
 @app.get("/health")

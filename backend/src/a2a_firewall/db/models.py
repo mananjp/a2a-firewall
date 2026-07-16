@@ -156,3 +156,79 @@ class TraceEvent(Base):
     attributes = Column(JSONB, default=dict)
     duration_ms = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Identity & Delegation (new)
+# ---------------------------------------------------------------------------
+
+class AgentIdentity(Base):
+    """Ed25519 identity record for each agent."""
+    __tablename__ = "agent_identities"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), unique=True, nullable=False)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    public_key = Column(String, nullable=False)  # hex-encoded Ed25519 public key
+    card_signature = Column(Text, nullable=False)  # signed agent card
+    card_issued_at = Column(DateTime(timezone=True), nullable=False)
+    card_expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class WorkspaceIdentity(Base):
+    """Workspace root Ed25519 keypair (public key stored, private key never in DB)."""
+    __tablename__ = "workspace_identities"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, nullable=False)
+    root_public_key = Column(String, nullable=False)  # hex-encoded Ed25519 public key
+    root_hmac_key_hash = Column(String, nullable=False)  # SHA-256 of HMAC root key (for verification)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class DelegationChain(Base):
+    """Records every delegation hop for audit and lineage."""
+    __tablename__ = "delegation_chains"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    sender_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
+    receiver_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
+    delegation_depth = Column(Integer, nullable=False, default=0)
+    caveats = Column(JSONB, nullable=False, default=list)
+    delegation_token = Column(Text, nullable=False)  # compact serialized DelegationToken
+    signature_valid = Column(Boolean, nullable=False, default=True)
+    chain_hash = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class TelemetryRow(Base):
+    """Structured telemetry events for the correlation engine.
+
+    Every inspection, identity failure, scope violation, and delegation event
+    produces a row here. The correlation engine queries this table.
+    """
+    __tablename__ = "telemetry_events"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_id = Column(String, nullable=False, unique=True)
+    event_type = Column(String, nullable=False)  # "a2a.inspection" | "a2a.identity_failure" | etc.
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    sender_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    receiver_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    task_type = Column(String, nullable=True)
+    decision = Column(String, nullable=True)
+    risk_score = Column(Float, default=0.0)
+    violations = Column(JSONB, default=list)
+    delegation_chain = Column(JSONB, default=list)
+    delegation_depth = Column(Integer, default=0)
+    message_hash = Column(String, nullable=True)
+    chain_hash = Column(String, nullable=True)
+    signature_valid = Column(Boolean, nullable=True)
+    cipher_suite = Column(String, default="TLS_AES_256_GCM_SHA384")
+    key_exchange = Column(String, default="X25519Kyber768")
+    otel_trace_id = Column(String, nullable=True)
+    otel_span_id = Column(String, nullable=True)
+    latency_ms = Column(Integer, default=0)
+    groq_called = Column(Boolean, default=False)
+    groq_rationale = Column(Text, nullable=True)
+    payload_snapshot = Column(JSONB, nullable=True)  # truncated payload for audit
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
