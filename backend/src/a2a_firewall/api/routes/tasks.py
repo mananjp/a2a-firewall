@@ -14,6 +14,35 @@ from a2a_firewall.db.models import Task, TraceEvent, Violation, Workspace
 router = APIRouter()
 
 
+@router.get("")
+async def list_recent_tasks(
+    limit: int = 20,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return the most recent tasks for this workspace (live feed)."""
+    result = await db.execute(
+        select(Task).where(Task.workspace_id == ws.id).order_by(Task.created_at.desc()).limit(limit)
+    )
+    tasks = result.scalars().all()
+    return [
+        {
+            "id": str(t.id),
+            "task_type": t.task_type,
+            "decision": t.decision,
+            "risk_score": t.risk_score,
+            "decision_reason": t.decision_reason,
+            "total_latency_ms": t.total_latency_ms,
+            "groq_called": t.groq_called,
+            "groq_injection_detected": t.groq_injection_detected,
+            "depth": t.depth,
+            "trace_id": t.trace_id,
+            "created_at": str(t.created_at),
+        }
+        for t in tasks
+    ]
+
+
 @router.get("/by-trace/{trace_id}")
 async def trace_events(
     trace_id: str,

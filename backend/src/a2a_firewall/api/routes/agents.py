@@ -183,6 +183,7 @@ async def list_agents(
         {
             "id": str(a.id),
             "name": a.name,
+            "description": a.description,
             "status": a.status,
             "capabilities": a.capabilities,
         }

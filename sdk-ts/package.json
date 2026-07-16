@@ -1,0 +1,33 @@
+{
+  "name": "@a2a-firewall/sdk",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for A2A Firewall — inter-agent governance mesh with identity, delegation, and signing",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3",
+    "bs58": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "files": ["dist", "src"],
+  "license": "MIT"
+}

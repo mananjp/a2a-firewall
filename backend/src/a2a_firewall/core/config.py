@@ -64,5 +64,10 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
     OTEL_SERVICE_NAME: str = "a2a-firewall"
 
+    # Identity & Delegation
+    IDENTITY_CARD_TTL_SECONDS: float = 86400.0  # 24h
+    DELEGATION_MAX_DEPTH: int = 10
+    DELEGATION_DEFAULT_EXPIRY_SECONDS: float = 3600.0  # 1h
+
 
 settings = Settings()

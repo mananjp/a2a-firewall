@@ -7,4 +7,4 @@ ruff==0.15.19
 mypy==2.1.0
 types-requests==2.33.0.20260518
 pip-audit==2.10.1
-setuptools<81
+setuptools>=83.0.0

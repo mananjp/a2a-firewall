@@ -12,21 +12,41 @@ from a2a_firewall.db.models import AgentPermission
 async def check_permissions(
     request_data: dict[str, Any], sender: Any, workspace: Any, db: AsyncSession
 ) -> dict[str, Any]:
-    """Layer 2: agent permission check.
+    """Layer 2: agent permission check with task-type scoping.
 
-    Behavior controlled by workspace.default_deny:
-    - default_deny=True: any unregistered sender->receiver pair is blocked (whitelist).
-    - default_deny=False: any unregistered pair is allowed (legacy).
+    Resolution order:
+    1. Exact match (sender, receiver, task_type) → allowed/blocked.
+    2. Wildcard match (sender, receiver, task_type=None) → allowed/blocked.
+    3. No match → controlled by workspace.default_deny.
     """
     receiver_id = uuid.UUID(request_data["receiver_agent_id"])
+    task_type = request_data.get("task_type")
+
+    # Try exact task_type match first
+    if task_type:
+        result = await db.execute(
+            select(AgentPermission).where(
+                AgentPermission.workspace_id == workspace.id,
+                AgentPermission.sender_id == sender.id,
+                AgentPermission.receiver_id == receiver_id,
+                AgentPermission.task_type == task_type,
+            )
+        )
+        perm = result.scalar_one_or_none()
+        if perm:
+            return {"allowed": perm.allowed}
+
+    # Fall back to wildcard (task_type=None) match
     result = await db.execute(
         select(AgentPermission).where(
             AgentPermission.workspace_id == workspace.id,
             AgentPermission.sender_id == sender.id,
             AgentPermission.receiver_id == receiver_id,
+            AgentPermission.task_type.is_(None),
         )
     )
     perm = result.scalar_one_or_none()
     if perm:
         return {"allowed": perm.allowed}
+
     return {"allowed": not workspace.default_deny}

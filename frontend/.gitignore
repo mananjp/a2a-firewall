@@ -1,9 +1,4 @@
 node_modules
-dist
-.DS_Store
-.env
+.next
 .env.local
-coverage
-.vite
-*.tsbuildinfo
-*.log
+.env*.local
