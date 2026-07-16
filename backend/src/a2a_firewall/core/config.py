@@ -26,7 +26,7 @@ class Settings(BaseSettings):
            for each one.  SSL is enforced via ``connect_args`` in
            ``database.py`` instead.
         """
-        url = self.DATABASE_URL
+        url = self.DATABASE_URL.strip().strip('"').strip("'")
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgres://"):

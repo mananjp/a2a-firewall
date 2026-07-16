@@ -332,7 +332,7 @@ export default function SimulationPage() {
 
                 {/* Payload */}
                 <div className="border-t border-border pt-2">
-                  <button onClick={() => setExpandedPayload(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                  <button onClick={() => setExpandedPayload(prev => { const n = new Set(prev); if (n.has(i)) { n.delete(i); } else { n.add(i); } return n; })} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                     <ChevronRight size={10} className={`transition-transform ${expandedPayload.has(i) ? "rotate-90" : ""}`} /> {expandedPayload.has(i) ? "Hide" : "Show"} payload
                   </button>
                   {expandedPayload.has(i) && parsedPayload && (
