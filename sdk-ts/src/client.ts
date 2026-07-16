@@ -7,6 +7,11 @@
  * - Hash-chained provenance
  * - Automatic review polling
  * - Fail-open/closed modes
+ *
+ * OpenTelemetry integration (optional):
+ * Install @opentelemetry/api as a peer dependency to automatically create
+ * CLIENT spans for each firewall.inspect call. Trace context is propagated
+ * to the backend for end-to-end distributed tracing.
  */
 
 import type {
@@ -32,6 +37,39 @@ import {
   tokenFromCompact,
   verifyDelegationToken,
 } from './crypto';
+
+// ---------------------------------------------------------------------------
+// Optional OpenTelemetry integration
+// ---------------------------------------------------------------------------
+
+let _otelModule: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  _otelModule = require('@opentelemetry/api');
+} catch {
+  // @opentelemetry/api not installed — OTel features silently disabled
+  _otelModule = null;
+}
+
+function _createOtelSpan(
+  name: string,
+  kind: any,
+  attributes: Record<string, string>,
+): any | null {
+  if (!_otelModule) return null;
+  const tracer = _otelModule.trace.getTracer('a2a-firewall-sdk', '0.2.0');
+  const span = tracer.startSpan(name, { kind, attributes });
+  return span;
+}
+
+function _applyOtelContext(body: Record<string, any>, span: any | null): void {
+  if (!span || !_otelModule) return;
+  const sc = span.spanContext();
+  if (_otelModule.trace.isSpanContextValid(sc)) {
+    body.trace_id = sc.traceId;
+    body.parent_span_id = sc.spanId;
+  }
+}
 
 export class A2AFirewall {
   private config: Required<Pick<FirewallConfig, 'timeoutMs' | 'failMode' | 'reviewPollIntervalMs' | 'reviewMaxWaitMs'>> & FirewallConfig;
@@ -134,7 +172,7 @@ export class A2AFirewall {
       senderPublicKey = ''; // populated by backend verification
     }
 
-    const body: InspectRequest = {
+    const body: InspectRequest & Record<string, any> = {
       task_id: taskId,
       parent_task_id: options.parentTaskId || this.ctx.current_task_id,
       root_task_id: options.rootTaskId || this.ctx.root_task_id || taskId,
@@ -154,6 +192,13 @@ export class A2AFirewall {
       body.delegation_token = tokenToCompact(this.delegationToken);
     }
 
+    // ── OTel span wrapping ──
+    const span = _createOtelSpan('firewall.inspect', _otelModule?.SpanKind?.CLIENT, {
+      task_type: options.taskType,
+      receiver_agent_id: options.receiverAgentId,
+    });
+    _applyOtelContext(body, span);
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
@@ -172,10 +217,13 @@ export class A2AFirewall {
 
       if (!res.ok) {
         const errBody = await res.text();
+        if (span) {
+          span.setStatus({ code: _otelModule.SpanStatusCode.ERROR, message: `HTTP ${res.status}` });
+        }
         throw new Error(`Firewall HTTP ${res.status}: ${errBody}`);
       }
 
-      const data = await res.json();
+      const data: any = await res.json();
       const fw: FirewallResponse = {
         taskId: data.task_id,
         decision: data.decision,
@@ -188,17 +236,31 @@ export class A2AFirewall {
         traceId: data.trace_id,
       };
 
+      if (span) {
+        span.setAttribute('decision', data.decision);
+        span.setAttribute('risk_score', data.risk_score);
+        span.setStatus({ code: _otelModule?.SpanStatusCode?.OK ?? 1 });
+      }
+
       if (fw.decision === 'review') {
+        span?.end();
         return this.waitForReview(fw);
       }
 
       if (!fw.allowed && (options.raiseOnBlock ?? true)) {
+        if (span) {
+          span.setStatus({ code: _otelModule.SpanStatusCode.ERROR, message: fw.blockReason ?? 'blocked' });
+        }
         throw new FirewallBlockedError(fw.taskId, fw.blockReason ?? 'unknown', fw.riskScore, fw.violations);
       }
 
       return fw;
     } catch (err: any) {
       clearTimeout(timeout);
+      if (span) {
+        span.recordException(err);
+        span.setStatus({ code: _otelModule?.SpanStatusCode?.ERROR ?? 2, message: err.message ?? String(err) });
+      }
       if (err.name === 'AbortError') {
         if (this.config.failMode === 'closed') {
           throw new FirewallBlockedError(taskId, 'firewall_unreachable', 1.0, []);
@@ -213,6 +275,8 @@ export class A2AFirewall {
         };
       }
       throw err;
+    } finally {
+      span?.end();
     }
   }
 
@@ -229,7 +293,7 @@ export class A2AFirewall {
           `${this.config.firewallUrl}/v1/review/${fw.reviewToken}/status`,
           { headers: { Authorization: `Bearer ${this.config.agentApiKey}` } },
         );
-        const s = await res.json();
+        const s: any = await res.json();
         if (s.status === 'approved') {
           fw.decision = 'allow';
           fw.allowed = true;

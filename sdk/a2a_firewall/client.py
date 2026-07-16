@@ -33,6 +33,14 @@ from typing import Any, Optional
 
 import httpx
 
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import SpanKind, Status, StatusCode
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -222,6 +230,34 @@ class A2AFirewall:
         self._delegation_chain.append(receiver_agent_id)
         return _token_to_compact(token)
 
+    # ---------------------------------------------------------------------------
+    # OTel helpers
+    # ---------------------------------------------------------------------------
+
+    def _start_inspect_span(self, task_type: str, receiver_id: str) -> Any | None:
+        """Start an OTel CLIENT span for the inspect call, or None if OTel unavailable."""
+        if not _OTEL_AVAILABLE:
+            return None
+        tracer = trace.get_tracer("a2a-firewall-sdk", "0.2.0")
+        span = tracer.start_span(
+            "firewall.inspect",
+            kind=SpanKind.CLIENT,
+            attributes={
+                "task_type": task_type,
+                "receiver_agent_id": receiver_id,
+            },
+        )
+        return span
+
+    def _apply_otel_context(self, body: dict[str, Any], span: Any | None) -> None:
+        """Override trace_id/parent_span_id from OTel span context if valid."""
+        if span is None:
+            return
+        sc = span.get_span_context()
+        if sc.is_valid:
+            body["trace_id"] = format(sc.trace_id, "032x")
+            body["parent_span_id"] = format(sc.span_id, "016x")
+
     # -- Core send --
 
     def send(
@@ -267,6 +303,10 @@ class A2AFirewall:
         if self._delegation_token:
             body["delegation_token"] = _token_to_compact(self._delegation_token)
 
+        # ── OTel span wrapping ──
+        span = self._start_inspect_span(task_type, receiver_agent_id)
+        self._apply_otel_context(body, span)
+
         try:
             resp = self._http.post("/v1/firewall/inspect", json=body)
             resp.raise_for_status()
@@ -282,7 +322,14 @@ class A2AFirewall:
                 latency_ms=data.get("latency_ms", 0),
                 trace_id=data.get("trace_id"),
             )
+            if span:
+                span.set_attribute("decision", fw.decision)
+                span.set_attribute("risk_score", fw.risk_score)
+                span.set_status(Status(StatusCode.OK))
         except httpx.TimeoutException:
+            if span:
+                span.set_status(Status(StatusCode.ERROR, "timeout"))
+                span.record_exception("firewall_unreachable")
             if self.config.fail_mode == "closed":
                 raise FirewallBlockedError(task_id, "firewall_unreachable", 1.0, [])
             return FirewallResponse(
@@ -290,7 +337,13 @@ class A2AFirewall:
                 risk_score=0.0, violations=[], latency_ms=-1,
             )
         except httpx.HTTPStatusError as e:
+            if span:
+                span.set_status(Status(StatusCode.ERROR, f"HTTP {e.response.status_code}"))
+                span.record_exception(e)
             raise RuntimeError(f"Firewall HTTP error: {e.response.status_code}") from e
+        finally:
+            if span:
+                span.end()
 
         if fw.decision == "review":
             fw = self._wait_for_review(fw)
