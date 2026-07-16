@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import time
+import secrets
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
@@ -111,12 +112,35 @@ def attenuate_token(
     Raises ValueError if new caveats would widen existing restrictions.
     """
     _validate_caveat_narrowing(token.caveats, new_caveats)
-    all_caveats = token.caveats + new_caveats
-    sig = _compute_signature(root_key, token.location, token.identifier, all_caveats)
+    
+    # Construct the new caveat list: if a key exists, replace it in-place, otherwise append.
+    existing_map = _parse_caveats(token.caveats)
+    new_map = _parse_caveats(new_caveats)
+    
+    updated_caveats = []
+    for c in token.caveats:
+        if "=" in c:
+            k, v = c.split("=", 1)
+            if k in new_map:
+                updated_caveats.append(f"{k}={new_map[k]}")
+                del new_map[k]
+            else:
+                updated_caveats.append(c)
+        else:
+            updated_caveats.append(c)
+            
+    for k, v in new_map.items():
+        updated_caveats.append(f"{k}={v}")
+        
+    for c in new_caveats:
+        if "=" not in c:
+            updated_caveats.append(c)
+
+    sig = _compute_signature(root_key, token.location, token.identifier, updated_caveats)
     return DelegationToken(
         location=token.location,
         identifier=token.identifier,
-        caveats=all_caveats,
+        caveats=updated_caveats,
         signature=sig,
     )
 
@@ -132,12 +156,14 @@ def _validate_caveat_narrowing(existing: list[str], new: list[str]) -> None:
             # Numeric caveats: new must be <= old (narrowing)
             if key.startswith("max_"):
                 try:
-                    if float(new_value) > float(old_value) + 1e-9:
-                        raise ValueError(
-                            f"Caveat '{key}' would widen: {new_value} > {old_value}"
-                        )
+                    new_val_f = float(new_value)
+                    old_val_f = float(old_value)
                 except ValueError:
-                    pass  # non-numeric, skip numeric check
+                    continue  # non-numeric, skip numeric check
+                if new_val_f > old_val_f + 1e-9:
+                    raise ValueError(
+                        f"Caveat '{key}' would widen: {new_value} > {old_value}"
+                    )
             # Equality caveats: must match exactly
             elif key in ("workspace_id", "task_type", "receiver"):
                 if new_value != old_value:
@@ -240,4 +266,4 @@ def token_from_compact(data: str) -> DelegationToken:
 
 def generate_root_key() -> bytes:
     """Generate a random 32-byte root HMAC key."""
-    return _hmac_sha256(b"a2a-firewall-root-key-gen", str(time.time_ns()).encode())
+    return secrets.token_bytes(32)

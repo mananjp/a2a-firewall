@@ -67,14 +67,15 @@ class TestIdentity:
 
     def test_card_creation_and_signing(self):
         ws_priv, ws_pub = generate_keypair()
-        agent_priv, _ = generate_keypair()
+        _, agent_pub = generate_keypair()
 
         card = create_agent_card(
             agent_id="agent-1",
             name="test-agent",
             workspace_id="ws-1",
             capabilities=["research", "analysis"],
-            private_key=agent_priv,
+            agent_public_key=public_key_to_hex(agent_pub),
+            workspace_private_key=ws_priv,
             ttl_seconds=3600,
         )
         assert card.signature != ""
@@ -84,23 +85,25 @@ class TestIdentity:
         assert verify_card(card, ws_pub) is True
 
     def test_card_verification_wrong_key(self):
-        _, ws_pub = generate_keypair()
+        ws_priv, ws_pub = generate_keypair()
         _, wrong_pub = generate_keypair()
-        agent_priv, _ = generate_keypair()
+        _, agent_pub = generate_keypair()
 
         card = create_agent_card(
             agent_id="agent-1", name="test", workspace_id="ws-1",
-            capabilities=[], private_key=agent_priv,
+            capabilities=[], agent_public_key=public_key_to_hex(agent_pub),
+            workspace_private_key=ws_priv,
         )
         assert verify_card(card, wrong_pub) is False
 
     def test_card_expiry(self):
-        _, ws_pub = generate_keypair()
-        agent_priv, _ = generate_keypair()
+        ws_priv, ws_pub = generate_keypair()
+        _, agent_pub = generate_keypair()
 
         card = create_agent_card(
             agent_id="agent-1", name="test", workspace_id="ws-1",
-            capabilities=[], private_key=agent_priv, ttl_seconds=-1,  # expired
+            capabilities=[], agent_public_key=public_key_to_hex(agent_pub),
+            workspace_private_key=ws_priv, ttl_seconds=-1,  # expired
         )
         assert card.is_expired()
         assert verify_card(card, ws_pub) is False

@@ -125,21 +125,26 @@ def create_agent_card(
     name: str,
     workspace_id: str,
     capabilities: list[str],
-    private_key: Ed25519PrivateKey,
+    agent_public_key: str,
+    workspace_private_key: Ed25519PrivateKey,
     ttl_seconds: float = 86400.0,
 ) -> AgentCard:
-    """Create and sign a new agent card."""
+    """Create and sign a new agent card.
+
+    The card embeds the agent's public key for identity, but is signed
+    by the workspace root private key for authority verification.
+    """
     now = time.time()
     card = AgentCard(
         agent_id=agent_id,
         name=name,
         workspace_id=workspace_id,
         capabilities=capabilities,
-        public_key=public_key_to_hex(private_key.public_key()),
+        public_key=agent_public_key,
         issued_at=now,
         expires_at=now + ttl_seconds,
     )
-    return sign_card(card, private_key)
+    return sign_card(card, workspace_private_key)
 
 
 # ---------------------------------------------------------------------------

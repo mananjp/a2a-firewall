@@ -6,8 +6,12 @@ const nextConfig: NextConfig = {
     const apiBase = process.env.API_BASE_URL ?? "http://localhost:8000";
     return [
       {
-        source: "/api/:path*",
-        destination: `${apiBase}/:path*`,
+        source: "/v1/:path*",
+        destination: `${apiBase}/v1/:path*`,
+      },
+      {
+        source: "/health",
+        destination: `${apiBase}/health`,
       },
     ];
   },
