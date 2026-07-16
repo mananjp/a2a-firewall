@@ -119,7 +119,11 @@ async def demo_run(
         demo_agents_data = [
             ("Planner Agent", "Orchestrates tasks across the mesh", ["task_routing"]),
             ("Research Agent", "Retrieves and summarises information", ["research", "search"]),
-            ("Compliance Agent", "Validates regulatory constraints", ["policy_check", "compliance"]),
+            (
+                "Compliance Agent",
+                "Validates regulatory constraints",
+                ["policy_check", "compliance"],
+            ),
         ]
         created = []
         for agent_name, agent_desc, caps in demo_agents_data:
@@ -141,13 +145,15 @@ async def demo_run(
         for sender_agent in agents:
             for receiver_agent in agents:
                 if sender_agent.id != receiver_agent.id:
-                    db.add(AgentPermission(
-                        workspace_id=workspace.id,
-                        sender_id=sender_agent.id,
-                        receiver_id=receiver_agent.id,
-                        task_type=None,
-                        allowed=True,
-                    ))
+                    db.add(
+                        AgentPermission(
+                            workspace_id=workspace.id,
+                            sender_id=sender_agent.id,
+                            receiver_id=receiver_agent.id,
+                            task_type=None,
+                            allowed=True,
+                        )
+                    )
         await db.flush()
 
     sender = agents[0]

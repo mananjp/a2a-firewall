@@ -43,6 +43,7 @@ def _caveat_bytes(caveats: list[str]) -> bytes:
 # Macaroon Token
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DelegationToken:
     """A macaroon-style capability token with caveat-based attenuation.
@@ -53,6 +54,7 @@ class DelegationToken:
     - caveats: list of capability restrictions (can only narrow)
     - signature: HMAC-SHA256 over (location + identifier + all caveats)
     """
+
     location: str  # workspace_id or firewall URL
     identifier: str  # agent_id
     caveats: list[str] = field(default_factory=list)
@@ -76,6 +78,7 @@ def _compute_signature(root_key: bytes, location: str, identifier: str, caveats:
 # Minting
 # ---------------------------------------------------------------------------
 
+
 def mint_token(
     root_key: bytes,
     location: str,
@@ -98,6 +101,7 @@ def mint_token(
 # ---------------------------------------------------------------------------
 # Attenuation (delegation)
 # ---------------------------------------------------------------------------
+
 
 def attenuate_token(
     token: DelegationToken,
@@ -160,15 +164,11 @@ def _validate_caveat_narrowing(existing: list[str], new: list[str]) -> None:
                 except ValueError:
                     continue  # non-numeric, skip numeric check
                 if new_val_f > old_val_f + 1e-9:
-                    raise ValueError(
-                        f"Caveat '{key}' would widen: {new_value} > {old_value}"
-                    )
+                    raise ValueError(f"Caveat '{key}' would widen: {new_value} > {old_value}")
             # Equality caveats: must match exactly
             elif key in ("workspace_id", "task_type", "receiver"):
                 if new_value != old_value:
-                    raise ValueError(
-                        f"Caveat '{key}' conflicts: '{new_value}' != '{old_value}'"
-                    )
+                    raise ValueError(f"Caveat '{key}' conflicts: '{new_value}' != '{old_value}'")
 
 
 def _parse_caveats(caveats: list[str]) -> dict[str, str]:
@@ -183,6 +183,7 @@ def _parse_caveats(caveats: list[str]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class VerificationResult:
@@ -209,9 +210,17 @@ def verify_token(token: DelegationToken, root_key: bytes) -> VerificationResult:
     if "expires" in parsed:
         try:
             if time.time() > float(parsed["expires"]):
-                return VerificationResult(valid=False, reason="token_expired", expired=True, caveats=token.caveats, parsed=parsed)
+                return VerificationResult(
+                    valid=False,
+                    reason="token_expired",
+                    expired=True,
+                    caveats=token.caveats,
+                    parsed=parsed,
+                )
         except ValueError:
-            return VerificationResult(valid=False, reason="invalid_expiry", caveats=token.caveats, parsed=parsed)
+            return VerificationResult(
+                valid=False, reason="invalid_expiry", caveats=token.caveats, parsed=parsed
+            )
 
     return VerificationResult(valid=True, caveats=token.caveats, parsed=parsed)
 
@@ -249,6 +258,7 @@ def check_capability(token: DelegationToken, required: str) -> bool:
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
+
 def token_to_compact(token: DelegationToken) -> str:
     """Serialize a token to a compact string for HTTP transport."""
     return json.dumps(token.to_dict(), separators=(",", ":"))
@@ -262,6 +272,7 @@ def token_from_compact(data: str) -> DelegationToken:
 # ---------------------------------------------------------------------------
 # Root key generation
 # ---------------------------------------------------------------------------
+
 
 def generate_root_key() -> bytes:
     """Generate a random 32-byte root HMAC key."""

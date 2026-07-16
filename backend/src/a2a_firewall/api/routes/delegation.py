@@ -1,4 +1,5 @@
 """Delegation chain routes — create, attenuate, and verify delegation tokens."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -89,6 +90,7 @@ async def mint_delegation_token(
 
     # Generate root key for this workspace (in production, retrieve from HSM/vault)
     from a2a_firewall.core.security import hash_api_key
+
     root_key = hash_api_key(str(workspace.id)).encode()[:32]
 
     initial = body.initial_caveats or [f"workspace_id={workspace.id}"]
@@ -111,6 +113,7 @@ async def attenuate_delegation_token(
     Each delegation hop can only restrict, never widen, the token's capabilities.
     """
     from a2a_firewall.core.security import hash_api_key
+
     root_key = hash_api_key(str(workspace.id)).encode()[:32]
 
     parent_token = token_from_compact(body.token_compact)
@@ -138,6 +141,7 @@ async def verify_delegation_token(
 ) -> VerifyTokenResponse:
     """Verify a delegation token's signature and check expiry."""
     from a2a_firewall.core.security import hash_api_key
+
     root_key = hash_api_key(str(workspace.id)).encode()[:32]
 
     token = token_from_compact(body.token_compact)
@@ -158,6 +162,7 @@ async def check_token_capability(
 ) -> CheckCapabilityResponse:
     """Check if a delegation token grants a specific capability."""
     from a2a_firewall.core.security import hash_api_key
+
     root_key = hash_api_key(str(workspace.id)).encode()[:32]
 
     token = token_from_compact(body.token_compact)

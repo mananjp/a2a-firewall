@@ -4,6 +4,7 @@ Revision ID: 002
 Revises: 001
 Create Date: 2026-07-15
 """
+
 from __future__ import annotations
 
 import uuid
@@ -22,7 +23,13 @@ def upgrade() -> None:
     op.create_table(
         "workspace_identities",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("workspace_id", UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, nullable=False),
+        sa.Column(
+            "workspace_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            unique=True,
+            nullable=False,
+        ),
         sa.Column("root_public_key", sa.String, nullable=False),
         sa.Column("root_hmac_key_hash", sa.String, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -31,8 +38,19 @@ def upgrade() -> None:
     op.create_table(
         "agent_identities",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id", ondelete="CASCADE"), unique=True, nullable=False),
-        sa.Column("workspace_id", UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "agent_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("agents.id", ondelete="CASCADE"),
+            unique=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "workspace_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("public_key", sa.String, nullable=False),
         sa.Column("card_signature", sa.Text, nullable=False),
         sa.Column("card_issued_at", sa.DateTime(timezone=True), nullable=False),
@@ -43,10 +61,24 @@ def upgrade() -> None:
     op.create_table(
         "delegation_chains",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("workspace_id", UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("task_id", UUID(as_uuid=True), sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("sender_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=False),
-        sa.Column("receiver_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=False),
+        sa.Column(
+            "workspace_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "task_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("tasks.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "sender_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=False
+        ),
+        sa.Column(
+            "receiver_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=False
+        ),
         sa.Column("delegation_depth", sa.Integer, nullable=False, server_default="0"),
         sa.Column("caveats", JSONB, nullable=False, server_default="[]"),
         sa.Column("delegation_token", sa.Text, nullable=False),
@@ -55,16 +87,25 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
     op.create_index("idx_delegation_chains_task", "delegation_chains", ["task_id"])
-    op.create_index("idx_delegation_chains_workspace", "delegation_chains", ["workspace_id", "created_at"])
+    op.create_index(
+        "idx_delegation_chains_workspace", "delegation_chains", ["workspace_id", "created_at"]
+    )
 
     op.create_table(
         "telemetry_events",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
         sa.Column("event_id", sa.String, nullable=False, unique=True),
         sa.Column("event_type", sa.String, nullable=False),
-        sa.Column("workspace_id", UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "workspace_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("sender_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True),
-        sa.Column("receiver_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True),
+        sa.Column(
+            "receiver_agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True
+        ),
         sa.Column("task_type", sa.String, nullable=True),
         sa.Column("decision", sa.String, nullable=True),
         sa.Column("risk_score", sa.Float, default=0.0),
@@ -84,7 +125,9 @@ def upgrade() -> None:
         sa.Column("payload_snapshot", JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("idx_telemetry_events_workspace", "telemetry_events", ["workspace_id", "created_at"])
+    op.create_index(
+        "idx_telemetry_events_workspace", "telemetry_events", ["workspace_id", "created_at"]
+    )
     op.create_index("idx_telemetry_events_type", "telemetry_events", ["event_type"])
     op.create_index("idx_telemetry_events_sender", "telemetry_events", ["sender_agent_id"])
 

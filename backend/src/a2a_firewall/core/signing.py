@@ -29,6 +29,7 @@ from a2a_firewall.core.identity import hex_to_public_key
 # Hashing
 # ---------------------------------------------------------------------------
 
+
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -61,9 +62,11 @@ def compute_chain_hash(parent_chain_hash: str | None, message_hash: str) -> str:
 # Signed message
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SignedMessage:
     """A fully signed and chain-hashed inter-agent message."""
+
     task_id: str
     sender_id: str
     receiver_id: str
@@ -104,6 +107,7 @@ class SignedMessage:
 # Sign and verify
 # ---------------------------------------------------------------------------
 
+
 def sign_message(
     task_id: str,
     sender_id: str,
@@ -143,6 +147,7 @@ def sign_message(
 @dataclass
 class SignatureVerificationResult:
     """Result of verifying a signed message."""
+
     signature_valid: bool
     chain_valid: bool
     reason: str = ""
@@ -186,6 +191,7 @@ def verify_signature(
 # Telemetry event (structured JSON for correlation engine)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TelemetryEvent:
     """Structured telemetry event emitted on every inspection.
@@ -193,8 +199,11 @@ class TelemetryEvent:
     This is the bridge between the A2A firewall and the correlation engine —
     every decision, violation, and identity check produces one of these.
     """
+
     event_id: str
-    event_type: str  # "a2a.inspection" | "a2a.identity_failure" | "a2a.scope_violation" | "a2a.delegation"
+    event_type: (
+        str  # "a2a.inspection" | "a2a.identity_failure" | "a2a.scope_violation" | "a2a.delegation"
+    )
     timestamp: str  # ISO 8601
     workspace_id: str
     sender_agent_id: str
@@ -217,7 +226,11 @@ class TelemetryEvent:
     groq_rationale: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {k: v for k, v in self.__dict__.items() if v is not None or k in ("event_id", "event_type", "timestamp")}
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if v is not None or k in ("event_id", "event_type", "timestamp")
+        }
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))

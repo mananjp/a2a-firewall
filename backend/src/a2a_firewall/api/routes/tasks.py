@@ -22,10 +22,7 @@ async def list_recent_tasks(
 ) -> list[dict[str, Any]]:
     """Return the most recent tasks for this workspace (live feed)."""
     result = await db.execute(
-        select(Task)
-        .where(Task.workspace_id == ws.id)
-        .order_by(Task.created_at.desc())
-        .limit(limit)
+        select(Task).where(Task.workspace_id == ws.id).order_by(Task.created_at.desc()).limit(limit)
     )
     tasks = result.scalars().all()
     return [

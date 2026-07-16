@@ -55,10 +55,24 @@ async def run_inspection(
 
     if not agent_allowed:
         result = await _rate_limit_response(
-            request_data, sender, workspace, db, trace_events=trace_events,
-            scope="agent", current_count=agent_count,
+            request_data,
+            sender,
+            workspace,
+            db,
+            trace_events=trace_events,
+            scope="agent",
+            current_count=agent_count,
         )
-        await _emit_telemetry(result, request_data, sender, workspace, db, start, trace_events, violations=result.get("violations", []))
+        await _emit_telemetry(
+            result,
+            request_data,
+            sender,
+            workspace,
+            db,
+            start,
+            trace_events,
+            violations=result.get("violations", []),
+        )
         return result
 
     violations: list[dict[str, Any]] = []
@@ -84,20 +98,22 @@ async def run_inspection(
     sender_public_key = request_data.get("sender_public_key")
     if sender_signature and sender_public_key:
         try:
-
             from a2a_firewall.core.identity import hex_to_public_key
+
             pub_key = hex_to_public_key(sender_public_key)
             msg_hash = hashlib.sha256(payload_str.encode()).digest()
             pub_key.verify(bytes.fromhex(sender_signature), msg_hash)
             signature_valid = True
         except Exception:
             signature_valid = False
-            violations.append({
-                "layer": "identity",
-                "violation_type": "invalid_signature",
-                "severity": "critical",
-                "details": {"sender_id": str(sender.id)},
-            })
+            violations.append(
+                {
+                    "layer": "identity",
+                    "violation_type": "invalid_signature",
+                    "severity": "critical",
+                    "details": {"sender_id": str(sender.id)},
+                }
+            )
             risk_score = 1.0
 
     # Check delegation token if present
@@ -109,27 +125,36 @@ async def run_inspection(
                 verify_token,
             )
             from a2a_firewall.core.security import hash_api_key
+
             root_key = hash_api_key(str(workspace.id)).encode()[:32]
             token = token_from_compact(delegation_token_compact)
             verification = verify_token(token, root_key)
             if not verification.valid:
-                violations.append({
-                    "layer": "delegation",
-                    "violation_type": "invalid_delegation_token",
-                    "severity": "critical",
-                    "details": {"reason": verification.reason},
-                })
+                violations.append(
+                    {
+                        "layer": "delegation",
+                        "violation_type": "invalid_delegation_token",
+                        "severity": "critical",
+                        "details": {"reason": verification.reason},
+                    }
+                )
                 risk_score = 1.0
             else:
-                delegation_chain = verification.parsed.get("delegation_chain", "").split(",") if verification.parsed.get("delegation_chain") else []
+                delegation_chain = (
+                    verification.parsed.get("delegation_chain", "").split(",")
+                    if verification.parsed.get("delegation_chain")
+                    else []
+                )
                 delegation_depth = len(delegation_chain)
         except Exception as e:
-            violations.append({
-                "layer": "delegation",
-                "violation_type": "delegation_token_parse_error",
-                "severity": "high",
-                "details": {"error": str(e)[:200]},
-            })
+            violations.append(
+                {
+                    "layer": "delegation",
+                    "violation_type": "delegation_token_parse_error",
+                    "severity": "high",
+                    "details": {"error": str(e)[:200]},
+                }
+            )
             risk_score = max(risk_score, 0.8)
 
     # ---------- Layer 0: preflight ----------
@@ -153,19 +178,59 @@ async def run_inspection(
     )
 
     if pre and pre.get("idempotent_replay"):
-        result = await _replay_response(pre["cached_task"], db, trace_id, parent_span_id, trace_events)
-        await _emit_telemetry(result, request_data, sender, workspace, db, start, trace_events, violations=[], signature_valid=signature_valid, delegation_chain=delegation_chain, delegation_depth=delegation_depth)
+        result = await _replay_response(
+            pre["cached_task"], db, trace_id, parent_span_id, trace_events
+        )
+        await _emit_telemetry(
+            result,
+            request_data,
+            sender,
+            workspace,
+            db,
+            start,
+            trace_events,
+            violations=[],
+            signature_valid=signature_valid,
+            delegation_chain=delegation_chain,
+            delegation_depth=delegation_depth,
+        )
         return result
 
     if pre and pre.get("block"):
         violations.extend(pre["violations"])
         risk_score = max(risk_score, pre.get("risk_score", 0))
         result = await _save_and_return(
-            "block", pre["reason"], request_data, sender, workspace,
-            payload_hash, payload_size, risk_score, violations, None, False, None,
-            start, db, trace_id, parent_span_id, trace_events,
+            "block",
+            pre["reason"],
+            request_data,
+            sender,
+            workspace,
+            payload_hash,
+            payload_size,
+            risk_score,
+            violations,
+            None,
+            False,
+            None,
+            start,
+            db,
+            trace_id,
+            parent_span_id,
+            trace_events,
         )
-        await _emit_telemetry(result, request_data, sender, workspace, db, start, trace_events, violations=violations, signature_valid=signature_valid, delegation_chain=delegation_chain, delegation_depth=delegation_depth)
+        await _emit_telemetry(
+            result,
+            request_data,
+            sender,
+            workspace,
+            db,
+            start,
+            trace_events,
+            violations=violations,
+            signature_valid=signature_valid,
+            delegation_chain=delegation_chain,
+            delegation_depth=delegation_depth,
+        )
         return result
 
     # ---------- Layer 1: schema ----------
@@ -188,11 +253,37 @@ async def run_inspection(
     if schema_result["violations"]:
         violations.extend(schema_result["violations"])
         result = await _save_and_return(
-            "block", "schema_validation_failed", request_data, sender, workspace,
-            payload_hash, payload_size, 1.0, violations, None, False, None,
-            start, db, trace_id, parent_span_id, trace_events,
+            "block",
+            "schema_validation_failed",
+            request_data,
+            sender,
+            workspace,
+            payload_hash,
+            payload_size,
+            1.0,
+            violations,
+            None,
+            False,
+            None,
+            start,
+            db,
+            trace_id,
+            parent_span_id,
+            trace_events,
         )
-        await _emit_telemetry(result, request_data, sender, workspace, db, start, trace_events, violations=violations, signature_valid=signature_valid, delegation_chain=delegation_chain, delegation_depth=delegation_depth)
+        await _emit_telemetry(
+            result,
+            request_data,
+            sender,
+            workspace,
+            db,
+            start,
+            trace_events,
+            violations=violations,
+            signature_valid=signature_valid,
+            delegation_chain=delegation_chain,
+            delegation_depth=delegation_depth,
+        )
         return result
 
     # ---------- Layer 2: permissions ----------
@@ -214,14 +305,45 @@ async def run_inspection(
 
     if not perm_result["allowed"]:
         violations.append(
-            {"layer": "rule", "violation_type": "sender_not_permitted", "severity": "high", "details": {}}
+            {
+                "layer": "rule",
+                "violation_type": "sender_not_permitted",
+                "severity": "high",
+                "details": {},
+            }
         )
         result = await _save_and_return(
-            "block", "permission_denied", request_data, sender, workspace,
-            payload_hash, payload_size, 1.0, violations, None, False, None,
-            start, db, trace_id, parent_span_id, trace_events,
+            "block",
+            "permission_denied",
+            request_data,
+            sender,
+            workspace,
+            payload_hash,
+            payload_size,
+            1.0,
+            violations,
+            None,
+            False,
+            None,
+            start,
+            db,
+            trace_id,
+            parent_span_id,
+            trace_events,
         )
-        await _emit_telemetry(result, request_data, sender, workspace, db, start, trace_events, violations=violations, signature_valid=signature_valid, delegation_chain=delegation_chain, delegation_depth=delegation_depth)
+        await _emit_telemetry(
+            result,
+            request_data,
+            sender,
+            workspace,
+            db,
+            start,
+            trace_events,
+            violations=violations,
+            signature_valid=signature_valid,
+            delegation_chain=delegation_chain,
+            delegation_depth=delegation_depth,
+        )
         return result
 
     # ---------- Layer 3: rules ----------
@@ -276,7 +398,12 @@ async def run_inspection(
         )
         if groq_result.get("injection_detected"):
             violations.append(
-                {"layer": "semantic", "violation_type": "prompt_injection", "severity": "critical", "details": groq_result}
+                {
+                    "layer": "semantic",
+                    "violation_type": "prompt_injection",
+                    "severity": "critical",
+                    "details": groq_result,
+                }
             )
         risk_score = min(1.0, risk_score + groq_result.get("risk_score_delta", 0))
     else:
@@ -298,19 +425,45 @@ async def run_inspection(
             "span_id": uuid.uuid4().hex,
             "parent_span_id": parent_span_id,
             "duration_ms": 0,
-            "attributes": {"decision": decision, "risk_score": risk_score, "final_reason": rule_result.get("matched_rule_action")},
+            "attributes": {
+                "decision": decision,
+                "risk_score": risk_score,
+                "final_reason": rule_result.get("matched_rule_action"),
+            },
         }
     )
     result = await _save_and_return(
-        decision, None, request_data, sender, workspace,
-        payload_hash, payload_size, risk_score, violations, groq_result,
-        groq_called, matched_rule_id, start, db, trace_id, parent_span_id,
-        trace_events, groq_model,
+        decision,
+        None,
+        request_data,
+        sender,
+        workspace,
+        payload_hash,
+        payload_size,
+        risk_score,
+        violations,
+        groq_result,
+        groq_called,
+        matched_rule_id,
+        start,
+        db,
+        trace_id,
+        parent_span_id,
+        trace_events,
+        groq_model,
     )
     await _emit_telemetry(
-        result, request_data, sender, workspace, db, start, trace_events,
-        violations=violations, signature_valid=signature_valid,
-        delegation_chain=delegation_chain, delegation_depth=delegation_depth,
+        result,
+        request_data,
+        sender,
+        workspace,
+        db,
+        start,
+        trace_events,
+        violations=violations,
+        signature_valid=signature_valid,
+        delegation_chain=delegation_chain,
+        delegation_depth=delegation_depth,
         groq_result=groq_result,
     )
     return result
@@ -349,7 +502,9 @@ async def _emit_telemetry(
         event_type=event_type,
         workspace_id=workspace.id,
         sender_agent_id=sender.id,
-        receiver_agent_id=uuid.UUID(request_data.get("receiver_agent_id", "00000000-0000-0000-0000-000000000000")),
+        receiver_agent_id=uuid.UUID(
+            request_data.get("receiver_agent_id", "00000000-0000-0000-0000-000000000000")
+        ),
         task_type=request_data.get("task_type"),
         decision=result.get("decision"),
         risk_score=result.get("risk_score", 0.0),

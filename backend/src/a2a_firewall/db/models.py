@@ -162,12 +162,18 @@ class TraceEvent(Base):
 # Identity & Delegation (new)
 # ---------------------------------------------------------------------------
 
+
 class AgentIdentity(Base):
     """Ed25519 identity record for each agent."""
+
     __tablename__ = "agent_identities"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), unique=True, nullable=False)
-    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     public_key = Column(String, nullable=False)  # hex-encoded Ed25519 public key
     card_signature = Column(Text, nullable=False)  # signed agent card
     card_issued_at = Column(DateTime(timezone=True), nullable=False)
@@ -177,19 +183,30 @@ class AgentIdentity(Base):
 
 class WorkspaceIdentity(Base):
     """Workspace root Ed25519 keypair (public key stored, private key never in DB)."""
+
     __tablename__ = "workspace_identities"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, nullable=False)
+    workspace_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
     root_public_key = Column(String, nullable=False)  # hex-encoded Ed25519 public key
-    root_hmac_key_hash = Column(String, nullable=False)  # SHA-256 of HMAC root key (for verification)
+    root_hmac_key_hash = Column(
+        String, nullable=False
+    )  # SHA-256 of HMAC root key (for verification)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class DelegationChain(Base):
     """Records every delegation hop for audit and lineage."""
+
     __tablename__ = "delegation_chains"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     sender_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
     receiver_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
@@ -207,11 +224,14 @@ class TelemetryRow(Base):
     Every inspection, identity failure, scope violation, and delegation event
     produces a row here. The correlation engine queries this table.
     """
+
     __tablename__ = "telemetry_events"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(String, nullable=False, unique=True)
     event_type = Column(String, nullable=False)  # "a2a.inspection" | "a2a.identity_failure" | etc.
-    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
     sender_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
     receiver_agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
     task_type = Column(String, nullable=True)

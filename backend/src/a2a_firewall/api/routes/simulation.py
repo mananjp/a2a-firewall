@@ -3,6 +3,7 @@
 Auto-provisions agents and permissions on first run so the user never has to
 manually configure anything.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -23,10 +24,26 @@ router = APIRouter()
 
 # Default bank agents for the simulation mesh
 DEFAULT_AGENTS = [
-    {"name": "Customer Service", "description": "First point of contact for customer queries", "capabilities": ["customer_interaction", "ticket_creation"]},
-    {"name": "Fraud Investigation", "description": "Investigates suspicious activity and fraud alerts", "capabilities": ["investigation", "fraud_detection", "case_management"]},
-    {"name": "KYC Agent", "description": "Know Your Customer identity verification", "capabilities": ["identity_verification", "document_check", "compliance"]},
-    {"name": "Payments Agent", "description": "Processes payments, holds, and wire transfers", "capabilities": ["payment_processing", "wire_transfer", "hold_management"]},
+    {
+        "name": "Customer Service",
+        "description": "First point of contact for customer queries",
+        "capabilities": ["customer_interaction", "ticket_creation"],
+    },
+    {
+        "name": "Fraud Investigation",
+        "description": "Investigates suspicious activity and fraud alerts",
+        "capabilities": ["investigation", "fraud_detection", "case_management"],
+    },
+    {
+        "name": "KYC Agent",
+        "description": "Know Your Customer identity verification",
+        "capabilities": ["identity_verification", "document_check", "compliance"],
+    },
+    {
+        "name": "Payments Agent",
+        "description": "Processes payments, holds, and wire transfers",
+        "capabilities": ["payment_processing", "wire_transfer", "hold_management"],
+    },
 ]
 
 
@@ -52,10 +69,26 @@ ALLOWED_TASK_PERMISSIONS: list[tuple[str, str, str]] = [
 ]
 
 TASK_TYPE_MAP: dict[str, dict[str, str]] = {
-    "customer service": {"fraud investigation": "investigation", "payments agent": "payment_request", "kyc agent": "identity_check"},
-    "fraud investigation": {"payments agent": "payment_hold", "customer service": "status_update", "kyc agent": "verification_request"},
-    "kyc agent": {"fraud investigation": "identity_verification", "payments agent": "compliance_check", "customer service": "kyc_status"},
-    "payments agent": {"customer service": "payment_confirmation", "fraud investigation": "transaction_report", "kyc agent": "risk_assessment"},
+    "customer service": {
+        "fraud investigation": "investigation",
+        "payments agent": "payment_request",
+        "kyc agent": "identity_check",
+    },
+    "fraud investigation": {
+        "payments agent": "payment_hold",
+        "customer service": "status_update",
+        "kyc agent": "verification_request",
+    },
+    "kyc agent": {
+        "fraud investigation": "identity_verification",
+        "payments agent": "compliance_check",
+        "customer service": "kyc_status",
+    },
+    "payments agent": {
+        "customer service": "payment_confirmation",
+        "fraud investigation": "transaction_report",
+        "kyc agent": "risk_assessment",
+    },
 }
 
 
@@ -120,13 +153,15 @@ async def _ensure_agents(workspace: Workspace, db: AsyncSession) -> dict[str, Ag
             sender_id = name_to_id.get(sender_name.lower())
             receiver_id = name_to_id.get(receiver_name.lower())
             if sender_id and receiver_id:
-                db.add(AgentPermission(
-                    workspace_id=workspace.id,
-                    sender_id=sender_id,
-                    receiver_id=receiver_id,
-                    task_type=task_type,
-                    allowed=True,
-                ))
+                db.add(
+                    AgentPermission(
+                        workspace_id=workspace.id,
+                        sender_id=sender_id,
+                        receiver_id=receiver_id,
+                        task_type=task_type,
+                        allowed=True,
+                    )
+                )
         await db.flush()
 
     return existing
@@ -150,7 +185,9 @@ async def run_simulation(
         if not sender:
             sender = list(agent_map.values())[0]
         if not receiver:
-            receiver = list(agent_map.values())[1] if len(agent_map) > 1 else list(agent_map.values())[0]
+            receiver = (
+                list(agent_map.values())[1] if len(agent_map) > 1 else list(agent_map.values())[0]
+            )
 
         task_type = step.task_type or _infer_task_type(step.sender, step.receiver, step.payload)
         task_id = str(uuid.uuid4())
@@ -172,13 +209,15 @@ async def run_simulation(
 
         inspection = await run_inspection(request_data, sender, workspace, db)
 
-        step_results.append({
-            "step": i,
-            "sender": step.sender,
-            "receiver": step.receiver,
-            "task_type": task_type,
-            **inspection,
-        })
+        step_results.append(
+            {
+                "step": i,
+                "sender": step.sender,
+                "receiver": step.receiver,
+                "task_type": task_type,
+                **inspection,
+            }
+        )
 
     return {
         "steps": step_results,

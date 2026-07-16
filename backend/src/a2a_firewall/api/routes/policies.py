@@ -72,7 +72,14 @@ async def create_policy(
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
-    return {"id": str(rule.id), "priority": rule.priority, "name": rule.name, "action": rule.action, "task_type": rule.task_type, "description": rule.description}
+    return {
+        "id": str(rule.id),
+        "priority": rule.priority,
+        "name": rule.name,
+        "action": rule.action,
+        "task_type": rule.task_type,
+        "description": rule.description,
+    }
 
 
 @router.delete("/{rule_id}")

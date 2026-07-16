@@ -23,13 +23,42 @@ INJECTION_PATTERNS: list[str] = [
 # Agent capabilities mapped to allowed task_type values
 AGENT_CAPABILITY_TASKS: dict[str, list[str]] = {
     "customer service": ["investigation", "status_update", "payment_request", "identity_check"],
-    "fraud investigation": ["investigation", "payment_hold", "payment_approval", "status_update", "verification_request", "identity_verification", "transaction_report", "risk_assessment"],
-    "kyc agent": ["identity_verification", "verification_request", "compliance_check", "kyc_status"],
-    "payments agent": ["payment_request", "payment_hold", "payment_approval", "compliance_check", "payment_confirmation", "transaction_report", "risk_assessment"],
+    "fraud investigation": [
+        "investigation",
+        "payment_hold",
+        "payment_approval",
+        "status_update",
+        "verification_request",
+        "identity_verification",
+        "transaction_report",
+        "risk_assessment",
+    ],
+    "kyc agent": [
+        "identity_verification",
+        "verification_request",
+        "compliance_check",
+        "kyc_status",
+    ],
+    "payments agent": [
+        "payment_request",
+        "payment_hold",
+        "payment_approval",
+        "compliance_check",
+        "payment_confirmation",
+        "transaction_report",
+        "risk_assessment",
+    ],
 }
 
 # Task types that involve financial transactions
-FINANCIAL_TASK_TYPES = {"payment_request", "payment_hold", "payment_approval", "wire_transfer", "payment_processing", "compliance_check"}
+FINANCIAL_TASK_TYPES = {
+    "payment_request",
+    "payment_hold",
+    "payment_approval",
+    "wire_transfer",
+    "payment_processing",
+    "compliance_check",
+}
 
 SUSPICIOUS_BENEFICIARY_PATTERNS = [
     r"(?i)shell\b",
@@ -68,23 +97,31 @@ async def run_rules(
     # ── Injection pattern scan ──
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, payload_str, re.IGNORECASE):
-            violations.append({
-                "layer": "rule",
-                "violation_type": "forbidden_pattern",
-                "severity": "high",
-                "details": {"pattern": pattern},
-            })
+            violations.append(
+                {
+                    "layer": "rule",
+                    "violation_type": "forbidden_pattern",
+                    "severity": "high",
+                    "details": {"pattern": pattern},
+                }
+            )
             risk_delta = min(1.0, risk_delta + 0.8)
 
     # ── Capability mismatch ──
     allowed_tasks = AGENT_CAPABILITY_TASKS.get(sender.name.lower(), [])
     if task_type and allowed_tasks and task_type not in allowed_tasks:
-        violations.append({
-            "layer": "rule",
-            "violation_type": "capability_mismatch",
-            "severity": "high",
-            "details": {"sender": sender.name, "task_type": task_type, "allowed": allowed_tasks},
-        })
+        violations.append(
+            {
+                "layer": "rule",
+                "violation_type": "capability_mismatch",
+                "severity": "high",
+                "details": {
+                    "sender": sender.name,
+                    "task_type": task_type,
+                    "allowed": allowed_tasks,
+                },
+            }
+        )
         risk_delta = min(1.0, risk_delta + 0.7)
 
     # ── Suspicious wire transfer ──
@@ -96,27 +133,37 @@ async def run_rules(
         beneficiary = str(payload.get("beneficiary", "") or "")
         to_account = str(payload.get("to", "") or "")
 
-    is_financial = task_type in FINANCIAL_TASK_TYPES or "initiate_wire" in str(payload.get("action", ""))
+    is_financial = task_type in FINANCIAL_TASK_TYPES or "initiate_wire" in str(
+        payload.get("action", "")
+    )
 
     if is_financial and amount is not None:
         try:
             amt = float(amount)
             if amt > 100000:
-                violations.append({
-                    "layer": "rule",
-                    "violation_type": "high_value_transaction",
-                    "severity": "high",
-                    "details": {"amount": amt, "currency": payload.get("currency"), "threshold": 100000},
-                })
+                violations.append(
+                    {
+                        "layer": "rule",
+                        "violation_type": "high_value_transaction",
+                        "severity": "high",
+                        "details": {
+                            "amount": amt,
+                            "currency": payload.get("currency"),
+                            "threshold": 100000,
+                        },
+                    }
+                )
                 risk_delta = min(1.0, risk_delta + 0.6)
 
                 if amt > 500000:
-                    violations.append({
-                        "layer": "rule",
-                        "violation_type": "extreme_value_transaction",
-                        "severity": "critical",
-                        "details": {"amount": amt},
-                    })
+                    violations.append(
+                        {
+                            "layer": "rule",
+                            "violation_type": "extreme_value_transaction",
+                            "severity": "critical",
+                            "details": {"amount": amt},
+                        }
+                    )
                     risk_delta = min(1.0, risk_delta + 0.3)
 
         except (ValueError, TypeError):
@@ -126,12 +173,14 @@ async def run_rules(
         if beneficiary:
             for bpat in SUSPICIOUS_BENEFICIARY_PATTERNS:
                 if re.search(bpat, beneficiary):
-                    violations.append({
-                        "layer": "rule",
-                        "violation_type": "suspicious_beneficiary",
-                        "severity": "high",
-                        "details": {"beneficiary": beneficiary[:100], "pattern": bpat},
-                    })
+                    violations.append(
+                        {
+                            "layer": "rule",
+                            "violation_type": "suspicious_beneficiary",
+                            "severity": "high",
+                            "details": {"beneficiary": beneficiary[:100], "pattern": bpat},
+                        }
+                    )
                     risk_delta = min(1.0, risk_delta + 0.5)
                     break
 
@@ -139,24 +188,28 @@ async def run_rules(
         if to_account:
             for apat in SUSPICIOUS_ACCOUNT_PATTERNS:
                 if re.search(apat, to_account):
-                    violations.append({
-                        "layer": "rule",
-                        "violation_type": "suspicious_destination",
-                        "severity": "high",
-                        "details": {"account": to_account[:100], "pattern": apat},
-                    })
+                    violations.append(
+                        {
+                            "layer": "rule",
+                            "violation_type": "suspicious_destination",
+                            "severity": "high",
+                            "details": {"account": to_account[:100], "pattern": apat},
+                        }
+                    )
                     risk_delta = min(1.0, risk_delta + 0.4)
                     break
 
     # ── Delegation abuse ──
     for dpat, drisk, dtype in DELEGATION_ABUSE_PATTERNS:
         if re.search(dpat, payload_str):
-            violations.append({
-                "layer": "rule",
-                "violation_type": dtype,
-                "severity": "critical",
-                "details": {"pattern": dpat},
-            })
+            violations.append(
+                {
+                    "layer": "rule",
+                    "violation_type": dtype,
+                    "severity": "critical",
+                    "details": {"pattern": dpat},
+                }
+            )
             risk_delta = min(1.0, risk_delta + drisk)
 
     # ── DB-stored policy rules (unchanged) ──
@@ -175,12 +228,14 @@ async def run_rules(
         matched_rule_id = str(rule.id)
         matched_rule_action = cast(str, rule.action) if rule.action else None
         if rule.action == "block":
-            violations.append({
-                "layer": "policy",
-                "violation_type": "policy_rule_triggered",
-                "severity": "high",
-                "details": {"rule": rule.name},
-            })
+            violations.append(
+                {
+                    "layer": "policy",
+                    "violation_type": "policy_rule_triggered",
+                    "severity": "high",
+                    "details": {"rule": rule.name},
+                }
+            )
             risk_delta = 1.0
         break
 

@@ -1,4 +1,5 @@
 """Identity management routes — register agent keys, verify cards, manage workspace root keys."""
+
 from __future__ import annotations
 
 import hashlib
@@ -33,6 +34,7 @@ router = APIRouter()
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _derive_workspace_private_key(workspace_id: Any) -> Ed25519PrivateKey:
     """Deterministically derive the workspace root Ed25519 private key from
     the workspace UUID.
@@ -50,6 +52,7 @@ def _derive_workspace_private_key(workspace_id: Any) -> Ed25519PrivateKey:
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+
 
 class RegisterIdentityRequest(BaseModel):
     public_key: str  # hex-encoded Ed25519 public key (agent already generated keypair)
@@ -83,6 +86,7 @@ class WorkspaceIdentityResponse(BaseModel):
 # Routes
 # ---------------------------------------------------------------------------
 
+
 @router.post("/register-identity", response_model=RegisterIdentityResponse)
 async def register_agent_identity(
     body: RegisterIdentityRequest,
@@ -114,9 +118,7 @@ async def register_agent_identity(
         await db.flush()
 
     # Check if identity already exists
-    existing = await db.execute(
-        select(AgentIdentity).where(AgentIdentity.agent_id == agent.id)
-    )
+    existing = await db.execute(select(AgentIdentity).where(AgentIdentity.agent_id == agent.id))
     existing_identity = existing.scalar_one_or_none()
     if existing_identity:
         raise HTTPException(status_code=409, detail="Agent identity already registered")

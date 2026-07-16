@@ -40,6 +40,7 @@ from a2a_firewall.core.signing import (
 # Identity tests
 # ---------------------------------------------------------------------------
 
+
 class TestIdentity:
     def test_keypair_generation(self):
         priv, pub = generate_keypair()
@@ -82,8 +83,11 @@ class TestIdentity:
         _, agent_pub = generate_keypair()
 
         card = create_agent_card(
-            agent_id="agent-1", name="test", workspace_id="ws-1",
-            capabilities=[], agent_public_key=public_key_to_hex(agent_pub),
+            agent_id="agent-1",
+            name="test",
+            workspace_id="ws-1",
+            capabilities=[],
+            agent_public_key=public_key_to_hex(agent_pub),
             workspace_private_key=ws_priv,
         )
         assert verify_card(card, wrong_pub) is False
@@ -93,9 +97,13 @@ class TestIdentity:
         _, agent_pub = generate_keypair()
 
         card = create_agent_card(
-            agent_id="agent-1", name="test", workspace_id="ws-1",
-            capabilities=[], agent_public_key=public_key_to_hex(agent_pub),
-            workspace_private_key=ws_priv, ttl_seconds=-1,  # expired
+            agent_id="agent-1",
+            name="test",
+            workspace_id="ws-1",
+            capabilities=[],
+            agent_public_key=public_key_to_hex(agent_pub),
+            workspace_private_key=ws_priv,
+            ttl_seconds=-1,  # expired
         )
         assert card.is_expired()
         assert verify_card(card, ws_pub) is False
@@ -111,6 +119,7 @@ class TestIdentity:
 # ---------------------------------------------------------------------------
 # Delegation tests
 # ---------------------------------------------------------------------------
+
 
 class TestDelegation:
     def setup_method(self):
@@ -202,6 +211,7 @@ class TestDelegation:
 # Signing tests
 # ---------------------------------------------------------------------------
 
+
 class TestSigning:
     def test_message_hash_deterministic(self):
         payload = {"query": "test"}
@@ -261,8 +271,12 @@ class TestSigning:
         pub_hex = public_key_to_hex(priv.public_key())
 
         msg = sign_message(
-            task_id="task-1", sender_id="a", receiver_id="b",
-            task_type="t", payload={"amount": 100}, sender_private_key=priv,
+            task_id="task-1",
+            sender_id="a",
+            receiver_id="b",
+            task_type="t",
+            payload={"amount": 100},
+            sender_private_key=priv,
         )
 
         # Tamper with chain hash

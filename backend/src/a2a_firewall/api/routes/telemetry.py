@@ -1,4 +1,5 @@
 """Telemetry events routes — structured events for the correlation engine."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -102,7 +103,9 @@ async def get_telemetry_summary(
 ) -> TelemetrySummaryResponse:
     """Get telemetry summary for correlation dashboard."""
     # Total events
-    total_result = await db.execute(select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace.id))
+    total_result = await db.execute(
+        select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace.id)
+    )
     total = total_result.scalar() or 0
 
     # Events by type
@@ -129,15 +132,19 @@ async def get_telemetry_summary(
 
     # Identity failures
     id_fail_result = await db.execute(
-        select(func.count(TelemetryRow.id))
-        .where(TelemetryRow.workspace_id == workspace.id, TelemetryRow.event_type == "a2a.identity_failure")
+        select(func.count(TelemetryRow.id)).where(
+            TelemetryRow.workspace_id == workspace.id,
+            TelemetryRow.event_type == "a2a.identity_failure",
+        )
     )
     identity_failures = id_fail_result.scalar() or 0
 
     # Scope violations
     scope_result = await db.execute(
-        select(func.count(TelemetryRow.id))
-        .where(TelemetryRow.workspace_id == workspace.id, TelemetryRow.event_type == "a2a.scope_violation")
+        select(func.count(TelemetryRow.id)).where(
+            TelemetryRow.workspace_id == workspace.id,
+            TelemetryRow.event_type == "a2a.scope_violation",
+        )
     )
     scope_violations = scope_result.scalar() or 0
 

@@ -32,6 +32,7 @@ from cryptography.hazmat.primitives.serialization import (
 # Key management
 # ---------------------------------------------------------------------------
 
+
 def generate_keypair() -> tuple[Ed25519PrivateKey, Ed25519PublicKey]:
     """Generate a fresh Ed25519 keypair."""
     private_key = Ed25519PrivateKey.generate()
@@ -62,9 +63,11 @@ def hex_to_public_key(hex_str: str) -> Ed25519PublicKey:
 # Agent Card
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AgentCard:
     """Cryptographically signed identity document for an agent."""
+
     agent_id: str
     name: str
     workspace_id: str
@@ -150,9 +153,11 @@ def create_agent_card(
 # Workspace root keypair helpers
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WorkspaceKeys:
     """Workspace-level Ed25519 keypair for signing agent cards."""
+
     private_key_hex: str
     public_key_hex: str
 
