@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     def _fix_database_url_scheme(self) -> Settings:
         """Normalise the database URL for asyncpg.
 
-        1. Rewrite ``postgresql://`` → ``postgresql+asyncpg://`` so
+        1. Rewrite ``postgresql://`` or ``postgres://`` → ``postgresql+asyncpg://`` so
            SQLAlchemy picks the async driver.
         2. Strip **all** query-string parameters from the DSN.  asyncpg
            does not understand libpq-style params (``sslmode``,
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
         url = self.DATABASE_URL
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         parts = urlsplit(url)
         params = parse_qs(parts.query)
@@ -36,6 +38,15 @@ class Settings(BaseSettings):
         # Detect SSL requirement from sslmode before we strip it.
         sslmode = params.get("sslmode", [None])[0]
         if sslmode and sslmode != "disable":
+            self.DATABASE_SSL_REQUIRED = True
+
+        # Enforce SSL for remote databases by default if not explicitly disabled.
+        host = parts.hostname
+        if (
+            host
+            and host not in ("localhost", "127.0.0.1", "db", "test", "0.0.0.0")
+            and sslmode != "disable"
+        ):
             self.DATABASE_SSL_REQUIRED = True
 
         # Drop *all* query params – asyncpg doesn't accept any of them.
