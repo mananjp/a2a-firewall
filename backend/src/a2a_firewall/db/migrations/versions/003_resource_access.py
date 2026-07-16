@@ -4,6 +4,7 @@ Revision ID: 003
 Revises: 002
 Create Date: 2026-07-16
 """
+
 from __future__ import annotations
 
 import uuid
@@ -26,14 +27,28 @@ def upgrade() -> None:
     op.create_table(
         "resource_permissions",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("workspace_id", UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "workspace_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "agent_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("agents.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("resource_type", sa.String, nullable=False),
         sa.Column("action", sa.String, nullable=False),
         sa.Column("allowed", sa.Boolean, server_default="true"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("idx_resource_permissions_agent", "resource_permissions", ["agent_id", "resource_type", "action"])
+    op.create_index(
+        "idx_resource_permissions_agent",
+        "resource_permissions",
+        ["agent_id", "resource_type", "action"],
+    )
 
 
 def downgrade() -> None:

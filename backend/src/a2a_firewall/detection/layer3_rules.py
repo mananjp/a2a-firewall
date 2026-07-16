@@ -62,15 +62,29 @@ FINANCIAL_TASK_TYPES = {
 
 # ── Resource sensitivity map: resource_type → base risk for certain actions ──
 SENSITIVE_RESOURCES: dict[str, dict[str, float]] = {
-    "payment":      {"read": 0.0, "write": 0.3, "transfer": 0.5, "approve": 0.4, "delete": 0.8, "*": 0.2},
-    "account":      {"read": 0.1, "write": 0.4, "transfer": 0.5, "delete": 0.9, "*": 0.3},
+    "payment": {
+        "read": 0.0,
+        "write": 0.3,
+        "transfer": 0.5,
+        "approve": 0.4,
+        "delete": 0.8,
+        "*": 0.2,
+    },
+    "account": {"read": 0.1, "write": 0.4, "transfer": 0.5, "delete": 0.9, "*": 0.3},
     "customer_data": {"read": 0.2, "write": 0.5, "delete": 0.9, "export": 0.7, "*": 0.4},
-    "policy":       {"write": 0.6, "delete": 0.7, "*": 0.3},
-    "identity":     {"read": 0.3, "write": 0.6, "verify": 0.0, "delete": 0.9, "*": 0.4},
-    "key":          {"read": 0.8, "write": 1.0, "rotate": 0.9, "delete": 1.0, "*": 0.7},
+    "policy": {"write": 0.6, "delete": 0.7, "*": 0.3},
+    "identity": {"read": 0.3, "write": 0.6, "verify": 0.0, "delete": 0.9, "*": 0.4},
+    "key": {"read": 0.8, "write": 1.0, "rotate": 0.9, "delete": 1.0, "*": 0.7},
 }
 
-HIGH_RISK_ACTIONS = {"delete", "transfer", "approve_payment", "escalate", "impersonate", "delegate_all"}
+HIGH_RISK_ACTIONS = {
+    "delete",
+    "transfer",
+    "approve_payment",
+    "escalate",
+    "impersonate",
+    "delegate_all",
+}
 
 
 SUSPICIOUS_BENEFICIARY_PATTERNS = [
@@ -129,22 +143,31 @@ async def run_rules(
         if action_map:
             base = action_map.get(action.lower()) or action_map.get("*", 0.0)
             if base > 0:
-                violations.append({
-                    "layer": "rule",
-                    "violation_type": "sensitive_resource_access",
-                    "severity": "medium" if base < 0.5 else "high",
-                    "details": {"resource_type": resource_type, "resource_id": resource_id, "action": action, "base_risk": base},
-                })
+                violations.append(
+                    {
+                        "layer": "rule",
+                        "violation_type": "sensitive_resource_access",
+                        "severity": "medium" if base < 0.5 else "high",
+                        "details": {
+                            "resource_type": resource_type,
+                            "resource_id": resource_id,
+                            "action": action,
+                            "base_risk": base,
+                        },
+                    }
+                )
                 risk_delta = min(1.0, risk_delta + base)
 
     # ── High-risk action (regardless of resource) ──
     if action and action.lower() in HIGH_RISK_ACTIONS:
-        violations.append({
-            "layer": "rule",
-            "violation_type": "high_risk_action",
-            "severity": "high",
-            "details": {"action": action},
-        })
+        violations.append(
+            {
+                "layer": "rule",
+                "violation_type": "high_risk_action",
+                "severity": "high",
+                "details": {"action": action},
+            }
+        )
         risk_delta = min(1.0, risk_delta + 0.4)
 
     # ── Capability mismatch ──
@@ -295,6 +318,10 @@ def _rule_matches(rule: Any, request_data: dict[str, Any], sender: Any) -> bool:
     if rule.condition_expr:
         for key, val in rule.condition_expr.items():
             actual = request_data.get(key)
-            if actual is None or (isinstance(val, list) and actual not in val) or (not isinstance(val, list) and actual != val):
+            if (
+                actual is None
+                or (isinstance(val, list) and actual not in val)
+                or (not isinstance(val, list) and actual != val)
+            ):
                 return False
     return True
