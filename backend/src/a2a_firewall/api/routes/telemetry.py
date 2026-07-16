@@ -1,12 +1,11 @@
 """Telemetry events routes — structured events for the correlation engine."""
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
@@ -26,8 +25,8 @@ class TelemetryEventResponse(BaseModel):
     task_type: str | None
     decision: str | None
     risk_score: float
-    violations: list
-    delegation_chain: list
+    violations: list[Any]
+    delegation_chain: list[str]
     delegation_depth: int
     message_hash: str | None
     chain_hash: str | None
@@ -102,8 +101,6 @@ async def get_telemetry_summary(
     db: AsyncSession = Depends(get_db),
 ) -> TelemetrySummaryResponse:
     """Get telemetry summary for correlation dashboard."""
-    base = select(TelemetryRow).where(TelemetryRow.workspace_id == workspace.id)
-
     # Total events
     total_result = await db.execute(select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace.id))
     total = total_result.scalar() or 0

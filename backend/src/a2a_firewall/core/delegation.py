@@ -25,9 +25,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import time
 import secrets
-from dataclasses import dataclass, field, asdict
+import time
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -112,11 +112,10 @@ def attenuate_token(
     Raises ValueError if new caveats would widen existing restrictions.
     """
     _validate_caveat_narrowing(token.caveats, new_caveats)
-    
+
     # Construct the new caveat list: if a key exists, replace it in-place, otherwise append.
-    existing_map = _parse_caveats(token.caveats)
     new_map = _parse_caveats(new_caveats)
-    
+
     updated_caveats = []
     for c in token.caveats:
         if "=" in c:
@@ -128,10 +127,10 @@ def attenuate_token(
                 updated_caveats.append(c)
         else:
             updated_caveats.append(c)
-            
+
     for k, v in new_map.items():
         updated_caveats.append(f"{k}={v}")
-        
+
     for c in new_caveats:
         if "=" not in c:
             updated_caveats.append(c)

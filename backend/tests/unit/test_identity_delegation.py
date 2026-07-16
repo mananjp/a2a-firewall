@@ -2,28 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import time
 
 import pytest
 
-from a2a_firewall.core.identity import (
-    AgentCard,
-    WorkspaceKeys,
-    create_agent_card,
-    generate_keypair,
-    hex_to_private_key,
-    hex_to_public_key,
-    private_key_to_hex,
-    public_key_to_hex,
-    sign_card,
-    verify_card,
-)
 from a2a_firewall.core.delegation import (
-    DelegationToken,
-    VerificationResult,
     _parse_caveats,
     attenuate_token,
     check_capability,
@@ -33,8 +17,17 @@ from a2a_firewall.core.delegation import (
     token_to_compact,
     verify_token,
 )
+from a2a_firewall.core.identity import (
+    WorkspaceKeys,
+    create_agent_card,
+    generate_keypair,
+    hex_to_private_key,
+    hex_to_public_key,
+    private_key_to_hex,
+    public_key_to_hex,
+    verify_card,
+)
 from a2a_firewall.core.signing import (
-    SignatureVerificationResult,
     TelemetryEvent,
     compute_chain_hash,
     compute_message_hash,
@@ -42,7 +35,6 @@ from a2a_firewall.core.signing import (
     sign_message,
     verify_signature,
 )
-
 
 # ---------------------------------------------------------------------------
 # Identity tests

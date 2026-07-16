@@ -16,16 +16,14 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
-    Ed25519PublicKey,
 )
 
 from a2a_firewall.core.identity import hex_to_public_key
-
 
 # ---------------------------------------------------------------------------
 # Hashing

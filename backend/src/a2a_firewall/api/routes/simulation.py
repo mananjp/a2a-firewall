@@ -96,7 +96,7 @@ async def _ensure_agents(workspace: Workspace, db: AsyncSession) -> dict[str, Ag
     # Create any missing agents
     created_any = False
     for agent_def in DEFAULT_AGENTS:
-        key = agent_def["name"].lower()
+        key = str(agent_def["name"]).lower()
         if key not in existing:
             _, key_hash = generate_api_key("agt")
             agent = Agent(

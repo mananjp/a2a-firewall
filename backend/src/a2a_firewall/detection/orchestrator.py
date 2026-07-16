@@ -11,7 +11,13 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.core.rate_limit import check_agent
-from a2a_firewall.db.models import AgentIdentity, DelegationChain, ReviewItem, Task, TelemetryRow, TraceEvent, Violation
+from a2a_firewall.db.models import (
+    ReviewItem,
+    Task,
+    TelemetryRow,
+    TraceEvent,
+    Violation,
+)
 from a2a_firewall.detection.layer0_preflight import preflight
 from a2a_firewall.detection.layer1_schema import validate_schema
 from a2a_firewall.detection.layer2_permissions import check_permissions
@@ -78,8 +84,8 @@ async def run_inspection(
     sender_public_key = request_data.get("sender_public_key")
     if sender_signature and sender_public_key:
         try:
+
             from a2a_firewall.core.identity import hex_to_public_key
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
             pub_key = hex_to_public_key(sender_public_key)
             msg_hash = hashlib.sha256(payload_str.encode()).digest()
             pub_key.verify(bytes.fromhex(sender_signature), msg_hash)
@@ -98,7 +104,10 @@ async def run_inspection(
     delegation_token_compact = request_data.get("delegation_token")
     if delegation_token_compact:
         try:
-            from a2a_firewall.core.delegation import token_from_compact, verify_token, check_capability
+            from a2a_firewall.core.delegation import (
+                token_from_compact,
+                verify_token,
+            )
             from a2a_firewall.core.security import hash_api_key
             root_key = hash_api_key(str(workspace.id)).encode()[:32]
             token = token_from_compact(delegation_token_compact)

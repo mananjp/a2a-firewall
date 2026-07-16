@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_agent, get_current_workspace
 from a2a_firewall.core.config import settings
+from a2a_firewall.core.delegation import generate_root_key
 from a2a_firewall.core.identity import (
     AgentCard,
     hex_to_public_key,
@@ -21,7 +22,6 @@ from a2a_firewall.core.identity import (
     sign_card,
     verify_card,
 )
-from a2a_firewall.core.delegation import generate_root_key
 from a2a_firewall.core.security import hash_api_key
 from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import Agent, AgentIdentity, Workspace, WorkspaceIdentity
@@ -33,7 +33,7 @@ router = APIRouter()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _derive_workspace_private_key(workspace_id) -> Ed25519PrivateKey:
+def _derive_workspace_private_key(workspace_id: Any) -> Ed25519PrivateKey:
     """Deterministically derive the workspace root Ed25519 private key from
     the workspace UUID.
 
@@ -124,7 +124,7 @@ async def register_agent_identity(
     # Create and sign agent card with the workspace root private key
     card = AgentCard(
         agent_id=str(agent.id),
-        name=agent.name,
+        name=str(agent.name),
         workspace_id=str(workspace.id),
         capabilities=agent.capabilities if isinstance(agent.capabilities, list) else [],
         public_key=body.public_key,
@@ -178,7 +178,7 @@ async def verify_agent_card(
     card_data = body.card.copy()
     card = AgentCard(**{k: v for k, v in card_data.items() if k in AgentCard.__dataclass_fields__})
 
-    root_pub = hex_to_public_key(ws_identity.root_public_key)
+    root_pub = hex_to_public_key(str(ws_identity.root_public_key))
     valid = verify_card(card, root_pub)
 
     return VerifyCardResponse(

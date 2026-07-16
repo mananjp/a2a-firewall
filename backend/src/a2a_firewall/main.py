@@ -10,8 +10,8 @@ from sqlalchemy import select
 from a2a_firewall.api.routes import (
     agents,
     auth,
-    demo,
     delegation,
+    demo,
     firewall,
     identity,
     policies,

@@ -1,7 +1,6 @@
 """Delegation chain routes — create, attenuate, and verify delegation tokens."""
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,16 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from a2a_firewall.api.deps import get_current_agent, get_current_workspace
-from a2a_firewall.core.config import settings
+from a2a_firewall.api.deps import get_current_workspace
 from a2a_firewall.core.delegation import (
-    DelegationToken,
-    VerificationResult,
     attenuate_token,
     check_capability,
     mint_token,
     token_from_compact,
-    token_to_compact,
     verify_token,
 )
 from a2a_firewall.db.database import get_db
@@ -128,7 +123,7 @@ async def attenuate_delegation_token(
     try:
         child_token = attenuate_token(parent_token, root_key, body.new_caveats)
     except ValueError as e:
-        raise HTTPException(status_code=403, detail=f"Caveat narrowing violation: {e}")
+        raise HTTPException(status_code=403, detail=f"Caveat narrowing violation: {e}") from e
 
     return AttenuateResponse(
         token=child_token.to_dict(),
