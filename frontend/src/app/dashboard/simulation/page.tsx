@@ -183,7 +183,7 @@ export default function SimulationPage() {
             <Button onClick={addCustomStep} variant="ghost" size="sm"><Plus size={13} /> Add Step</Button>
           </div>
           {customSteps.length === 0 ? (
-            <div className="text-xs text-muted py-6 text-center border border-dashed border-border rounded-md">No steps yet. Click "Add Step" to build a scenario.</div>
+            <div className="text-xs text-muted py-6 text-center border border-dashed border-border rounded-md">No steps yet. Click &quot;Add Step&quot; to build a scenario.</div>
           ) : (
             <div className="space-y-3">
               {customSteps.map((step, i) => (
@@ -352,19 +352,19 @@ export default function SimulationPage() {
 
 function PipelineLayers({ events, labels }: { events: (TraceEvent | undefined)[]; labels: string[] }) {
   const statuses = events.map((e, i) => {
-    if (!e) return { status: "pending" as const, label: "—", dur: null, attrs: {} as Record<string, any>, violationsLine: "", detailLine: "" };
-    const a = e.attributes as Record<string, any>;
+    if (!e) return { status: "pending" as const, label: "—", dur: null, attrs: {} as Record<string, unknown>, violationsLine: "", detailLine: "" };
+    const a = e.attributes as Record<string, unknown>;
     const dur = e.duration_ms;
     let status: "passed" | "blocked" | "flagged" | "skipped" | "pending" = "pending";
     let label = "";
-    let violationsLine = "";
+    const violationsLine = "";
     let detailLine = "";
 
     switch (labels[i]) {
       case "Preflight":
         status = a.blocked ? "blocked" : a.idempotent_replay ? "flagged" : "passed";
         label = a.blocked ? "blocked" : a.idempotent_replay ? "replay" : "passed";
-        detailLine = a.blocked ? a.reason || "" : "";
+        detailLine = a.blocked ? (a.reason as string) || "" : "";
         break;
       case "Schema":
         status = a.valid ? "passed" : "blocked";
@@ -383,13 +383,13 @@ function PipelineLayers({ events, labels }: { events: (TraceEvent | undefined)[]
         break;
       case "Semantic":
         status = a.called ? (a.injection_detected ? "blocked" : "passed") : "skipped";
-        label = a.called ? (a.injection_detected ? "injection" : "clean") : a.reason || "skipped";
+        label = a.called ? (a.injection_detected ? "injection" : "clean") : (a.reason as string) || "skipped";
         if (a.called && a.risk_delta != null) detailLine = `Δrisk +${a.risk_delta}`;
         break;
       case "Decision":
         status = a.decision === "allow" ? "passed" : a.decision === "block" ? "blocked" : "flagged";
-        label = a.decision;
-        detailLine = a.final_reason || `risk ${Number(a.risk_score).toFixed(2)}`;
+        label = a.decision as string;
+        detailLine = (a.final_reason as string) || `risk ${Number(a.risk_score).toFixed(2)}`;
         break;
     }
 
