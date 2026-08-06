@@ -13,6 +13,7 @@ import {
   Flame,
   Activity,
   KeyRound,
+  GitFork,
   Settings2,
   LogOut,
   ChevronRight,
@@ -22,6 +23,7 @@ import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/audit", label: "Delegation Audit", icon: GitFork },
   { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
   { href: "/dashboard/demo", label: "Live Demo", icon: Flame },
   { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },

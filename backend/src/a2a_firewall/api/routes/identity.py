@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -18,12 +17,12 @@ from a2a_firewall.core.config import settings
 from a2a_firewall.core.delegation import generate_root_key
 from a2a_firewall.core.identity import (
     AgentCard,
-    hex_to_public_key,
+    parse_public_key,
     public_key_to_hex,
     sign_card,
     verify_card,
 )
-from a2a_firewall.core.security import hash_api_key
+from a2a_firewall.core.security import derive_workspace_signing_seed, hash_api_key
 from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import Agent, AgentIdentity, Workspace, WorkspaceIdentity
 
@@ -35,17 +34,16 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
-def _derive_workspace_private_key(workspace_id: Any) -> Ed25519PrivateKey:
+def _workspace_root_private_key(workspace_id: Any) -> Ed25519PrivateKey:
     """Deterministically derive the workspace root Ed25519 private key from
-    the workspace UUID.
+    the workspace UUID + the server-side ``API_KEY_SALT`` secret.
 
-    In production this would be replaced by an HSM/KMS lookup. For the MVP
-    this is a safe, reproducible derivation that never stores the private key
-    in the database.
+    In production this would be replaced by an HSM/KMS lookup. For the MVP this
+    is a safe, reproducible derivation that never stores the private key in the
+    database. Unlike the previous scheme (raw SHA-256 of the public UUID), the
+    salt makes the key unforgeable by anyone who knows the workspace ID.
     """
-    seed = hashlib.sha256(
-        str(workspace_id).encode() if not hasattr(workspace_id, "bytes") else workspace_id.bytes
-    ).digest()
+    seed = derive_workspace_signing_seed(str(workspace_id))
     return Ed25519PrivateKey.from_private_bytes(seed)
 
 
@@ -98,7 +96,7 @@ async def register_agent_identity(
     workspace = ws_result.scalar_one()
 
     # Derive workspace root private key deterministically
-    ws_root_priv = _derive_workspace_private_key(workspace.id)
+    ws_root_priv = _workspace_root_private_key(workspace.id)
     ws_root_pub_hex = public_key_to_hex(ws_root_priv.public_key())
 
     # Get or create workspace identity
@@ -180,7 +178,7 @@ async def verify_agent_card(
     card_data = body.card.copy()
     card = AgentCard(**{k: v for k, v in card_data.items() if k in AgentCard.__dataclass_fields__})
 
-    root_pub = hex_to_public_key(str(ws_identity.root_public_key))
+    root_pub = parse_public_key(str(ws_identity.root_public_key))
     valid = verify_card(card, root_pub)
 
     return VerifyCardResponse(

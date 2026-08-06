@@ -23,10 +23,12 @@ from a2a_firewall.core.identity import (
     generate_keypair,
     hex_to_private_key,
     hex_to_public_key,
+    parse_public_key,
     private_key_to_hex,
     public_key_to_hex,
     verify_card,
 )
+from a2a_firewall.core.security import derive_workspace_signing_seed
 from a2a_firewall.core.signing import (
     TelemetryEvent,
     compute_chain_hash,
@@ -114,6 +116,48 @@ class TestIdentity:
         assert len(keys.public_key_hex) == 64
         assert keys.get_private_key() is not None
         assert keys.get_public_key() is not None
+
+    def test_salted_workspace_derivation(self, monkeypatch):
+        # The workspace root key must depend on the server salt, not just the
+        # public workspace UUID, or anyone knowing the UUID could forge cards.
+        from a2a_firewall.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "API_KEY_SALT", "salt-a")
+        seed_a1 = derive_workspace_signing_seed("ws-123")
+        seed_a2 = derive_workspace_signing_seed("ws-123")
+        assert seed_a1 == seed_a2
+        assert len(seed_a1) == 32
+
+        monkeypatch.setattr(config_module.settings, "API_KEY_SALT", "salt-b")
+        seed_b = derive_workspace_signing_seed("ws-123")
+        assert seed_a1 != seed_b
+
+        # Different workspace IDs with the same salt also differ.
+        assert derive_workspace_signing_seed("ws-456") != seed_a1
+
+    def test_parse_public_key_hex_and_base64(self):
+        import base64
+
+        _, pub = generate_keypair()
+        hex_key = public_key_to_hex(pub)
+
+        parsed_hex = parse_public_key(hex_key)
+        assert parsed_hex == pub
+
+        raw = bytes.fromhex(hex_key)
+        b64_key = base64.b64encode(raw).decode()
+        parsed_b64 = parse_public_key(b64_key)
+        assert parsed_b64 == pub
+
+    def test_parse_public_key_rejects_garbage(self):
+        import binascii
+
+        import pytest
+
+        from a2a_firewall.core.identity import parse_public_key
+
+        with pytest.raises((ValueError, binascii.Error)):
+            parse_public_key("!!!not-a-key!!!")
 
 
 # ---------------------------------------------------------------------------

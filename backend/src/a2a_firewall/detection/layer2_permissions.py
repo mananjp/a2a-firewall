@@ -6,20 +6,40 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.scope import is_subset, parse_requested_scope
 from a2a_firewall.db.models import AgentPermission, ResourcePermission
 
 
 async def check_permissions(
-    request_data: dict[str, Any], sender: Any, workspace: Any, db: AsyncSession
+    request_data: dict[str, Any],
+    sender: Any,
+    workspace: Any,
+    db: AsyncSession,
+    parent_caveats: list[str] | None = None,
 ) -> dict[str, Any]:
     """Layer 2: agent permission check with task-type + resource scoping.
 
     Resolution order:
-    1. Exact match (sender, receiver, task_type) → allowed/blocked.
-    2. Wildcard match (sender, receiver, task_type=None) → allowed/blocked.
-    3. Resource-level check (agent, resource_type, action) → allowed/blocked.
-    4. No match → controlled by workspace.default_deny.
+    1. Non-amplification (if ``parent_caveats`` provided) — every capability
+       the request asks for must be a subset of the parent's caveats. Any
+       widening short-circuits to ``allowed=False`` with
+       ``check="non_amplification_violation"``.
+    2. Exact match (sender, receiver, task_type) → allowed/blocked.
+    3. Wildcard match (sender, receiver, task_type=None) → allowed/blocked.
+    4. Resource-level check (agent, resource_type, action) → allowed/blocked.
+    5. No match → controlled by workspace.default_deny.
     """
+    # 1. Non-amplification (delegation non-amplification principle)
+    if parent_caveats is not None:
+        requested = parse_requested_scope(request_data)
+        if not is_subset(requested, parent_caveats):
+            return {
+                "allowed": False,
+                "check": "non_amplification_violation",
+                "requested": sorted(requested),
+                "parent_caveats": list(parent_caveats),
+            }
+
     receiver_id = uuid.UUID(request_data["receiver_agent_id"])
     task_type = request_data.get("task_type")
 

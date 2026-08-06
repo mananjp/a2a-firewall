@@ -8,10 +8,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.config import settings
 from a2a_firewall.core.rate_limit import check_agent
 from a2a_firewall.db.models import (
+    AgentIdentity,
+    DelegationChain,
     ReviewItem,
     Task,
     TelemetryRow,
@@ -93,31 +97,110 @@ async def run_inspection(
     delegation_chain: list[str] = []
     delegation_depth = 0
 
-    # Check Ed25519 signature if present
+    # Verify the sender's Ed25519 signature against its REGISTERED public key.
+    # A client-supplied public key is self-asserted and cannot be trusted for
+    # identity — an attacker would simply supply a key they control.
     sender_signature = request_data.get("sender_signature")
-    sender_public_key = request_data.get("sender_public_key")
-    if sender_signature and sender_public_key:
-        try:
-            from a2a_firewall.core.identity import hex_to_public_key
+    if sender_signature:
+        from a2a_firewall.core.identity import parse_public_key
+        from a2a_firewall.core.signing import compute_message_hash
 
-            pub_key = hex_to_public_key(sender_public_key)
-            msg_hash = hashlib.sha256(payload_str.encode()).digest()
-            pub_key.verify(bytes.fromhex(sender_signature), msg_hash)
-            signature_valid = True
-        except Exception:
+        identity_row = await db.execute(
+            select(AgentIdentity).where(AgentIdentity.agent_id == sender.id)
+        )
+        registered = identity_row.scalar_one_or_none()
+
+        if registered is None:
             signature_valid = False
             violations.append(
                 {
                     "layer": "identity",
-                    "violation_type": "invalid_signature",
-                    "severity": "critical",
-                    "details": {"sender_id": str(sender.id)},
+                    "violation_type": "identity_not_registered",
+                    "severity": "high",
+                    "details": {
+                        "sender_id": str(sender.id),
+                        "hint": "Message was signed but the sender has no registered Ed25519 "
+                        "identity. Register via POST /v1/identity/register-identity.",
+                    },
                 }
             )
-            risk_score = 1.0
+            risk_score = max(risk_score, 0.7)
+        else:
+            sender_message_hash = request_data.get("message_hash")
+            sender_timestamp = request_data.get("timestamp")
+
+            if not sender_message_hash or sender_timestamp is None:
+                signature_valid = False
+                violations.append(
+                    {
+                        "layer": "identity",
+                        "violation_type": "signature_unverifiable",
+                        "severity": "high",
+                        "details": {
+                            "sender_id": str(sender.id),
+                            "hint": "message_hash and timestamp are required to verify a signed payload.",
+                        },
+                    }
+                )
+                risk_score = max(risk_score, 0.7)
+            else:
+                try:
+                    ts = float(sender_timestamp)
+                except (TypeError, ValueError):
+                    signature_valid = False
+                    violations.append(
+                        {
+                            "layer": "identity",
+                            "violation_type": "invalid_timestamp",
+                            "severity": "high",
+                            "details": {"sender_id": str(sender.id)},
+                        }
+                    )
+                    risk_score = max(risk_score, 0.7)
+                    ts = 0.0
+
+                # 1. The signed hash must match a recomputation over the payload.
+                expected_hash = compute_message_hash(
+                    request_data.get("payload", {}),
+                    str(sender.id),
+                    str(request_data.get("receiver_agent_id", "")),
+                    ts,
+                )
+                if expected_hash != sender_message_hash:
+                    signature_valid = False
+                    violations.append(
+                        {
+                            "layer": "identity",
+                            "violation_type": "message_hash_mismatch",
+                            "severity": "high",
+                            "details": {"sender_id": str(sender.id)},
+                        }
+                    )
+                    risk_score = max(risk_score, 0.7)
+                else:
+                    # 2. Verify the signature with the registered key.
+                    try:
+                        pub_key = parse_public_key(str(registered.public_key))
+                        pub_key.verify(
+                            bytes.fromhex(sender_signature),
+                            bytes.fromhex(sender_message_hash),
+                        )
+                        signature_valid = True
+                    except Exception:
+                        signature_valid = False
+                        violations.append(
+                            {
+                                "layer": "identity",
+                                "violation_type": "invalid_signature",
+                                "severity": "critical",
+                                "details": {"sender_id": str(sender.id)},
+                            }
+                        )
+                        risk_score = max(risk_score, 1.0)
 
     # Check delegation token if present
     delegation_token_compact = request_data.get("delegation_token")
+    parent_caveats: list[str] | None = None
     if delegation_token_compact:
         try:
             from a2a_firewall.core.delegation import (
@@ -140,6 +223,7 @@ async def run_inspection(
                 )
                 risk_score = 1.0
             else:
+                parent_caveats = list(verification.caveats)
                 delegation_chain = (
                     verification.parsed.get("delegation_chain", "").split(",")
                     if verification.parsed.get("delegation_chain")
@@ -156,6 +240,13 @@ async def run_inspection(
                 }
             )
             risk_score = max(risk_score, 0.8)
+
+    # Stash delegation metadata on request_data for _save_and_return to write DelegationChain
+    if delegation_token_compact:
+        request_data["_delegation_token_compact"] = delegation_token_compact
+        request_data["_parent_caveats"] = parent_caveats or []
+        request_data["_delegation_depth"] = delegation_depth
+        request_data["_delegation_signature_valid"] = signature_valid
 
     # ---------- Layer 0: preflight ----------
     layer_start = time.monotonic()
@@ -288,7 +379,9 @@ async def run_inspection(
 
     # ---------- Layer 2: permissions ----------
     layer_start = time.monotonic()
-    perm_result = await check_permissions(request_data, sender, workspace, db)
+    perm_result = await check_permissions(
+        request_data, sender, workspace, db, parent_caveats=parent_caveats
+    )
     perms_ms = int((time.monotonic() - layer_start) * 1000)
     trace_events.append(
         {
@@ -299,19 +392,35 @@ async def run_inspection(
             "attributes": {
                 "allowed": bool(perm_result["allowed"]),
                 "default_deny": bool(workspace.default_deny),
+                "check": perm_result.get("check"),
+                "non_amplification_enforced": parent_caveats is not None,
             },
         }
     )
 
     if not perm_result["allowed"]:
-        violations.append(
-            {
-                "layer": "rule",
-                "violation_type": "sender_not_permitted",
-                "severity": "high",
-                "details": {},
-            }
-        )
+        # Differentiate non-amplification from generic permission denial
+        if perm_result.get("check") == "non_amplification_violation":
+            violations.append(
+                {
+                    "layer": "delegation",
+                    "violation_type": "non_amplification_violation",
+                    "severity": "critical",
+                    "details": {
+                        "requested": perm_result.get("requested", []),
+                        "parent_caveats": perm_result.get("parent_caveats", []),
+                    },
+                }
+            )
+        else:
+            violations.append(
+                {
+                    "layer": "rule",
+                    "violation_type": "sender_not_permitted",
+                    "severity": "high",
+                    "details": {},
+                }
+            )
         result = await _save_and_return(
             "block",
             "permission_denied",
@@ -368,15 +477,47 @@ async def run_inspection(
     risk_score = min(1.0, risk_score + rule_result["risk_delta"])
     matched_rule_id = rule_result.get("matched_rule_id")
 
+    # ---------- Intent resolution for delegation-bound requests ----------
+    # Resolve declared_intent: either from the request itself (root task creation)
+    # or by looking up the root task's declared_intent for child delegated tasks.
+    declared_intent: str | None = request_data.get("declared_intent")
+    intent_drift_score: float | None = None
+    task_id_str = request_data.get("task_id", "")
+    root_task_id_str = request_data.get("root_task_id") or task_id_str
+
+    if (
+        not declared_intent
+        and parent_caveats is not None
+        and root_task_id_str
+        and root_task_id_str != task_id_str
+    ):
+        # Child delegated task: look up the root task's declared intent
+        try:
+            root_row = await db.execute(select(Task).where(Task.id == uuid.UUID(root_task_id_str)))
+            root_task = root_row.scalar_one_or_none()
+            if root_task and root_task.declared_intent:
+                declared_intent = str(root_task.declared_intent)
+        except Exception:  # noqa: BLE001
+            pass  # root task not found — intent-binding simply won't activate
+
     # ---------- Layer 4: groq (semantic intent verification) ----------
     # Always called when risk > 0 so regex false positives can be corrected
     # by LLM intent analysis. The rules layer no longer short-circuits —
     # Groq must weigh in before any block decision.
+    # Also called when a declared_intent exists on a delegated request
+    # (even if risk is 0) to score intent consistency.
     groq_called = False
     groq_model: str | None = None
-    if risk_score > 0:
+    needs_groq = risk_score > 0 or (declared_intent and parent_caveats is not None)
+    if needs_groq:
         layer_start = time.monotonic()
-        groq_result = await groq_inspect(request_data, sender, workspace, payload_hash)
+        groq_result = await groq_inspect(
+            request_data,
+            sender,
+            workspace,
+            payload_hash,
+            declared_intent=declared_intent if parent_caveats is not None else None,
+        )
         groq_called = True
         groq_model = groq_result.get("model")
         groq_ms = int((time.monotonic() - layer_start) * 1000)
@@ -406,6 +547,28 @@ async def run_inspection(
                 }
             )
         risk_score = min(1.0, risk_score + groq_result.get("risk_score_delta", 0))
+
+        # Intent-binding: check if the payload drifts from the declared intent
+        if declared_intent and parent_caveats is not None:
+            intent_drift_score = groq_result.get("intent_consistency")
+            if (
+                isinstance(intent_drift_score, (int, float))
+                and intent_drift_score > settings.INTENT_DRIFT_THRESHOLD
+            ):
+                violations.append(
+                    {
+                        "layer": "semantic",
+                        "violation_type": "intent_drift",
+                        "severity": "critical",
+                        "details": {
+                            "declared_intent": declared_intent,
+                            "intent_drift_score": intent_drift_score,
+                            "threshold": settings.INTENT_DRIFT_THRESHOLD,
+                            "rationale": groq_result.get("rationale", ""),
+                        },
+                    }
+                )
+                risk_score = 1.0
     else:
         trace_events.append(
             {
@@ -432,6 +595,10 @@ async def run_inspection(
             },
         }
     )
+    # Stash intent fields on request_data for _save_and_return to persist
+    request_data["_declared_intent"] = declared_intent
+    request_data["_intent_drift_score"] = intent_drift_score
+
     result = await _save_and_return(
         decision,
         None,
@@ -551,6 +718,11 @@ async def _save_and_return(
     if decision == "review":
         review_token = secrets.token_urlsafe(32)
 
+    # Resolve declared_intent and intent_drift_score from request_data extras
+    # (set by run_inspection before calling _save_and_return)
+    _declared_intent = req.get("_declared_intent")
+    _intent_drift_score = req.get("_intent_drift_score")
+
     task = Task(
         id=task_id,
         workspace_id=workspace.id,
@@ -581,6 +753,8 @@ async def _save_and_return(
         total_latency_ms=total_ms,
         trace_id=trace_id,
         span_id=parent_span_id,
+        declared_intent=_declared_intent,
+        intent_drift_score=_intent_drift_score,
     )
     db.add(task)
     await db.flush()
@@ -594,6 +768,29 @@ async def _save_and_return(
                 violation_type=v["violation_type"],
                 severity=v["severity"],
                 details=v.get("details", {}),
+            )
+        )
+
+    # Record DelegationChain entry if delegation_token was supplied
+    _delegation_token_compact = req.get("_delegation_token_compact")
+    if _delegation_token_compact:
+        receiver_id = uuid.UUID(req["receiver_agent_id"])
+        _parent_caveats = req.get("_parent_caveats", [])
+        _delegation_depth = req.get("_delegation_depth", 0)
+        _delegation_sig_valid = req.get("_delegation_signature_valid", True)
+        _chain_hash = hashlib.sha256(f"{task_id}:{_delegation_token_compact}".encode()).hexdigest()
+
+        db.add(
+            DelegationChain(
+                workspace_id=workspace.id,
+                task_id=task_id,
+                sender_agent_id=sender.id,
+                receiver_agent_id=receiver_id,
+                delegation_depth=_delegation_depth,
+                caveats=_parent_caveats,
+                delegation_token=_delegation_token_compact,
+                signature_valid=_delegation_sig_valid,
+                chain_hash=_chain_hash,
             )
         )
 

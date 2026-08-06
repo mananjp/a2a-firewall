@@ -367,3 +367,63 @@ export const schemas = {
       body: JSON.stringify(body),
     }),
 };
+
+export interface AuditHop {
+  id: string;
+  task_id: string;
+  sender_id: string;
+  sender_name: string;
+  receiver_id: string;
+  receiver_name: string;
+  delegation_depth: number;
+  caveats: string[];
+  signature_valid: boolean;
+  chain_hash: string;
+  created_at: string | null;
+}
+
+export interface TaskAuditChain {
+  task_id: string;
+  root_task_id: string;
+  declared_intent: string | null;
+  intent_drift_score: number | null;
+  hops_count: number;
+  hops: AuditHop[];
+}
+
+export interface AuditChainExport {
+  workspace_id: string;
+  count: number;
+  events: Array<{
+    timestamp: string;
+    task_id: string;
+    sender_id: string;
+    sender_name: string;
+    receiver_id: string;
+    receiver_name: string;
+    delegation_depth: number;
+    caveats: string;
+    signature_valid: boolean;
+    chain_hash: string;
+  }>;
+}
+
+export const audit = {
+  taskChain: (taskId: string) =>
+    request<TaskAuditChain>(`/v1/audit/tasks/${taskId}/delegation-chain`),
+  listChains: (limit = 100, since?: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    if (since) q.set("since", since);
+    return request<AuditChainExport>(`/v1/audit/delegation-chains?${q.toString()}`);
+  },
+  exportCsvUrl: (limit = 100, since?: string) => {
+    const apiKey = getApiKey();
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    q.set("format", "csv");
+    if (since) q.set("since", since);
+    return `${API_BASE}/v1/audit/delegation-chains?${q.toString()}`;
+  },
+};
+

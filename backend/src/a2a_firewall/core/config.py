@@ -77,8 +77,11 @@ class Settings(BaseSettings):
 
     # Identity & Delegation
     IDENTITY_CARD_TTL_SECONDS: float = 86400.0  # 24h
-    DELEGATION_MAX_DEPTH: int = 10
+    DELEGATION_MAX_DEPTH: int = 3
     DELEGATION_DEFAULT_EXPIRY_SECONDS: float = 3600.0  # 1h
+
+    # Intent-binding
+    INTENT_DRIFT_THRESHOLD: float = 0.7  # block if intent_drift_score > this
 
 
 settings = Settings()
