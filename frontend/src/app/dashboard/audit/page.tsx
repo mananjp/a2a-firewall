@@ -41,7 +41,7 @@ export default function AuditPage() {
           title="Delegation Chain Audit"
           description="Auditable delegation lineage, macaroon caveats, and non-amplification verification."
         />
-        <Button onClick={handleDownloadCsv} variant="outline" size="sm" className="gap-2">
+        <Button onClick={handleDownloadCsv} variant="secondary" size="sm" className="gap-2">
           <Download size={14} />
           Export CSV
         </Button>
