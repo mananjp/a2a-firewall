@@ -240,7 +240,51 @@ export const demo = {
       method: "POST",
       body: JSON.stringify({ scenario }),
     }),
+  delegationBootstrap: () =>
+    request<{
+      scenarios: Array<{
+        id: string;
+        label: string;
+        description: string;
+        category: string;
+      }>;
+    }>("/v1/demo/delegation-bootstrap"),
+  runDelegation: (scenario: string, useStatic = false) =>
+    request<DelegationDemoResponse>("/v1/demo/run-delegation", {
+      method: "POST",
+      body: JSON.stringify({ scenario, use_static: useStatic }),
+    }),
 };
+
+export interface DelegationDemoResponse extends FirewallResponse {
+  demo_scenario: string;
+  demo_label: string;
+  demo_description: string;
+  demo_payload: Record<string, unknown>;
+  is_static?: boolean;
+  pipeline_error?: string;
+  root_task?: {
+    task_id: string;
+    decision: string;
+    risk_score: number;
+    trace_id: string;
+  };
+  delegation_metadata?: {
+    root_token_caveats: string[];
+    child_token_caveats: string[];
+    delegation_depth: number;
+    intent_declared: string | null;
+    intent_drift_score: number | null;
+    signature_valid: boolean;
+    chain_hops: Array<{
+      from: string;
+      to: string;
+      caveats_added: string[];
+      valid: boolean;
+    }>;
+  };
+}
+
 
 export const simulation = {
   run: (steps: Array<{
