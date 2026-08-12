@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { audit } from "@/lib/api";
+import { audit, demo } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import type { AuditChainExport, TaskAuditChain } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
@@ -19,12 +19,16 @@ import {
   AlertTriangle,
   FileCode,
   BrainCircuit,
+  Play,
+  Loader2,
 } from "lucide-react";
 
 export default function AuditPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
-  const { data, loading, error } = usePolling<AuditChainExport>(
+  const { data, loading, error, refresh } = usePolling<AuditChainExport>(
     useCallback((_signal) => audit.listChains(100), []),
     5000
   );
@@ -34,6 +38,20 @@ export default function AuditPage() {
     window.open(url, "_blank");
   }
 
+  async function handleSeedDemo() {
+    if (seeding) return;
+    setSeeding(true);
+    setSeedError(null);
+    try {
+      await demo.runDelegation("delegation_clean");
+      await refresh();
+    } catch (err) {
+      setSeedError(err instanceof Error ? err.message : "Failed to generate demo chain");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -41,15 +59,21 @@ export default function AuditPage() {
           title="Delegation Chain Audit"
           description="Auditable delegation lineage, macaroon caveats, and non-amplification verification."
         />
-        <Button onClick={handleDownloadCsv} variant="secondary" size="sm" className="gap-2">
-          <Download size={14} />
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={handleSeedDemo} disabled={seeding} variant="secondary" size="sm" className="gap-2">
+            {seeding ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            {seeding ? "Generating..." : "Generate Demo Chain"}
+          </Button>
+          <Button onClick={handleDownloadCsv} variant="secondary" size="sm" className="gap-2">
+            <Download size={14} />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
-      {error && (
+      {(error || seedError) && (
         <div className="mb-4 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {error.message}
+          {error?.message || seedError}
         </div>
       )}
 
@@ -64,7 +88,13 @@ export default function AuditPage() {
             <EmptyState
               icon={<GitFork size={24} />}
               title="No delegation chain events recorded yet"
-              description="Delegation events are logged when messages carry macaroon delegation tokens."
+              description="Click below to generate a multi-hop delegation chain with real macaroon caveats and audit records."
+              action={
+                <Button onClick={handleSeedDemo} disabled={seeding} size="sm" className="gap-2">
+                  {seeding ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  Generate Demo Delegation Chain
+                </Button>
+              }
             />
           )}
 

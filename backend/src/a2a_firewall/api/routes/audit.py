@@ -46,7 +46,7 @@ async def get_task_delegation_chain(
     # Retrieve all delegation chain entries for this root task lineage
     query = (
         select(DelegationChain, Agent)
-        .join(Agent, DelegationChain.sender_agent_id == Agent.id)
+        .outerjoin(Agent, DelegationChain.sender_agent_id == Agent.id)
         .join(Task, DelegationChain.task_id == Task.id)
         .where(
             DelegationChain.workspace_id == ws.id,
@@ -76,7 +76,7 @@ async def get_task_delegation_chain(
                 "id": str(dc.id),
                 "task_id": str(dc.task_id),
                 "sender_id": str(dc.sender_agent_id),
-                "sender_name": sender_agent.name,
+                "sender_name": sender_agent.name if sender_agent else "Unknown",
                 "receiver_id": str(dc.receiver_agent_id),
                 "receiver_name": agents_map.get(dc.receiver_agent_id, "Unknown"),
                 "delegation_depth": dc.delegation_depth,
@@ -108,7 +108,7 @@ async def export_delegation_chains(
     """Export delegation chain events for compliance auditing (JSON or CSV)."""
     stmt = (
         select(DelegationChain, Agent)
-        .join(Agent, DelegationChain.sender_agent_id == Agent.id)
+        .outerjoin(Agent, DelegationChain.sender_agent_id == Agent.id)
         .where(DelegationChain.workspace_id == ws.id)
         .order_by(DelegationChain.created_at.desc())
         .limit(limit)
@@ -143,7 +143,7 @@ async def export_delegation_chains(
                 "timestamp": dc.created_at.isoformat() if dc.created_at else "",
                 "task_id": str(dc.task_id),
                 "sender_id": str(dc.sender_agent_id),
-                "sender_name": sender_agent.name,
+                "sender_name": sender_agent.name if sender_agent else "Unknown",
                 "receiver_id": str(dc.receiver_agent_id),
                 "receiver_name": agents_map.get(dc.receiver_agent_id, "Unknown"),
                 "delegation_depth": dc.delegation_depth,
