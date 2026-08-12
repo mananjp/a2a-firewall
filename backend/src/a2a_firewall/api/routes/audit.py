@@ -44,13 +44,13 @@ async def get_task_delegation_chain(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Retrieve all delegation chain entries for this root task lineage
-    # Query matching task_id or root_task_id
     query = (
         select(DelegationChain, Agent)
         .join(Agent, DelegationChain.sender_agent_id == Agent.id)
+        .join(Task, DelegationChain.task_id == Task.id)
         .where(
             DelegationChain.workspace_id == ws.id,
-            DelegationChain.task_id == task_uuid,
+            Task.root_task_id == task.root_task_id,
         )
         .order_by(DelegationChain.delegation_depth)
     )

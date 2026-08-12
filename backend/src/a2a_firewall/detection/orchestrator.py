@@ -229,7 +229,9 @@ async def run_inspection(
                     if verification.parsed.get("delegation_chain")
                     else []
                 )
-                delegation_depth = len(delegation_chain)
+                delegation_depth = (
+                    len(delegation_chain) if delegation_chain else request_data.get("depth", 0)
+                )
         except Exception as e:
             violations.append(
                 {

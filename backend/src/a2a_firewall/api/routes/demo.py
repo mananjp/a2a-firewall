@@ -599,6 +599,7 @@ async def demo_run_delegation(
         "sdk_version": "delegation-demo-v1",
         "depth": 0,
         "declared_intent": scenario["root_intent"],
+        "delegation_token": token_to_compact(root_token),
     }
 
     root_result = await run_inspection(root_request, orchestrator, workspace, db)
