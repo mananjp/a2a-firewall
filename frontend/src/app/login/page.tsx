@@ -3,20 +3,22 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { auth, workspaces, setApiKey } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { ShieldAlert, ArrowRight, KeyRound, UserPlus, TestTube2, ArrowLeft } from "lucide-react";
+import { ShieldAlert, ArrowRight, KeyRound, UserPlus, TestTube2, ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
 
 type Tab = "signin" | "register" | "apikey";
 
 const DEMO_ROLES = [
-  { email: "admin@a2afirewall.dev", label: "Admin", desc: "Full access" },
-  { email: "auditor@a2afirewall.dev", label: "Auditor", desc: "Read-only" },
-  { email: "trial@a2afirewall.dev", label: "Trial", desc: "Limited" },
-  { email: "traffic@a2afirewall.dev", label: "Traffic", desc: "Agent only" },
+  { email: "admin@a2afirewall.dev", label: "Admin", desc: "Full permissions" },
+  { email: "auditor@a2afirewall.dev", label: "Auditor", desc: "Read-only access" },
+  { email: "trial@a2afirewall.dev", label: "Trial", desc: "Standard bounds" },
+  { email: "traffic@a2afirewall.dev", label: "Traffic", desc: "Agent gateway" },
 ];
 
 export default function LoginPage() {
@@ -35,14 +37,14 @@ export default function LoginPage() {
       const res = await auth.login(email);
       setApiKey(res.api_key);
       toast({
-        title: "Signed in",
+        title: "Authenticated",
         description: `Workspace: ${res.admin_email}`,
         variant: "success",
       });
       router.push("/dashboard");
     } catch (err) {
       toast({
-        title: "Sign in failed",
+        title: "Authentication Failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "error",
       });
@@ -58,14 +60,14 @@ export default function LoginPage() {
       const res = await workspaces.register({ name, admin_email: email });
       setApiKey(res.api_key);
       toast({
-        title: "Workspace created",
+        title: "Workspace Provisioned",
         description: res.name,
         variant: "success",
       });
       router.push("/dashboard");
     } catch (err) {
       toast({
-        title: "Registration failed",
+        title: "Registration Failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "error",
       });
@@ -78,7 +80,7 @@ export default function LoginPage() {
     e.preventDefault();
     if (apiKeyInput.trim()) {
       setApiKey(apiKeyInput.trim());
-      toast({ title: "Connected", variant: "success" });
+      toast({ title: "API Key Connected", variant: "success" });
       router.push("/dashboard");
     }
   }
@@ -89,14 +91,14 @@ export default function LoginPage() {
       const res = await auth.login(demoEmail);
       setApiKey(res.api_key);
       toast({
-        title: "Demo access granted",
+        title: "Demo Role Granted",
         description: `${demoEmail.split("@")[0]} workspace`,
         variant: "success",
       });
       router.push("/dashboard");
     } catch (err) {
       toast({
-        title: "Demo login failed",
+        title: "Demo Login Failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "error",
       });
@@ -106,108 +108,120 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+    <div className="min-h-screen bg-bg-base text-ink-primary flex flex-col">
+      <header className="material-soft border-b border-hairline bg-surface/70">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link
             href="/"
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 text-[13px] text-ink-muted hover:text-ink-primary transition-colors font-mono"
           >
-            <ArrowLeft size={13} />
-            Back to home
+            <ArrowLeft size={14} />
+            Back to Home
           </Link>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/15 text-accent">
-              <ShieldAlert size={15} strokeWidth={2.2} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-allow/10 border border-allow/25 p-1 glow-allow shadow-sm">
+              <Image
+                src="/a2a-logo.png"
+                alt="A2A Logo"
+                width={28}
+                height={28}
+                className="object-contain"
+              />
             </div>
-            <span className="text-sm font-semibold">A2A Firewall</span>
+            <span className="text-[14px] font-bold tracking-tight text-ink-primary">A2A Firewall</span>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
+      <main className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-xl font-semibold">Welcome</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Sign in to your workspace or create a new one.
+            <div className="eyebrow mb-2">SOC Authentication</div>
+            <h1 className="text-[24px] font-bold tracking-tight text-ink-primary">
+              Access Governance Mesh
+            </h1>
+            <p className="mt-1.5 text-[13px] text-ink-muted">
+              Authenticate with your workspace administrator credentials or bearer key.
             </p>
           </div>
 
-          {/* Tabs */}
-          <div className="mb-4 flex gap-1 rounded-md border border-border bg-surface p-1">
+          {/* Mode Switcher Tabs */}
+          <div className="mb-4 flex gap-1 rounded-xl border border-hairline bg-surface p-1">
             {([
-              { id: "signin", label: "Sign in", icon: ArrowRight },
-              { id: "register", label: "Register", icon: UserPlus },
+              { id: "signin", label: "Sign In", icon: ArrowRight },
+              { id: "register", label: "Provision", icon: UserPlus },
               { id: "apikey", label: "API Key", icon: KeyRound },
-            ] as const).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                  tab === t.id
-                    ? "bg-surface-elevated text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <t.icon size={13} />
-                {t.label}
-              </button>
-            ))}
+            ] as const).map((t) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-medium transition-all ${
+                    active
+                      ? "bg-surface-elevated text-ink-primary border border-hairline-strong shadow-sm font-semibold"
+                      : "text-ink-muted hover:text-ink-primary border border-transparent"
+                  }`}
+                >
+                  <t.icon size={13} />
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
 
-          <Card>
+          <div className="material-panel rounded-2xl p-6 shadow-popover">
             {tab === "signin" && (
-              <form onSubmit={handleSignIn} className="space-y-3">
+              <form onSubmit={handleSignIn} className="space-y-4">
                 <Input
-                  label="Workspace email"
+                  label="Administrator Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="admin@enterprise.com"
                   required
                 />
                 <Button
                   type="submit"
                   disabled={loading || !email}
-                  className="w-full"
+                  className="w-full font-mono text-[13px]"
                 >
-                  {loading ? "Signing in..." : "Sign in"}
+                  {loading ? "Authenticating..." : "Sign in to Dashboard"}
                 </Button>
               </form>
             )}
 
             {tab === "register" && (
-              <form onSubmit={handleRegister} className="space-y-3">
+              <form onSubmit={handleRegister} className="space-y-4">
                 <Input
-                  label="Workspace name"
+                  label="Workspace Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="my-workspace"
+                  placeholder="production-mesh"
                   required
                 />
                 <Input
-                  label="Admin email"
+                  label="Administrator Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="admin@enterprise.com"
                   required
                 />
                 <Button
                   type="submit"
                   disabled={loading || !name || !email}
-                  className="w-full"
+                  className="w-full font-mono text-[13px]"
                 >
-                  {loading ? "Creating..." : "Create workspace"}
+                  {loading ? "Provisioning..." : "Provision Workspace"}
                 </Button>
               </form>
             )}
 
             {tab === "apikey" && (
-              <form onSubmit={handleApiKey} className="space-y-3">
+              <form onSubmit={handleApiKey} className="space-y-4">
                 <Input
-                  label="API key"
+                  label="Bearer Workspace Key"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   placeholder="ws_..."
@@ -216,40 +230,33 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={!apiKeyInput.trim()}
-                  className="w-full"
+                  className="w-full font-mono text-[13px]"
                 >
-                  Connect
+                  Connect Key
                 </Button>
               </form>
             )}
-          </Card>
+          </div>
 
-          {/* Demo roles */}
-          <div className="mt-5">
-            <div className="mb-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-              Quick demo access
-            </div>
+          {/* Quick Demo Access */}
+          <div className="mt-6">
+            <div className="eyebrow mb-2.5">Fast Demo Persona Access</div>
             <div className="grid grid-cols-2 gap-2">
               {DEMO_ROLES.map((r) => (
                 <button
                   key={r.email}
                   onClick={() => handleDemoRole(r.email)}
                   disabled={loading}
-                  className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2.5 text-left text-xs transition-colors hover:border-border/80 hover:bg-surface-elevated disabled:opacity-40"
+                  className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface px-3 py-2.5 text-left text-[12px] transition-all hover:border-hairline-strong hover:bg-surface-elevated disabled:opacity-40"
                 >
-                  <TestTube2 size={13} className="shrink-0 text-muted" />
+                  <TestTube2 size={14} className="shrink-0 text-accent" />
                   <div className="min-w-0">
-                    <div className="font-medium text-foreground">{r.label}</div>
-                    <div className="truncate text-muted-foreground">{r.desc}</div>
+                    <div className="font-semibold text-ink-primary">{r.label}</div>
+                    <div className="truncate text-ink-muted text-[11px] font-mono">{r.desc}</div>
                   </div>
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="mt-5 rounded-md border border-warning/20 bg-warning/5 p-3 text-xs text-warning/80">
-            <span className="font-semibold text-warning">Dev-only build.</span>{" "}
-            Uses localStorage and auto-provisioned workspaces. Replace before production.
           </div>
         </div>
       </main>

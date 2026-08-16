@@ -7,13 +7,13 @@ import type { Policy, PolicyAction } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FileText, Trash2 } from "lucide-react";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { FileText, Trash2, Plus, ShieldCheck, ArrowRight, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 
-const ACTIONS: PolicyAction[] = ["allow", "block", "review", "flag"];
+const ACTIONS: PolicyAction[] = ["block", "allow", "review", "flag"];
 
 export default function PoliciesPage() {
   const [priority, setPriority] = useState("100");
@@ -30,25 +30,26 @@ export default function PoliciesPage() {
     refresh,
   } = usePolling<Policy[]>(
     useCallback((_signal) => policies.list() as Promise<Policy[]>, []),
-    10000
+    8000
   );
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!name.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
       await policies.create({
-        priority: Number(priority),
-        name,
+        priority: Number(priority) || 100,
+        name: name.trim(),
         action,
-        task_type: taskType || undefined,
+        task_type: taskType.trim() || undefined,
       });
       setName("");
       setTaskType("");
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(err instanceof Error ? err.message : "Failed to create policy");
     } finally {
       setSubmitting(false);
     }
@@ -59,84 +60,120 @@ export default function PoliciesPage() {
       await policies.delete(id);
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(err instanceof Error ? err.message : "Failed to delete policy");
     }
   }
 
   return (
-    <div>
-      <PageHeader title="Policies" description="Define rules that control agent behavior." />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Layer 5 Rule Engine"
+        title="Firewall Policies & Safety Predicates"
+        description="Configure declarative rule predicates, action gates, and priority-ranked evaluation rules for agent payloads."
+      />
 
       {(error || loadErr) && (
-        <div className="mb-4 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
+        <div className="rounded-lg border border-block/30 bg-block/10 px-4 py-3 text-[13px] text-block font-mono">
           {error || loadErr?.message}
         </div>
       )}
 
-      {/* Create form */}
-      <Card className="mb-6">
-        <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          New policy
+      {/* Sentence-style Policy Builder Centerpiece */}
+      <div className="material-panel rounded-2xl p-6">
+        <div className="eyebrow mb-3 flex items-center gap-1.5">
+          <Sparkles size={13} className="text-accent" />
+          <span>Declarative Policy Sentence Builder</span>
         </div>
-        <form onSubmit={onSubmit} className="grid grid-cols-4 gap-3">
-          <Input
-            label="Priority"
-            type="number"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            required
-          />
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="block external IPs"
-            required
-          />
-          <Select
-            label="Action"
-            value={action}
-            onChange={(e) => setAction(e.target.value as PolicyAction)}
-            options={ACTIONS.map((a) => ({ value: a, label: a }))}
-          />
-          <Input
-            label="Task type (optional)"
-            value={taskType}
-            onChange={(e) => setTaskType(e.target.value)}
-            placeholder="research"
-          />
-          <div className="col-span-4">
-            <Button type="submit" disabled={submitting || !name} size="sm">
-              {submitting ? "Adding..." : "Add policy"}
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="p-4 rounded-xl border border-hairline-strong bg-surface-elevated text-[14px] leading-loose text-ink-primary font-medium">
+            <span>When incoming task of type </span>
+            <input
+              type="text"
+              value={taskType}
+              onChange={(e) => setTaskType(e.target.value)}
+              placeholder="any (e.g. wire_transfer)"
+              className="inline-block mx-1.5 px-3 py-1 rounded-lg border border-hairline bg-surface text-accent font-mono text-[13px] focus:outline-none focus:border-accent w-48"
+            />
+            <span> matches policy </span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Block unverified external payouts"
+              required
+              className="inline-block mx-1.5 px-3 py-1 rounded-lg border border-hairline bg-surface text-ink-primary text-[13px] focus:outline-none focus:border-accent w-72"
+            />
+            <span> immediately set verdict to </span>
+            <select
+              value={action}
+              onChange={(e) => setAction(e.target.value as PolicyAction)}
+              className={`inline-block mx-1.5 px-3 py-1 rounded-lg border font-mono font-bold text-[12px] uppercase focus:outline-none ${
+                action === "block"
+                  ? "bg-block/15 text-block border-block/40"
+                  : action === "allow"
+                  ? "bg-allow/15 text-allow border-allow/40"
+                  : "bg-review/15 text-review border-review/40"
+              }`}
+            >
+              {ACTIONS.map((a) => (
+                <option key={a} value={a} className="bg-surface text-ink-primary">
+                  {a.toUpperCase()}
+                </option>
+              ))}
+            </select>
+            <span> with evaluation priority </span>
+            <input
+              type="number"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              className="inline-block mx-1.5 px-2.5 py-1 rounded-lg border border-hairline bg-surface text-ink-primary font-mono text-[13px] focus:outline-none focus:border-accent w-20 text-center"
+            />
+            <span>.</span>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              disabled={submitting || !name.trim()}
+              size="sm"
+              className="gap-1.5 font-mono text-[12px]"
+            >
+              <Plus size={14} />
+              {submitting ? "Enforcing..." : "Enforce Policy"}
             </Button>
           </div>
         </form>
-      </Card>
-
-      {/* Policy list */}
-      <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Active policies
       </div>
-      {loading && !data && (
-        <Card className="text-sm text-muted">Loading...</Card>
-      )}
-      {data && data.length === 0 && (
-        <EmptyState
-          icon={<FileText size={24} />}
-          title="No policies defined"
-          description="Create one above to get started."
-        />
-      )}
-      {data && data.length > 0 && (
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
+
+      {/* Active Rules Grid */}
+      <div className="material-panel rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-hairline flex items-center justify-between">
+          <span className="eyebrow">Active Firewall Policies</span>
+          <span className="text-[11px] font-mono text-ink-muted">
+            {data?.length ?? 0} rules evaluated in Layer 5
+          </span>
+        </div>
+
+        {loading && !data && <TableSkeleton rows={4} cols={4} />}
+
+        {!loading && data && data.length === 0 && (
+          <EmptyState
+            icon={<FileText size={24} />}
+            title="No declarative policies configured"
+            description="Use the sentence builder above to enforce strict rules against specific task types and payload boundaries."
+          />
+        )}
+
+        {data && data.length > 0 && (
+          <table className="w-full text-left text-[13px]">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Priority</th>
-                <th className="px-4 py-2.5 font-medium">Name</th>
-                <th className="px-4 py-2.5 font-medium">Action</th>
-                <th className="px-4 py-2.5 font-medium">Task type</th>
-                <th className="px-4 py-2.5 font-medium w-16"></th>
+              <tr className="border-b border-hairline text-[10.5px] uppercase tracking-wide text-ink-muted bg-surface-elevated/40">
+                <th className="px-5 py-3 font-medium">Priority</th>
+                <th className="px-5 py-3 font-medium">Policy Name</th>
+                <th className="px-5 py-3 font-medium">Action Verdict</th>
+                <th className="px-5 py-3 font-medium">Target Task Type</th>
+                <th className="px-5 py-3 font-medium text-right w-20">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -145,34 +182,37 @@ export default function PoliciesPage() {
                 .map((p) => (
                   <tr
                     key={p.id}
-                    className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50"
+                    className="border-t border-hairline/60 transition-colors duration-120 hover:bg-surface-elevated"
                   >
-                    <td className="px-4 py-2.5 font-mono text-xs">
-                      {p.priority}
+                    <td className="px-5 py-3.5 font-mono text-[12px] font-bold text-accent tabular-nums">
+                      #{p.priority}
                     </td>
-                    <td className="px-4 py-2.5">{p.name}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-5 py-3.5 font-medium text-ink-primary">
+                      {p.name}
+                    </td>
+                    <td className="px-5 py-3.5">
                       <Badge
                         variant={
                           p.action === "block"
-                            ? "danger"
+                            ? "block"
                             : p.action === "allow"
-                            ? "success"
+                            ? "allow"
                             : p.action === "review"
-                            ? "warning"
+                            ? "review"
                             : "info"
                         }
                       >
                         {p.action}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {p.task_type ?? "-"}
+                    <td className="px-5 py-3.5 font-mono text-[12px] text-ink-muted">
+                      {p.task_type ?? "wildcard (*)"}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-5 py-3.5 text-right">
                       <button
                         onClick={() => onDelete(p.id)}
-                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
+                        className="rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-block/15 hover:text-block"
+                        aria-label={`Delete ${p.name}`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -181,8 +221,8 @@ export default function PoliciesPage() {
                 ))}
             </tbody>
           </table>
-        </Card>
-      )}
+        )}
+      </div>
     </div>
   );
 }

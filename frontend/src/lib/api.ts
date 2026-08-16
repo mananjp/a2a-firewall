@@ -426,6 +426,8 @@ export interface AuditHop {
   created_at: string | null;
 }
 
+export type DelegationHop = AuditHop;
+
 export interface TaskAuditChain {
   task_id: string;
   root_task_id: string;

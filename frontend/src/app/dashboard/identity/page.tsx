@@ -3,34 +3,35 @@
 import { useState, useCallback, useEffect } from "react";
 import { identity, delegation, agents } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
-import type { Agent, AgentIdentity, DelegationToken, DelegationChainEntry } from "@/lib/types";
+import type { Agent, AgentIdentity, DelegationToken } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton, CardSkeleton } from "@/components/ui/skeleton";
 import {
   KeyRound,
   ShieldCheck,
   Link2,
   Loader2,
   Plus,
-  ChevronDown,
-  ChevronRight,
   Fingerprint,
   Copy,
   CheckCircle2,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
 
 export default function IdentityPage() {
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Identity & Delegation"
-        description="Manage agent identities, Ed25519 keypairs, and attenuable delegation tokens."
+        eyebrow="Layer 2 Cryptography"
+        title="Agent Identity & Macaroon Delegation"
+        description="Manage agent cryptographic identities, Ed25519 public key registries, and attenuable macaroon delegation tokens."
       />
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <WorkspaceIdentityCard />
         <AgentIdentityCard />
         <DelegationMinter />
@@ -47,25 +48,35 @@ function WorkspaceIdentityCard() {
   );
 
   return (
-    <Card>
-      <div className="flex items-center gap-2 mb-3">
-        <KeyRound size={15} className="text-accent" />
-        <div className="text-sm font-medium">Workspace Root Identity</div>
+    <div className="material-panel rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-hairline">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
+          <KeyRound size={15} />
+        </div>
+        <div>
+          <h3 className="text-[14px] font-semibold text-ink-primary">Workspace Root Identity</h3>
+          <span className="text-[11px] text-ink-muted">Ed25519 Root Trust Anchor</span>
+        </div>
       </div>
-      {loading && !data && <div className="text-xs text-muted">Loading...</div>}
+
+      {loading && !data && <CardSkeleton lines={2} hasHeader={false} />}
       {data && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Workspace ID</div>
-            <div className="font-mono text-xs text-foreground break-all">{data.workspace_id}</div>
+            <div className="eyebrow mb-1">Workspace ID</div>
+            <div className="font-mono text-[12px] text-ink-primary bg-surface-sunken p-2.5 rounded-lg border border-hairline break-all">
+              {data.workspace_id}
+            </div>
           </div>
           <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Root Public Key (Ed25519)</div>
-            <div className="font-mono text-[11px] text-foreground break-all leading-relaxed">{data.root_public_key}</div>
+            <div className="eyebrow mb-1">Root Public Key (Ed25519)</div>
+            <div className="font-mono text-[11px] text-allow bg-surface-sunken p-2.5 rounded-lg border border-hairline break-all leading-relaxed">
+              {data.root_public_key}
+            </div>
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -87,7 +98,6 @@ function AgentIdentityCard() {
     if (!selectedId) return;
     setLoading(true);
     try {
-      // Generate a fresh Ed25519 keypair for this agent
       const keypair = await crypto.subtle.generateKey(
         { name: "Ed25519" },
         true,
@@ -100,7 +110,7 @@ function AgentIdentityCard() {
       const result = await identity.register(selectedId, pubHex);
       setIdentityData(result);
     } catch {
-      // Error handled silently
+      // Ignored
     } finally {
       setLoading(false);
     }
@@ -114,72 +124,81 @@ function AgentIdentityCard() {
   }
 
   return (
-    <Card>
-      <div className="flex items-center gap-2 mb-3">
-        <Fingerprint size={15} className="text-accent" />
-        <div className="text-sm font-medium">Agent Identity Registration</div>
+    <div className="material-panel rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-hairline">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
+          <Fingerprint size={15} />
+        </div>
+        <div>
+          <h3 className="text-[14px] font-semibold text-ink-primary">Agent Keypair Registry</h3>
+          <span className="text-[11px] text-ink-muted">Register Ed25519 Public Keys</span>
+        </div>
       </div>
+
       <div className="space-y-3">
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Select Agent</div>
+          <div className="eyebrow mb-1.5">Select Agent Target</div>
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground"
+            className="w-full rounded-lg border border-hairline bg-surface-elevated px-3 py-2 text-[12px] font-mono text-ink-primary focus:outline-none focus:border-accent"
           >
             {agentList.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} ({a.id.slice(0, 8)})
+                {a.name} ({a.id.slice(0, 8)}...)
               </option>
             ))}
           </select>
         </div>
-        <Button onClick={handleRegister} disabled={!selectedId || loading} variant="secondary" size="sm">
+
+        <Button
+          onClick={handleRegister}
+          disabled={!selectedId || loading}
+          variant="secondary"
+          size="sm"
+          className="gap-2 font-mono text-[12px]"
+        >
           {loading ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
-          {loading ? "Generating..." : "Generate & Register Keypair"}
+          {loading ? "Registering..." : "Generate & Register Ed25519 Key"}
         </Button>
+
         {identityData && (
-          <div className="rounded-md border border-border bg-surface p-2.5 space-y-2">
+          <div className="rounded-lg border border-hairline bg-surface-elevated p-3.5 space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-[10px] text-success font-medium flex items-center gap-1">
-                <ShieldCheck size={12} /> Identity registered
+              <div className="text-[11px] text-allow font-semibold flex items-center gap-1 font-mono">
+                <ShieldCheck size={13} /> Ed25519 Registered
               </div>
-              <button onClick={handleCopy} className="text-muted-foreground hover:text-foreground transition-colors">
-                {copied ? <CheckCircle2 size={12} className="text-success" /> : <Copy size={12} />}
+              <button
+                onClick={handleCopy}
+                className="text-ink-muted hover:text-ink-primary transition-colors p-1"
+                aria-label="Copy identity card"
+              >
+                {copied ? <CheckCircle2 size={13} className="text-allow" /> : <Copy size={13} />}
               </button>
             </div>
             <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Agent ID</div>
-              <div className="font-mono text-xs">{identityData.agent_id}</div>
+              <div className="eyebrow mb-0.5">Agent UUID</div>
+              <div className="font-mono text-[11px] text-ink-primary">{identityData.agent_id}</div>
             </div>
             <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Public Key</div>
-              <div className="font-mono text-[10px] break-all text-muted-foreground">{identityData.public_key}</div>
+              <div className="eyebrow mb-0.5">Public Key</div>
+              <div className="font-mono text-[10px] break-all text-ink-muted bg-surface-sunken p-1.5 rounded border border-hairline">
+                {identityData.public_key}
+              </div>
             </div>
-            <details className="group">
-              <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">
-                View Identity Card
-              </summary>
-              <pre className="mt-1 rounded bg-surface-elevated p-2 text-[10px] font-mono overflow-auto max-h-40">
-                {JSON.stringify(identityData.card, null, 2)}
-              </pre>
-            </details>
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
 function DelegationMinter() {
   const [agentList, setAgentList] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [caveats, setCaveats] = useState("task_type:investigation, max_amount:10000");
+  const [caveats, setCaveats] = useState("task_type:research, max_depth:2");
   const [token, setToken] = useState<DelegationToken | null>(null);
   const [loading, setLoading] = useState(false);
-  const [attenuated, setAttenuated] = useState<DelegationToken[]>([]);
-  const [newCaveats, setNewCaveats] = useState("task_type:payment");
-  const [attLoading, setAttLoading] = useState(false);
 
   useEffect(() => {
     agents.list().then((a) => {
@@ -195,119 +214,80 @@ function DelegationMinter() {
       const parsed = caveats.split(",").map((c) => c.trim()).filter(Boolean);
       const result = await delegation.mint(selectedId, parsed);
       setToken(result.token);
-      setAttenuated([]);
     } catch {
-      // Error
+      // Ignored
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleAttenuate() {
-    if (!token) return;
-    setAttLoading(true);
-    try {
-      const parsed = newCaveats.split(",").map((c) => c.trim()).filter(Boolean);
-      const result = await delegation.attenuate(
-        `${token.location}|${token.identifier}|${token.signature}`,
-        parsed
-      );
-      setAttenuated([...attenuated, result.token]);
-    } catch {
-      // Error
-    } finally {
-      setAttLoading(false);
-    }
-  }
-
   return (
-    <Card>
-      <div className="flex items-center gap-2 mb-3">
-        <Link2 size={15} className="text-warning" />
-        <div className="text-sm font-medium">Delegation Token Minting</div>
+    <div className="material-panel rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-hairline">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-review-soft text-review">
+          <Link2 size={15} />
+        </div>
+        <div>
+          <h3 className="text-[14px] font-semibold text-ink-primary">Macaroon Token Minter</h3>
+          <span className="text-[11px] text-ink-muted">Mint Scoped Caveat Chains</span>
+        </div>
       </div>
+
       <div className="space-y-3">
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Delegate Agent</div>
+          <div className="eyebrow mb-1.5">Delegate Target Agent</div>
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground"
+            className="w-full rounded-lg border border-hairline bg-surface-elevated px-3 py-2 text-[12px] font-mono text-ink-primary focus:outline-none focus:border-accent"
           >
             {agentList.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} ({a.id.slice(0, 8)})
+                {a.name} ({a.id.slice(0, 8)}...)
               </option>
             ))}
           </select>
         </div>
+
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Caveats (comma-separated)</div>
+          <div className="eyebrow mb-1.5">Caveats (Comma-separated)</div>
           <Input
             value={caveats}
             onChange={(e) => setCaveats(e.target.value)}
-            className="text-xs font-mono"
-            placeholder="task_type:investigation, max_amount:10000"
+            className="font-mono text-[12px]"
+            placeholder="task_type:research, max_depth:2"
           />
         </div>
-        <Button onClick={handleMint} disabled={!selectedId || loading} variant="secondary" size="sm">
+
+        <Button
+          onClick={handleMint}
+          disabled={!selectedId || loading}
+          variant="secondary"
+          size="sm"
+          className="gap-2 font-mono text-[12px]"
+        >
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-          {loading ? "Minting..." : "Mint Token"}
+          {loading ? "Minting..." : "Mint Macaroon Token"}
         </Button>
 
-        {/* Root token */}
         {token && (
-          <div className="rounded-md border border-border bg-surface p-2.5 space-y-2">
-            <div className="text-[10px] text-success font-medium flex items-center gap-1">
-              <ShieldCheck size={12} /> Root token minted
+          <div className="rounded-lg border border-hairline bg-surface-elevated p-3.5 space-y-2">
+            <div className="text-[11px] text-allow font-mono font-semibold flex items-center gap-1">
+              <ShieldCheck size={13} /> Token Minted Successfully
             </div>
-            <div className="space-y-1">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Identifier</div>
-              <div className="font-mono text-[10px] break-all">{token.identifier}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Caveats</div>
-              <div className="flex flex-wrap gap-1">
-                {token.caveats.map((c, i) => (
-                  <Badge key={i} variant="info">{c}</Badge>
-                ))}
-              </div>
+            <div>
+              <div className="eyebrow mb-0.5">Token Identifier</div>
+              <div className="font-mono text-[11px] text-ink-primary truncate">{token.identifier}</div>
             </div>
-
-            {/* Attenuate form */}
-            <div className="pt-2 border-t border-border">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Attenuate with new caveats</div>
-              <div className="flex gap-2">
-                <Input
-                  value={newCaveats}
-                  onChange={(e) => setNewCaveats(e.target.value)}
-                  className="text-xs font-mono flex-1"
-                  placeholder="task_type:payment"
-                />
-                <Button onClick={handleAttenuate} disabled={attLoading} variant="ghost" size="sm">
-                  {attLoading ? <Loader2 size={11} className="animate-spin" /> : "Attenuate"}
-                </Button>
-              </div>
+            <div className="flex flex-wrap gap-1 pt-1">
+              {token.caveats.map((c, i) => (
+                <Badge key={i} variant="allow" className="text-[10px]">{c}</Badge>
+              ))}
             </div>
-
-            {/* Attenuated chain */}
-            {attenuated.length > 0 && (
-              <div className="space-y-1 pt-1">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Attenuated Chain</div>
-                {attenuated.map((t, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded bg-surface-elevated/50 px-2 py-1">
-                    <span className="text-[10px] text-muted">Level {i + 1}</span>
-                    <div className="flex flex-wrap gap-1 flex-1">
-                      {t.caveats.map((c, j) => (
-                        <Badge key={j} variant="warning" className="text-[9px]">{c}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -315,8 +295,6 @@ function DelegationVerifier() {
   const [tokenInput, setTokenInput] = useState("");
   const [result, setResult] = useState<{ valid: boolean; reason: string; caveats: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [capInput, setCapInput] = useState("");
-  const [capResult, setCapResult] = useState<{ granted: boolean; token_caveats: string[] } | null>(null);
 
   async function handleVerify() {
     if (!tokenInput.trim()) return;
@@ -331,94 +309,56 @@ function DelegationVerifier() {
     }
   }
 
-  async function handleCheckCap() {
-    if (!tokenInput.trim() || !capInput.trim()) return;
-    setLoading(true);
-    try {
-      const res = await delegation.checkCapability(tokenInput.trim(), capInput.trim());
-      setCapResult(res);
-    } catch {
-      setCapResult({ granted: false, token_caveats: [] });
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <Card>
-      <div className="flex items-center gap-2 mb-3">
-        <ShieldCheck size={15} className="text-success" />
-        <div className="text-sm font-medium">Token Verification</div>
+    <div className="material-panel rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-hairline">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-allow-soft text-allow">
+          <ShieldCheck size={15} />
+        </div>
+        <div>
+          <h3 className="text-[14px] font-semibold text-ink-primary">Token Verification Gate</h3>
+          <span className="text-[11px] text-ink-muted">Validate Scopes & Caveat Signatures</span>
+        </div>
       </div>
+
       <div className="space-y-3">
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Token (compact)</div>
+          <div className="eyebrow mb-1.5">Compact Token String</div>
           <Input
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
-            className="text-xs font-mono"
+            className="font-mono text-[12px]"
             placeholder="location|identifier|signature"
           />
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleVerify} disabled={!tokenInput.trim() || loading} variant="secondary" size="sm">
-            {loading ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
-            Verify
-          </Button>
-          <Button onClick={handleCheckCap} disabled={!tokenInput.trim() || !capInput.trim() || loading} variant="ghost" size="sm">
-            Check Capability
-          </Button>
-        </div>
 
-        {/* Capability check */}
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Required Capability</div>
-          <Input
-            value={capInput}
-            onChange={(e) => setCapInput(e.target.value)}
-            className="text-xs font-mono"
-            placeholder="task_type:investigation"
-          />
-        </div>
-
-        {capResult && (
-          <div className={`rounded-md border px-2.5 py-2 text-xs ${
-            capResult.granted
-              ? "border-success/20 bg-success/5 text-success"
-              : "border-danger/20 bg-danger/5 text-danger"
-          }`}>
-            {capResult.granted ? "Capability granted" : "Capability denied"}
-            {capResult.token_caveats.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {capResult.token_caveats.map((c, i) => (
-                  <Badge key={i} variant={capResult.granted ? "success" : "danger"} className="text-[9px]">{c}</Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <Button
+          onClick={handleVerify}
+          disabled={!tokenInput.trim() || loading}
+          variant="secondary"
+          size="sm"
+          className="gap-2 font-mono text-[12px]"
+        >
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+          Verify Macaroon Token
+        </Button>
 
         {result && (
-          <div className={`rounded-md border px-2.5 py-2 text-xs ${
-            result.valid
-              ? "border-success/20 bg-success/5 text-success"
-              : "border-danger/20 bg-danger/5 text-danger"
-          }`}>
-            <div className="flex items-center gap-1.5 mb-1">
-              {result.valid ? <ShieldCheck size={12} /> : <KeyRound size={12} />}
-              {result.valid ? "Token valid" : "Token invalid"}
+          <div
+            className={`rounded-lg border p-3 text-[12px] font-mono ${
+              result.valid
+                ? "border-allow/30 bg-allow/10 text-allow"
+                : "border-block/30 bg-block/10 text-block"
+            }`}
+          >
+            <div className="font-bold flex items-center gap-1.5 mb-1">
+              {result.valid ? <ShieldCheck size={13} /> : <Lock size={13} />}
+              {result.valid ? "VALID: Non-amplified signature confirmed" : "INVALID TOKEN"}
             </div>
-            <div className="text-muted-foreground">{result.reason}</div>
-            {result.caveats.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {result.caveats.map((c, i) => (
-                  <Badge key={i} variant="info" className="text-[9px]">{c}</Badge>
-                ))}
-              </div>
-            )}
+            <div className="text-[11px] opacity-90">{result.reason}</div>
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

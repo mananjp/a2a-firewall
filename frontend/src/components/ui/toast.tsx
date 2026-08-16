@@ -108,7 +108,7 @@ function ToastContainer({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none">
       <AnimatePresence>
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
@@ -126,28 +126,28 @@ const VARIANT_STYLES: Record<
   { border: string; icon: React.ReactNode; title: string; desc: string }
 > = {
   success: {
-    border: "border-success/30",
+    border: "border-success/25",
     icon: <CheckCircle2 size={15} className="text-success" />,
-    title: "text-success",
-    desc: "text-success/70",
+    title: "text-foreground",
+    desc: "text-muted-foreground",
   },
   error: {
-    border: "border-danger/30",
+    border: "border-danger/25",
     icon: <AlertTriangle size={15} className="text-danger" />,
-    title: "text-danger",
-    desc: "text-danger/70",
+    title: "text-foreground",
+    desc: "text-muted-foreground",
   },
   warning: {
-    border: "border-warning/30",
+    border: "border-warning/25",
     icon: <AlertTriangle size={15} className="text-warning" />,
-    title: "text-warning",
-    desc: "text-warning/70",
+    title: "text-foreground",
+    desc: "text-muted-foreground",
   },
   info: {
-    border: "border-accent/30",
-    icon: <Info size={15} className="text-accent" />,
-    title: "text-accent",
-    desc: "text-accent/70",
+    border: "border-info/25",
+    icon: <Info size={15} className="text-info" />,
+    title: "text-foreground",
+    desc: "text-muted-foreground",
   },
 };
 
@@ -161,27 +161,28 @@ function ToastItem({
   const s = VARIANT_STYLES[toast.variant];
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.95 }}
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
-      className={`pointer-events-auto w-80 rounded-lg border ${s.border} bg-background shadow-lg shadow-black/20`}
+      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+      transition={{ type: "spring", bounce: 0.18, duration: 0.32 }}
+      className={`pointer-events-auto w-80 rounded-xl border ${s.border} bg-surface shadow-[var(--shadow-toast)]`}
     >
       <div className="flex items-start gap-2.5 px-3.5 py-3">
         <span className="mt-0.5 shrink-0">{s.icon}</span>
         <div className="flex-1 min-w-0">
-          <div className={`text-sm font-medium ${s.title}`}>{toast.title}</div>
+          <div className={`text-[13px] font-medium ${s.title}`}>{toast.title}</div>
           {toast.description && (
-            <div className={`mt-0.5 text-xs ${s.desc} leading-relaxed`}>
+            <div className={`mt-0.5 text-[12px] leading-relaxed ${s.desc}`}>
               {toast.description}
             </div>
           )}
         </div>
         <button
           onClick={() => onDismiss(toast.id)}
-          className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground transition-colors"
+          className="shrink-0 mt-0.5 rounded p-1 text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground"
+          aria-label="Dismiss"
         >
-          <X size={14} />
+          <X size={13} />
         </button>
       </div>
     </motion.div>

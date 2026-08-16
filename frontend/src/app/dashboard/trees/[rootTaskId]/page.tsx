@@ -16,20 +16,29 @@ import type { LineageNode } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CardSkeleton } from "@/components/ui/skeleton";
 import { GitBranch } from "lucide-react";
 
+// Warm-light palette — solid colors for node backgrounds
 const DECISION_BG: Record<string, string> = {
-  allow: "#052e16",
-  block: "#450a0a",
-  review: "#451a03",
-  error: "#18181b",
+  allow:  "#e3eedf",
+  block:  "#f4e1de",
+  review: "#f6ead0",
+  error:  "#f3ede2",
 };
 
 const DECISION_BORDER: Record<string, string> = {
-  allow: "#22c55e",
-  block: "#ef4444",
-  review: "#f59e0b",
-  error: "#52525b",
+  allow:  "#3f7d4e",
+  block:  "#b3382c",
+  review: "#b87a14",
+  error:  "#756a59",
+};
+
+const DECISION_FG: Record<string, string> = {
+  allow:  "#3f7d4e",
+  block:  "#b3382c",
+  review: "#b87a14",
+  error:  "#756a59",
 };
 
 export default function TreeViewPage() {
@@ -51,7 +60,7 @@ export default function TreeViewPage() {
     return <Card>No root_task_id in URL.</Card>;
   }
   if (loading && !data) {
-    return <Card className="text-muted">Loading tree...</Card>;
+    return <CardSkeleton lines={8} hasHeader={true} />;
   }
   if (error) {
     return <Card className="text-danger">{error.message}</Card>;
@@ -59,7 +68,7 @@ export default function TreeViewPage() {
   if (!data || data.length === 0) {
     return (
       <EmptyState
-        icon={<GitBranch size={24} />}
+        icon={<GitBranch size={20} />}
         title="Empty tree"
       />
     );
@@ -93,18 +102,8 @@ export default function TreeViewPage() {
               <span
                 className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-mono uppercase"
                 style={{
-                  background:
-                    n.decision === "allow"
-                      ? "rgba(34,197,94,0.15)"
-                      : n.decision === "block"
-                      ? "rgba(239,68,68,0.15)"
-                      : "rgba(245,158,11,0.15)",
-                  color:
-                    n.decision === "allow"
-                      ? "#22c55e"
-                      : n.decision === "block"
-                      ? "#ef4444"
-                      : "#f59e0b",
+                  background: DECISION_BG[n.decision] ?? DECISION_BG.error,
+                  color: DECISION_FG[n.decision] ?? DECISION_FG.error,
                 }}
               >
                 {n.decision}
@@ -114,10 +113,10 @@ export default function TreeViewPage() {
         ),
       },
       style: {
-        background: DECISION_BG[n.decision],
-        color: "#fff",
-        border: `1.5px solid ${DECISION_BORDER[n.decision]}`,
-        borderRadius: 8,
+        background: "#ffffff",
+        color: "#1c1714",
+        border: `1.5px solid ${DECISION_BORDER[n.decision] ?? DECISION_BORDER.error}`,
+        borderRadius: 10,
         width: 180,
       },
     };
@@ -130,27 +129,28 @@ export default function TreeViewPage() {
       source: n.parent_task_id!,
       target: n.id,
       markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: "#52525b" },
+      style: { stroke: "#b9ab94" },
     }));
 
   return (
     <div>
-      <PageHeader title="Execution Tree" />
-      <div className="mb-2 text-xs font-mono text-muted-foreground">
-        root: {rootTaskId}
-      </div>
-      <Card className="p-0" style={{ height: 500 }}>
+      <PageHeader
+        eyebrow="Lineage"
+        title="Execution Tree"
+        description={`Root: ${rootTaskId}`}
+      />
+      <Card className="p-0 overflow-hidden" style={{ height: 500 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           fitView
           proOptions={{ hideAttribution: true }}
         >
-          <Background gap={20} color="#27272a" />
+          <Background gap={20} color="#efe9da" />
           <Controls />
         </ReactFlow>
       </Card>
-      <div className="mt-3 flex gap-4 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex gap-4 text-[11.5px] text-muted-foreground">
         {(["allow", "block", "review"] as const).map((d) => (
           <span key={d} className="flex items-center gap-1.5">
             <span

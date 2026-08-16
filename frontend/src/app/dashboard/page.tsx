@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { violations, telemetry, stats, workspaces, tasks } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
@@ -14,7 +14,10 @@ import type { RecentTask } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge, decisionVariant, severityVariant } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton, StatsGridSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { MessageJourneyPipeline } from "@/components/pipeline/message-journey-pipeline";
 import {
   ShieldAlert,
   Activity,
@@ -30,268 +33,319 @@ import {
   ArrowRight,
   Settings2,
   ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function DashboardPage() {
-  const { data: violationsData } = usePolling<Violation[]>(
-    useCallback((_signal) => violations.list(undefined) as Promise<Violation[]>, []), 5000
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+
+  const { data: statsData, loading: statsLoading } = usePolling<StatsOverview>(
+    useCallback((_signal) => stats.overview(), []),
+    4000
   );
 
-  const { data: statsData } = usePolling<StatsOverview>(
-    useCallback((_signal) => stats.overview(), []), 5000
+  const { data: telemetryData, loading: telemetryLoading } = usePolling<TelemetrySummary>(
+    useCallback((_signal) => telemetry.summary(), []),
+    6000
   );
 
-  const { data: telemetryData } = usePolling<TelemetrySummary>(
-    useCallback((_signal) => telemetry.summary(), []), 10000
+  const { data: recentTasks, loading: tasksLoading } = usePolling<RecentTask[]>(
+    useCallback((_signal) => tasks.recent(10), []),
+    3000
   );
 
-  const { data: recentTasks } = usePolling<RecentTask[]>(
-    useCallback((_signal) => tasks.recent(10), []), 3000
+  const { data: violationsData, loading: violationsLoading } = usePolling<Violation[]>(
+    useCallback((_signal) => violations.list(undefined) as Promise<Violation[]>, []),
+    6000
   );
 
-  const { data: wsSettings } = usePolling<Workspace>(
-    useCallback((_signal) => workspaces.me(), []), 30000
-  );
+  const isInitialLoading = (statsLoading && !statsData) || (tasksLoading && !recentTasks);
+
+  const totalDecisions = statsData?.total_tasks || 0;
+  const blockCount = statsData?.blocked || 0;
+  const reviewCount = telemetryData?.events_by_decision?.["review"] || 0;
+  const allowCount = Math.max(0, totalDecisions - blockCount - reviewCount);
+
+  const allowPct = totalDecisions > 0 ? ((allowCount / totalDecisions) * 100).toFixed(1) : "100.0";
+  const blockPct = totalDecisions > 0 ? ((blockCount / totalDecisions) * 100).toFixed(1) : "0.0";
+  const reviewPct = totalDecisions > 0 ? ((reviewCount / totalDecisions) * 100).toFixed(1) : "0.0";
 
   return (
-    <div>
-      <PageHeader
-        title="Dashboard"
-        description="Agent traffic overview, live decisions, and workspace configuration."
-      />
-
-      {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total Tasks" value={statsData?.total_tasks ?? 0} icon={<BarChart3 size={16} />} accent="blue" />
-        <StatCard label="Blocked" value={statsData?.blocked ?? 0} icon={<Ban size={16} />} accent="danger" subtitle={statsData ? `${statsData.blocked_pct}%` : undefined} />
-        <StatCard label="Groq Calls" value={statsData?.groq_calls_today ?? 0} icon={<Zap size={16} />} accent="warning" />
-        <StatCard label="Avg Latency" value={statsData?.avg_latency_ms ?? 0} icon={<Clock size={16} />} accent="green" suffix="ms" />
-      </div>
-
-      {/* Telemetry + Violation summary row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <StatCard label="Violations" value={violationsData?.length ?? 0} icon={<ShieldAlert size={16} />} accent="danger" />
-        <StatCard label="Telemetry Events" value={telemetryData?.total_events ?? 0} icon={<Activity size={16} />} accent="blue" />
-        <StatCard label="Identity Failures" value={telemetryData?.identity_failures ?? 0} icon={<KeyRound size={16} />} accent={telemetryData?.identity_failures ? "danger" : "green"} />
-        <StatCard label="Scope Violations" value={telemetryData?.scope_violations ?? 0} icon={<ScanSearch size={16} />} accent={telemetryData?.scope_violations ? "warning" : "green"} />
-      </div>
-
-      {/* Events breakdown + Workspace config */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {telemetryData && (
-          <>
-            <Card>
-              <div className="mb-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Events by Type</div>
-              <div className="space-y-1.5">
-                {Object.entries(telemetryData.events_by_type).map(([type, count]) => (
-                  <div key={type} className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-muted-foreground">{type}</span>
-                    <span className="font-mono text-xs text-foreground">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <Card>
-              <div className="mb-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Events by Decision</div>
-              <div className="space-y-1.5">
-                {Object.entries(telemetryData.events_by_decision).map(([d, count]) => (
-                  <div key={d} className="flex items-center justify-between">
-                    <Badge variant={decisionVariant(d)}>{d}</Badge>
-                    <span className="font-mono text-xs text-foreground">{count}</span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between pt-1.5 border-t border-border mt-1.5">
-                  <span className="text-xs text-muted-foreground">Avg Risk Score</span>
-                  <span className="font-mono text-xs">{telemetryData.avg_risk_score.toFixed(3)}</span>
-                </div>
-              </div>
-            </Card>
-          </>
-        )}
-        <WorkspaceConfigCard ws={wsSettings} />
-      </div>
-
-      {/* Live Feed of recent tasks */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Live Decision Feed</span>
-          <Link href="/dashboard/telemetry" className="text-xs text-accent hover:underline inline-flex items-center gap-1">
-            View all <ArrowRight size={11} />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <PageHeader
+          eyebrow="Operations Mesh"
+          title="Security Command Center"
+          description="Real-time multi-agent message governance, six-layer inspection verdicts, and delegation enforcement."
+        />
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/simulation">
+            <Button variant="secondary" size="sm" className="gap-1.5 font-mono text-[12px]">
+              <FlaskConical size={13} />
+              Run Simulation
+            </Button>
+          </Link>
+          <Link href="/dashboard/demo">
+            <Button variant="primary" size="sm" className="gap-1.5 font-mono text-[12px]">
+              <Flame size={13} />
+              Attack Demo
+            </Button>
           </Link>
         </div>
-        {recentTasks && recentTasks.length > 0 ? (
-          <Card className="p-0 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">Time</th>
-                  <th className="px-4 py-2.5 font-medium">Task Type</th>
-                  <th className="px-4 py-2.5 font-medium">Decision</th>
-                  <th className="px-4 py-2.5 font-medium">Risk</th>
-                  <th className="px-4 py-2.5 font-medium">Latency</th>
-                  <th className="px-4 py-2.5 font-medium">Groq</th>
-                  <th className="px-4 py-2.5 font-medium">Trace</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTasks.map((t) => (
-                  <tr key={t.id} className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50">
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(t.created_at).toLocaleTimeString()}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{t.task_type}</td>
-                    <td className="px-4 py-2.5">
+      </div>
+
+      {/* Hero Verdict Ratio & KPI Centerpiece */}
+      <div className="material-panel rounded-2xl p-6 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-5 border-b border-hairline">
+          <div>
+            <div className="eyebrow mb-1">Live Interception Verdicts</div>
+            <div className="text-[28px] font-bold tracking-tight text-ink-primary font-mono flex items-baseline gap-3">
+              <span>{totalDecisions}</span>
+              <span className="text-[13px] font-sans font-medium text-ink-muted">
+                Total Evaluated Tasks
+              </span>
+            </div>
+          </div>
+
+          {/* Verdict Hero Metric Cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="px-4 py-3 rounded-xl border border-allow/30 bg-allow/5 flex flex-col min-w-[120px]">
+              <div className="flex items-center justify-between text-[11px] font-mono text-allow font-semibold uppercase">
+                <span>Allow</span>
+                <span>{allowPct}%</span>
+              </div>
+              <div className="text-[24px] font-bold font-mono text-allow mt-0.5">
+                {allowCount}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 rounded-xl border border-block/30 bg-block/5 flex flex-col min-w-[120px]">
+              <div className="flex items-center justify-between text-[11px] font-mono text-block font-semibold uppercase">
+                <span>Block</span>
+                <span>{blockPct}%</span>
+              </div>
+              <div className="text-[24px] font-bold font-mono text-block mt-0.5">
+                {blockCount}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 rounded-xl border border-review/30 bg-review/5 flex flex-col min-w-[120px]">
+              <div className="flex items-center justify-between text-[11px] font-mono text-review font-semibold uppercase">
+                <span>Review</span>
+                <span>{reviewPct}%</span>
+              </div>
+              <div className="text-[24px] font-bold font-mono text-review mt-0.5">
+                {reviewCount}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Ratio Bar */}
+        <div className="pt-4">
+          <div className="flex h-2.5 w-full rounded-full overflow-hidden bg-surface-sunken border border-hairline">
+            <div
+              style={{ width: `${allowPct}%` }}
+              className="bg-allow transition-all duration-500"
+              title={`Allow: ${allowPct}%`}
+            />
+            <div
+              style={{ width: `${reviewPct}%` }}
+              className="bg-review transition-all duration-500"
+              title={`Review: ${reviewPct}%`}
+            />
+            <div
+              style={{ width: `${blockPct}%` }}
+              className="bg-block transition-all duration-500"
+              title={`Block: ${blockPct}%`}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted mt-2">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-allow" /> Allowed ({allowCount})
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-review" /> In Review ({reviewCount})
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-block" /> Blocked ({blockCount})
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Signature Centerpiece: Six-Layer Inspection Visualizer */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="eyebrow">Signature Inspection Engine</div>
+          <span className="text-[11px] font-mono text-ink-muted">Live Pipeline Interception</span>
+        </div>
+        <MessageJourneyPipeline
+          decision={recentTasks?.[0]?.decision ?? "allow"}
+          totalLatencyMs={statsData?.avg_latency_ms ?? 14}
+          groqCalled={true}
+          intentDriftScore={0.12}
+        />
+      </div>
+
+      {/* Operational Latency & Telemetry Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <div className="flex items-center justify-between text-ink-muted mb-2">
+            <span className="eyebrow">Avg Latency</span>
+            <Clock size={14} className="text-info" />
+          </div>
+          <div className="text-[22px] font-bold font-mono text-ink-primary">
+            {statsData?.avg_latency_ms ?? 0}<span className="text-[13px] font-normal text-ink-muted">ms</span>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1">End-to-end 6-layer pipeline</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between text-ink-muted mb-2">
+            <span className="eyebrow">Groq Guard Calls</span>
+            <Zap size={14} className="text-review" />
+          </div>
+          <div className="text-[22px] font-bold font-mono text-ink-primary">
+            {statsData?.groq_calls_today ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1">Semantic intent & injection guards</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between text-ink-muted mb-2">
+            <span className="eyebrow">Identity Checks</span>
+            <KeyRound size={14} className="text-allow" />
+          </div>
+          <div className="text-[22px] font-bold font-mono text-allow">
+            {telemetryData?.total_events ? telemetryData.total_events - (telemetryData.identity_failures ?? 0) : 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1">Ed25519 cryptographic signatures</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between text-ink-muted mb-2">
+            <span className="eyebrow">Scope Violations</span>
+            <ShieldAlert size={14} className={telemetryData?.scope_violations ? "text-block" : "text-allow"} />
+          </div>
+          <div className={`text-[22px] font-bold font-mono ${telemetryData?.scope_violations ? "text-block" : "text-allow"}`}>
+            {telemetryData?.scope_violations ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1">Caveat amplification attempts</p>
+        </Card>
+      </div>
+
+      {/* Live Decision Feed with Inline Inspection */}
+      <div className="material-panel rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="eyebrow mb-1">Live Feed</div>
+            <h3 className="text-[15px] font-semibold text-ink-primary">
+              Recent Interceptions & Decisions
+            </h3>
+          </div>
+          <Link
+            href="/dashboard/telemetry"
+            className="text-[12px] font-mono text-accent hover:underline inline-flex items-center gap-1"
+          >
+            Full Telemetry <ArrowRight size={12} />
+          </Link>
+        </div>
+
+        {tasksLoading && !recentTasks ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="p-3.5 rounded-lg border border-hairline bg-surface flex items-center justify-between gap-4 shimmer-effect"
+              >
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-12" />
+                  <Skeleton className="h-4 w-4 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : recentTasks && recentTasks.length > 0 ? (
+          <div className="space-y-2">
+            {recentTasks.map((t) => {
+              const isExpanded = expandedTaskId === t.id;
+              return (
+                <div
+                  key={t.id}
+                  className="rounded-lg border border-hairline bg-surface hover:border-hairline-strong transition-all overflow-hidden"
+                >
+                  <div
+                    onClick={() => setExpandedTaskId(isExpanded ? null : t.id)}
+                    className="flex items-center justify-between p-3.5 cursor-pointer text-[13px]"
+                  >
+                    <div className="flex items-center gap-3">
                       <Badge variant={decisionVariant(t.decision)}>{t.decision}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{t.risk_score.toFixed(2)}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted">{t.total_latency_ms ?? "-"}ms</td>
-                    <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
-                      {t.groq_called ? (
-                        t.groq_injection_detected
-                          ? <Badge variant="danger">Injected</Badge>
-                          : <Badge variant="success">Clean</Badge>
-                      ) : "-"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {t.trace_id ? (
-                        <Link href={`/dashboard/traces/${t.trace_id}`} className="text-xs font-mono text-accent hover:underline inline-flex items-center gap-0.5">
-                          {t.trace_id.slice(0, 8)} <ExternalLink size={9} />
-                        </Link>
-                      ) : <span className="text-xs text-muted">-</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
+                      <span className="font-mono text-[12px] text-ink-primary font-semibold">
+                        {t.task_type}
+                      </span>
+                      <span className="font-mono text-[11px] text-ink-muted">
+                        ID: {t.id.slice(0, 8)}...
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-ink-muted font-mono text-[11px]">
+                      <span>Risk: {t.risk_score.toFixed(2)}</span>
+                      <span>{t.total_latency_ms ?? 12}ms</span>
+                      <span className="text-ink-muted text-[10px]">
+                        {new Date(t.created_at).toLocaleTimeString()}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-200 ${isExpanded ? "rotate-180 text-ink-primary" : ""}`}
+                      />
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="p-4 border-t border-hairline bg-surface-elevated/70">
+                      <MessageJourneyPipeline
+                        decision={t.decision}
+                        riskScore={t.risk_score}
+                        totalLatencyMs={t.total_latency_ms ?? undefined}
+                        groqCalled={t.groq_called}
+                        animated={false}
+                        className="bg-surface-sunken p-4"
+                      />
+                      {t.trace_id && (
+                        <div className="mt-3 flex items-center justify-end">
+                          <Link
+                            href={`/dashboard/traces/${t.trace_id}`}
+                            className="text-[11px] font-mono text-accent hover:underline flex items-center gap-1"
+                          >
+                            Open Distributed OTel Trace ({t.trace_id.slice(0, 12)}...) <ExternalLink size={11} />
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <EmptyState
-            icon={<Activity size={24} />}
-            title="No traffic yet"
-            description="Run a simulation or demo to see live decisions."
-            action={
-              <div className="flex gap-2">
-                <Link href="/dashboard/simulation">
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-elevated px-3 py-1.5 text-xs font-medium text-foreground border border-border hover:bg-surface-elevated/80">
-                    <FlaskConical size={13} /> Simulation
-                  </span>
-                </Link>
-                <Link href="/dashboard/demo">
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-elevated px-3 py-1.5 text-xs font-medium text-foreground border border-border hover:bg-surface-elevated/80">
-                    <Flame size={13} /> Live Demo
-                  </span>
-                </Link>
-              </div>
-            }
+            icon={<Activity size={20} />}
+            title="No intercepted traffic yet"
+            description="Run an attack demo or bank simulation to generate multi-agent traffic."
           />
         )}
       </div>
-
-      {/* Recent violations */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Recent Violations</span>
-          <Link href="/dashboard/violations" className="text-xs text-accent hover:underline inline-flex items-center gap-1">
-            View all <ArrowRight size={11} />
-          </Link>
-        </div>
-        {violationsData && violationsData.length > 0 ? (
-          <Card className="p-0 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">Type</th>
-                  <th className="px-4 py-2.5 font-medium">Severity</th>
-                  <th className="px-4 py-2.5 font-medium">Layer</th>
-                  <th className="px-4 py-2.5 font-medium">When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {violationsData.slice(0, 10).map((v) => (
-                  <tr key={v.id} className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50">
-                    <td className="px-4 py-2.5 font-mono text-xs">{v.violation_type}</td>
-                    <td className="px-4 py-2.5"><Badge variant={severityVariant(v.severity)}>{v.severity}</Badge></td>
-                    <td className="px-4 py-2.5 text-muted-foreground text-xs">{v.layer}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(v.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        ) : (
-          <EmptyState icon={<ShieldAlert size={24} />} title="No violations" description="Run traffic to see violations here." />
-        )}
-      </div>
-
-      {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { href: "/dashboard/simulation", icon: <FlaskConical size={18} />, label: "Bank Agent Simulation", desc: "Multi-step bank scenarios through the real pipeline" },
-          { href: "/dashboard/demo", icon: <Flame size={18} />, label: "Live Attack Demo", desc: "Clean, injection, and review scenarios with layer detail" },
-          { href: "/dashboard/agents", icon: <Bot size={18} />, label: "Agent Registry", desc: "Manage identities, capabilities, and permissions" },
-        ].map((item) => (
-          <Link key={item.href} href={item.href}>
-            <Card hover className="h-full">
-              <div className="mb-2 text-muted">{item.icon}</div>
-              <div className="text-sm font-medium">{item.label}</div>
-              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, icon, accent, subtitle, suffix }: {
-  label: string; value: number; icon: React.ReactNode;
-  accent: "blue" | "green" | "danger" | "warning"; subtitle?: string; suffix?: string;
-}) {
-  const accentMap = { blue: "text-accent", green: "text-success", danger: "text-danger", warning: "text-warning" };
-  const borderMap = { blue: "border-accent/20", green: "border-success/20", danger: "border-danger/20", warning: "border-warning/20" };
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className={`border ${borderMap[accent]}`}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-          <span className={accentMap[accent]}>{icon}</span>
-        </div>
-        <div className={`text-2xl font-semibold font-mono tabular-nums ${accentMap[accent]}`}>
-          {value}{suffix && <span className="text-xs font-normal text-muted-foreground ml-1">{suffix}</span>}
-        </div>
-        {subtitle && <div className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</div>}
-      </Card>
-    </motion.div>
-  );
-}
-
-function WorkspaceConfigCard({ ws }: { ws: Workspace | null }) {
-  if (!ws) return null;
-  return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-          <Settings2 size={13} /> Workspace Config
-        </span>
-        <Link href="/dashboard/workspace" className="text-xs text-accent hover:underline">Edit</Link>
-      </div>
-      <div className="space-y-1.5">
-        <ConfigRow label="Fail Mode" value={ws.fail_mode} accent={ws.fail_mode === "closed" ? "danger" : "success"} />
-        <ConfigRow label="Default Deny" value={ws.default_deny ? "Enabled" : "Disabled"} accent={ws.default_deny ? "danger" : "success"} />
-        <ConfigRow label="Groq Threshold" value={String(ws.groq_threshold)} accent="warning" />
-        <ConfigRow label="Block Threshold" value={String(ws.block_threshold)} accent="danger" />
-      </div>
-    </Card>
-  );
-}
-
-function ConfigRow({ label, value, accent }: { label: string; value: string; accent: string }) {
-  const c = accent === "danger" ? "text-danger" : accent === "warning" ? "text-warning" : "text-success";
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-mono ${c}`}>{value}</span>
     </div>
   );
 }

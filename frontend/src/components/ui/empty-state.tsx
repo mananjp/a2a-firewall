@@ -18,16 +18,18 @@ export function EmptyState({
   return (
     <div
       className={clsx(
-        "flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center",
+        "flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface px-6 py-12 text-center",
         className
       )}
     >
       {icon && (
-        <div className="mb-3 text-muted">{icon}</div>
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-surface-elevated text-muted-foreground">
+          {icon}
+        </div>
       )}
-      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-[14px] font-medium text-foreground">{title}</p>
       {description && (
-        <p className="mt-1 text-xs text-muted-foreground max-w-sm">
+        <p className="mt-1 max-w-sm text-[12.5px] leading-relaxed text-muted-foreground">
           {description}
         </p>
       )}

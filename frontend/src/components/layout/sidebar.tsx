@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import {
   LayoutDashboard,
@@ -9,31 +10,29 @@ import {
   Bot,
   FileText,
   MessageSquare,
-  FlaskConical,
-  Flame,
   Activity,
   KeyRound,
   GitFork,
   Settings2,
   LogOut,
-  ChevronRight,
   Link2,
+  FlaskConical,
+  Flame,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
-import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/telemetry", label: "Live Inspector", icon: Activity },
   { href: "/dashboard/audit", label: "Delegation Audit", icon: GitFork },
-  { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
-  { href: "/dashboard/demo", label: "Live Demo", icon: Flame },
   { href: "/dashboard/delegation-demo", label: "Delegation Demo", icon: Link2 },
-  { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
-  { href: "/dashboard/telemetry", label: "Telemetry", icon: Activity },
-  { href: "/dashboard/identity", label: "Identity", icon: KeyRound },
-  { href: "/dashboard/agents", label: "Agents", icon: Bot },
-  { href: "/dashboard/policies", label: "Policies", icon: FileText },
   { href: "/dashboard/review", label: "Review Queue", icon: MessageSquare },
+  { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
+  { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
+  { href: "/dashboard/demo", label: "Live Attack Demo", icon: Flame },
+  { href: "/dashboard/identity", label: "Identity & Keys", icon: KeyRound },
+  { href: "/dashboard/agents", label: "Agent Registry", icon: Bot },
+  { href: "/dashboard/policies", label: "Firewall Policies", icon: FileText },
   { href: "/dashboard/workspace", label: "Workspace", icon: Settings2 },
 ];
 
@@ -48,17 +47,34 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-[220px] flex-col border-r border-border bg-surface">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/15 text-accent">
-          <ShieldAlert size={15} strokeWidth={2.2} />
-        </div>
-        <span className="text-sm font-semibold tracking-tight">A2A Firewall</span>
+    <aside className="fixed inset-y-0 left-0 z-30 flex w-[240px] flex-col material-soft border-r border-hairline bg-surface/80">
+      {/* Brand Header */}
+      <div className="flex h-16 items-center justify-between px-5 border-b border-hairline">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-allow/10 border border-allow/25 p-1 glow-allow transition-all group-hover:scale-105 shadow-sm">
+            <Image
+              src="/a2a-logo.png"
+              alt="A2A Logo"
+              width={28}
+              height={28}
+              className="object-contain"
+            />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[14px] font-bold tracking-tight text-ink-primary flex items-center gap-1">
+              A2A Firewall
+              <span className="text-[9px] font-mono px-1 rounded bg-accent/15 text-accent border border-accent/25">
+                v2.0
+              </span>
+            </span>
+            <span className="text-[10px] font-mono text-ink-muted">Zero-Trust Agent Mesh</span>
+          </div>
+        </Link>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
+      {/* Nav List */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="eyebrow px-2 mb-2">Operations</div>
         <ul className="space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const active =
@@ -71,27 +87,21 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   className={clsx(
-                    "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                    "group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-140",
                     active
-                      ? "bg-accent/10 text-accent"
-                      : "text-muted-foreground hover:bg-surface-elevated hover:text-foreground"
+                      ? "bg-surface-elevated text-ink-primary border border-hairline-strong shadow-sm"
+                      : "text-ink-muted hover:text-ink-primary hover:bg-surface-elevated/50 border border-transparent"
                   )}
                 >
                   <Icon
-                    size={16}
-                    strokeWidth={active ? 2 : 1.5}
+                    size={15}
+                    strokeWidth={active ? 2.1 : 1.7}
                     className={clsx(
                       "shrink-0 transition-colors",
-                      active ? "text-accent" : "text-muted group-hover:text-foreground"
+                      active ? "text-accent" : "text-ink-muted group-hover:text-ink-primary"
                     )}
                   />
                   <span className="flex-1 truncate">{item.label}</span>
-                  {active && (
-                    <ChevronRight
-                      size={12}
-                      className="text-accent/50"
-                    />
-                  )}
                 </Link>
               </li>
             );
@@ -100,13 +110,13 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-hairline p-3">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground"
+          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-ink-muted transition-colors hover:bg-surface-elevated hover:text-ink-primary border border-transparent hover:border-hairline"
         >
-          <LogOut size={16} strokeWidth={1.5} />
-          <span>Sign out</span>
+          <LogOut size={15} strokeWidth={1.7} />
+          <span className="font-medium">Sign out</span>
         </button>
       </div>
     </aside>

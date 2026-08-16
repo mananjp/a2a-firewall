@@ -57,12 +57,10 @@ const PRESETS: Array<{ id: string; name: string; description: string; category: 
 ];
 
 const AGENT_COLORS: Record<string, string> = {
-  "kyc agent": "#3b82f6", "fraud investigation": "#f59e0b", "payments agent": "#22c55e", "customer service": "#a78bfa",
+  "kyc agent": "#4f6680", "fraud investigation": "#b87a14", "payments agent": "#3f7d4e", "customer service": "#756a59",
 };
-function agentColor(name: string) { return AGENT_COLORS[name.toLowerCase()] || "#71717a"; }
+function agentColor(name: string) { return AGENT_COLORS[name.toLowerCase()] || "#756a59"; }
 function agentInitials(name: string) { return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(); }
-
-// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function SimulationPage() {
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -123,48 +121,52 @@ export default function SimulationPage() {
         <div className="text-xs font-medium text-foreground">{name}</div>
       </div>
     ) },
-    style: { background: "#18181b", border: "1.5px solid #27272a", borderRadius: 10, width: 150 },
+    style: { background: "#ffffff", border: "1px solid #e8dfcf", borderRadius: 10, width: 150, color: "#1c1714" },
   }));
   const flowEdges: Edge[] = results.map((r, i) => ({
     id: `e-${i}`, source: r.sender, target: r.receiver,
     label: `${r.task_type} → ${r.decision}`,
     markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: r.decision === "block" ? "#ef4444" : "#52525b", strokeWidth: r.decision === "block" ? 2.5 : 1 },
-    labelStyle: { fill: r.decision === "block" ? "#ef4444" : "#71717a", fontSize: 10 },
+    style: { stroke: r.decision === "block" ? "#b3382c" : "#b9ab94", strokeWidth: r.decision === "block" ? 2 : 1 },
+    labelStyle: { fill: r.decision === "block" ? "#b3382c" : "#756a59", fontSize: 10 },
   }));
 
   return (
     <div>
-      <PageHeader title="Agent Mesh Simulation" description="Multi-step scenarios through the real detection pipeline." />
+      <PageHeader
+        eyebrow="Sandbox"
+        title="Agent Mesh Simulation"
+        description="Multi-step scenarios through the real detection pipeline."
+      />
 
       {/* Flow graph */}
-      <Card className="mb-6 p-0" style={{ height: 260 }}>
+      <Card className="mb-5 p-0 overflow-hidden" style={{ height: 260 }}>
         {flowNodes.length > 0 ? (
           <ReactFlow nodes={flowNodes} edges={flowEdges} fitView proOptions={{ hideAttribution: true }}>
-            <Background gap={20} color="#27272a" /><Controls />
+            <Background gap={20} color="#efe9da" /><Controls />
           </ReactFlow>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted">Select a preset or build custom steps, then run</div>
+          <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">Select a preset or build custom steps, then run</div>
         )}
       </Card>
 
       {/* Mode toggle */}
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => { setMode("preset"); setResults([]); }} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "preset" ? "bg-surface-elevated text-foreground border border-border" : "text-muted-foreground hover:text-foreground border border-transparent"}`}>Presets</button>
-        <button onClick={() => { setMode("custom"); setResults([]); }} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mode === "custom" ? "bg-surface-elevated text-foreground border border-border" : "text-muted-foreground hover:text-foreground border border-transparent"}`}>Custom</button>
+      <div className="flex items-center gap-1 mb-4 rounded-md border border-border bg-surface-elevated p-1 w-fit">
+        <button onClick={() => { setMode("preset"); setResults([]); }} className={`rounded px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-150 ${mode === "preset" ? "bg-surface text-foreground border border-border" : "text-muted-foreground hover:text-foreground border border-transparent"}`}>Presets</button>
+        <button onClick={() => { setMode("custom"); setResults([]); }} className={`rounded px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-150 ${mode === "custom" ? "bg-surface text-foreground border border-border" : "text-muted-foreground hover:text-foreground border border-transparent"}`}>Custom</button>
       </div>
 
-      {/* ─── Preset mode ─── */}
+      {/* Preset mode */}
       {mode === "preset" && (
         <>
-          <div className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Normal Traffic</div>
+          <div className="eyebrow mb-2 mt-1">Normal Traffic</div>
           <div className="grid grid-cols-2 gap-2 mb-4">
             {PRESETS.filter(p => p.category === "Normal").map(p => (
               <PresetCard key={p.id} preset={p} selected={activePreset === p.id} disabled={running} onClick={() => { setActivePreset(p.id); setResults([]); }} />
             ))}
           </div>
-          <div className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Attack Scenarios</div>
-          <div className="grid grid-cols-4 gap-2 mb-6">
+          <div className="eyebrow mb-2">Attack Scenarios</div>
+          <div className="grid grid-cols-4 gap-2 mb-5">
             {PRESETS.filter(p => p.category === "Attack").map(p => (
               <PresetCard key={p.id} preset={p} selected={activePreset === p.id} disabled={running} onClick={() => { setActivePreset(p.id); setResults([]); }} />
             ))}
@@ -172,67 +174,67 @@ export default function SimulationPage() {
         </>
       )}
 
-      {/* ─── Custom mode ─── */}
+      {/* Custom mode */}
       {mode === "custom" && (
-        <Card className="mb-6">
+        <Card className="mb-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Custom Steps</span>
-              <p className="text-[10px] text-muted-foreground/60 mt-0.5">Define each step: which agents, what task type, and the message payload.</p>
+              <span className="eyebrow">Custom Steps</span>
+              <p className="text-[11px] text-muted-foreground mt-1">Define each step: which agents, what task type, and the message payload.</p>
             </div>
-            <Button onClick={addCustomStep} variant="ghost" size="sm"><Plus size={13} /> Add Step</Button>
+            <Button onClick={addCustomStep} variant="ghost" size="sm"><Plus size={12} /> Add Step</Button>
           </div>
           {customSteps.length === 0 ? (
-            <div className="text-xs text-muted py-6 text-center border border-dashed border-border rounded-md">No steps yet. Click &quot;Add Step&quot; to build a scenario.</div>
+            <div className="text-[12.5px] text-muted-foreground py-6 text-center border border-dashed border-border rounded-md">No steps yet. Click &quot;Add Step&quot; to build a scenario.</div>
           ) : (
             <div className="space-y-3">
               {customSteps.map((step, i) => (
-                <div key={i} className="rounded-md border border-border bg-surface-elevated/20 p-3">
+                <div key={i} className="rounded-md border border-border bg-surface-elevated p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-medium text-muted-foreground">Step {i + 1}</span>
-                    <button onClick={() => removeCustomStep(i)} className="p-1 text-muted-foreground hover:text-danger transition-colors"><Trash2 size={12} /></button>
+                    <span className="eyebrow">Step {i + 1}</span>
+                    <button onClick={() => removeCustomStep(i)} className="rounded p-1 text-muted-foreground hover:text-danger hover:bg-danger-soft transition-colors"><Trash2 size={12} /></button>
                   </div>
                   <div className="grid grid-cols-4 gap-3 mb-2">
                     <div>
-                      <label className="text-[9px] text-muted-foreground uppercase tracking-wide">From</label>
+                      <label className="eyebrow">From</label>
                       <select value={step.sender} onChange={e => updateCustomStep(i, "sender", e.target.value)}
-                        className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-foreground">
+                        className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
                         {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-[9px] text-muted-foreground uppercase tracking-wide">To</label>
+                      <label className="eyebrow">To</label>
                       <select value={step.receiver} onChange={e => updateCustomStep(i, "receiver", e.target.value)}
-                        className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-foreground">
+                        className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
                         {AGENTS.filter(a => a !== step.sender).map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-[9px] text-muted-foreground uppercase tracking-wide">Task Type</label>
+                      <label className="eyebrow">Task Type</label>
                       <select value={step.taskType || ""} onChange={e => updateCustomStep(i, "taskType", e.target.value)}
-                        className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-foreground">
+                        className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
                         <option value="">Auto-infer</option>
                         {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     <div className="flex items-end">
                       {!step.taskType && step.sender && step.receiver && (
-                        <span className="text-[9px] text-muted-foreground/50 italic">will infer from agent pair</span>
+                        <span className="text-[10.5px] text-muted-foreground italic">will infer from agent pair</span>
                       )}
                       {step.taskType && (
-                        <span className="text-[9px] text-muted-foreground/50">sent as <span className="font-mono">{step.taskType}</span></span>
+                        <span className="text-[10.5px] text-muted-foreground">sent as <span className="font-mono">{step.taskType}</span></span>
                       )}
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] text-muted-foreground uppercase tracking-wide">Payload (JSON)</label>
+                    <label className="eyebrow">Payload (JSON)</label>
                     <textarea value={step.payload} onChange={e => updateCustomStep(i, "payload", e.target.value)}
                       rows={3}
-                      className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1.5 text-xs font-mono text-foreground resize-vertical" />
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-vertical" />
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       {PAYLOAD_PRESETS.map(p => (
                         <button key={p.label} onClick={() => updateCustomStep(i, "payload", JSON.stringify(p.payload))}
-                          className="rounded border border-border/50 bg-surface-elevated/20 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                          className="rounded-md border border-border/60 bg-surface px-2 py-0.5 text-[10.5px] text-muted-foreground hover:text-foreground hover:border-border transition-colors"
                         >{p.label}</button>
                       ))}
                     </div>
@@ -244,47 +246,47 @@ export default function SimulationPage() {
         </Card>
       )}
 
-      {/* ─── Run ─── */}
+      {/* Run */}
       <div className="flex items-center gap-3 mb-6">
         <Button onClick={runSimulation} disabled={currentSteps.length === 0 || running} variant="secondary">
-          {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-          {running ? `Running ${currentSteps.length} step${currentSteps.length > 1 ? "s" : ""}...` : "Run Simulation"}
+          {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+          {running ? `Running ${currentSteps.length} step${currentSteps.length > 1 ? "s" : ""}…` : "Run Simulation"}
         </Button>
-        {error && <span className="text-xs text-danger bg-danger/5 border border-danger/20 px-2 py-1 rounded">{error}</span>}
-        {results.length > 0 && <span className="text-xs text-muted">{results.length} step{results.length > 1 ? "s" : ""} completed</span>}
+        {error && (
+          <span className="text-[12.5px] text-danger bg-danger-soft/60 border border-danger/25 px-2.5 py-1 rounded">
+            {error}
+          </span>
+        )}
+        {results.length > 0 && <span className="text-[12px] text-muted-foreground">{results.length} step{results.length > 1 ? "s" : ""} completed</span>}
       </div>
 
-      {/* ─── Results ─── */}
+      {/* Results */}
       {results.length > 0 && (
         <div className="space-y-4">
           {results.map((r, i) => {
             const traceMap = new Map(r.traceEvents.map(e => [e.event_name, e]));
-            const ruleViols = r.violations.filter(v => v.layer === "rule");
-            const policyViols = r.violations.filter(v => v.layer === "policy");
-            const otherViols = r.violations.filter(v => v.layer !== "rule" && v.layer !== "policy");
-
             const stepPayload = currentSteps[i]?.payload;
             const parsedPayload = (() => { try { return JSON.parse(stepPayload || "{}"); } catch { return null; } })();
 
             return (
               <Card key={i}>
-                {/* Header: verdict hero */}
+                {/* Verdict hero */}
                 <div className="flex items-stretch gap-4 mb-4">
-                  <div className={`flex w-24 shrink-0 flex-col items-center justify-center rounded-lg border ${r.decision === "allow" ? "border-success/30 bg-success/5" : r.decision === "block" ? "border-danger/30 bg-danger/5" : "border-warning/30 bg-warning/5"}`}>
-                    {r.decision === "allow" ? <ShieldCheck size={22} className="text-success" /> : r.decision === "block" ? <ShieldX size={22} className="text-danger" /> : <AlertTriangle size={22} className="text-warning" />}
-                    <span className={`text-sm font-bold mt-0.5 ${r.decision === "allow" ? "text-success" : r.decision === "block" ? "text-danger" : "text-warning"}`}>{r.decision.toUpperCase()}</span>
-                    <span className="text-[9px] font-mono text-muted-foreground/60">risk {r.risk_score.toFixed(2)}</span>
+                  <div className={`flex w-24 shrink-0 flex-col items-center justify-center rounded-xl border ${r.decision === "allow" ? "border-success/25 bg-success-soft/60" : r.decision === "block" ? "border-danger/25 bg-danger-soft/60" : "border-warning/25 bg-warning-soft/60"}`}>
+                    {r.decision === "allow" ? <ShieldCheck size={22} strokeWidth={1.8} className="text-success" /> : r.decision === "block" ? <ShieldX size={22} strokeWidth={1.8} className="text-danger" /> : <AlertTriangle size={22} strokeWidth={1.8} className="text-warning" />}
+                    <span className={`text-[13px] font-semibold mt-1 ${r.decision === "allow" ? "text-success" : r.decision === "block" ? "text-danger" : "text-warning"}`}>{r.decision.toUpperCase()}</span>
+                    <span className="text-[10px] font-mono tabular-nums text-muted-foreground">risk {r.risk_score.toFixed(2)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-bold text-white" style={{ background: agentColor(r.sender) }}>{agentInitials(r.sender)}</span>
                       <ChevronRight size={12} className="text-muted-foreground" />
                       <span className="flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-bold text-white" style={{ background: agentColor(r.receiver) }}>{agentInitials(r.receiver)}</span>
-                      <span className="text-sm font-medium">{r.sender} → {r.receiver}</span>
-                      <span className="text-[10px] font-mono text-muted-foreground/50 bg-surface-elevated/50 px-1.5 py-0.5 rounded">{r.task_type}</span>
+                      <span className="text-[13.5px] font-medium">{r.sender} → {r.receiver}</span>
+                      <span className="text-[10.5px] font-mono text-muted-foreground bg-surface-elevated px-1.5 py-0.5 rounded">{r.task_type}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span>{r.latency_ms}ms</span>
+                    <div className="flex items-center gap-3 text-[11.5px] text-muted-foreground">
+                      <span className="font-mono tabular-nums">{r.latency_ms}ms</span>
                       {r.block_reason && <Badge variant="danger">{r.block_reason}</Badge>}
                       {r.trace_id && <Link href={`/dashboard/traces/${r.trace_id}`} className="font-mono text-accent hover:underline inline-flex items-center gap-1">trace {r.trace_id.slice(0, 8)} <ExternalLink size={9} /></Link>}
                       <span className="font-mono">id {r.task_id.slice(0, 12)}</span>
@@ -307,16 +309,16 @@ export default function SimulationPage() {
                   />
                 </div>
 
-                {/* Violations per layer */}
+                {/* Violations */}
                 {r.violations.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Violations ({r.violations.length})</div>
+                    <div className="eyebrow mb-1.5">Violations ({r.violations.length})</div>
                     <div className="space-y-1">
                       {r.violations.map((v, vi) => {
-                        const sev = v.severity === "critical" ? "text-danger bg-danger/5 border-danger/15" : v.severity === "high" ? "text-warning bg-warning/5 border-warning/15" : "text-muted-foreground bg-surface border-border";
+                        const sev = v.severity === "critical" ? "border-danger/25 bg-danger-soft/60 text-foreground" : v.severity === "high" ? "border-warning/25 bg-warning-soft/60 text-foreground" : "border-border bg-surface-elevated text-muted-foreground";
                         return (
-                          <div key={vi} className={`flex items-start gap-2 rounded border px-2.5 py-1.5 text-[11px] ${sev}`}>
-                            <span className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-bold uppercase ${v.severity === "critical" ? "bg-danger/15 text-danger" : "bg-warning/15 text-warning"}`}>{v.severity}</span>
+                          <div key={vi} className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-[11.5px] ${sev}`}>
+                            <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase ${v.severity === "critical" ? "bg-danger text-white" : "bg-warning text-white"}`}>{v.severity}</span>
                             <span className="font-mono shrink-0">{v.layer}/{v.violation_type}</span>
                             {Object.keys(v.details || {}).length > 0 && (
                               <span className="text-muted-foreground truncate">
@@ -332,11 +334,11 @@ export default function SimulationPage() {
 
                 {/* Payload */}
                 <div className="border-t border-border pt-2">
-                  <button onClick={() => setExpandedPayload(prev => { const n = new Set(prev); if (n.has(i)) { n.delete(i); } else { n.add(i); } return n; })} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                  <button onClick={() => setExpandedPayload(prev => { const n = new Set(prev); if (n.has(i)) { n.delete(i); } else { n.add(i); } return n; })} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                     <ChevronRight size={10} className={`transition-transform ${expandedPayload.has(i) ? "rotate-90" : ""}`} /> {expandedPayload.has(i) ? "Hide" : "Show"} payload
                   </button>
                   {expandedPayload.has(i) && parsedPayload && (
-                    <pre className="mt-1.5 rounded bg-surface-elevated/30 p-2 text-[10px] font-mono text-muted-foreground overflow-auto max-h-36 border border-border/50">{JSON.stringify(parsedPayload, null, 2)}</pre>
+                    <pre className="mt-1.5 rounded-md bg-surface-sunken p-2 text-[10.5px] font-mono text-foreground overflow-auto max-h-36 border border-border/60">{JSON.stringify(parsedPayload, null, 2)}</pre>
                   )}
                 </div>
               </Card>
@@ -348,16 +350,13 @@ export default function SimulationPage() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
-
 function PipelineLayers({ events, labels }: { events: (TraceEvent | undefined)[]; labels: string[] }) {
   const statuses = events.map((e, i) => {
-    if (!e) return { status: "pending" as const, label: "—", dur: null, attrs: {} as Record<string, unknown>, violationsLine: "", detailLine: "" };
+    if (!e) return { status: "pending" as const, label: "—", dur: null, attrs: {} as Record<string, unknown>, detailLine: "" };
     const a = e.attributes as Record<string, unknown>;
     const dur = e.duration_ms;
     let status: "passed" | "blocked" | "flagged" | "skipped" | "pending" = "pending";
     let label = "";
-    const violationsLine = "";
     let detailLine = "";
 
     switch (labels[i]) {
@@ -393,30 +392,30 @@ function PipelineLayers({ events, labels }: { events: (TraceEvent | undefined)[]
         break;
     }
 
-    return { status, label, dur, attrs: a, violationsLine, detailLine };
+    return { status, label, dur, attrs: a, detailLine };
   });
 
   const colBg = (s: string) =>
-    s === "passed" ? "bg-success/5" : s === "blocked" ? "bg-danger/5" : s === "flagged" ? "bg-warning/5" : s === "skipped" ? "bg-surface-elevated/30" : "bg-surface/30";
+    s === "passed" ? "bg-success-soft/60" : s === "blocked" ? "bg-danger-soft/60" : s === "flagged" ? "bg-warning-soft/60" : s === "skipped" ? "bg-surface-elevated" : "bg-surface";
   const colBorder = (s: string) =>
-    s === "passed" ? "border-success/20" : s === "blocked" ? "border-danger/20" : s === "flagged" ? "border-warning/20" : "border-border/50";
+    s === "passed" ? "border-success/20" : s === "blocked" ? "border-danger/20" : s === "flagged" ? "border-warning/20" : "border-border/60";
   const colText = (s: string) =>
-    s === "passed" ? "text-success" : s === "blocked" ? "text-danger" : s === "flagged" ? "text-warning" : "text-muted";
+    s === "passed" ? "text-success" : s === "blocked" ? "text-danger" : s === "flagged" ? "text-warning" : "text-muted-foreground";
   const dotBg = (s: string) =>
     s === "passed" ? "bg-success" : s === "blocked" ? "bg-danger" : s === "flagged" ? "bg-warning" : "bg-muted";
 
   return (
     <div className="grid grid-cols-6 gap-1.5">
       {statuses.map((s, i) => (
-        <div key={i} className={`rounded border px-2 py-1.5 ${colBg(s.status)} ${colBorder(s.status)}`}>
-          <div className="text-[9px] font-medium text-muted-foreground uppercase">{labels[i]}</div>
-          <div className="flex items-center gap-1 mt-0.5">
+        <div key={i} className={`rounded-md border px-2 py-1.5 ${colBg(s.status)} ${colBorder(s.status)}`}>
+          <div className="eyebrow">{labels[i]}</div>
+          <div className="flex items-center gap-1 mt-1">
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotBg(s.status)}`} />
-            <span className={`text-[10px] font-mono font-medium ${colText(s.status)}`}>{s.label}</span>
+            <span className={`text-[10.5px] font-mono font-medium ${colText(s.status)}`}>{s.label}</span>
           </div>
-          <div className="flex items-center justify-between mt-0.5">
-            {s.detailLine && <span className={`text-[9px] ${colText(s.status)} opacity-70 truncate max-w-[100px]`}>{s.detailLine}</span>}
-            {s.dur != null && <span className={`text-[9px] font-mono ${colText(s.status)} opacity-50 ml-auto`}>{s.dur}ms</span>}
+          <div className="flex items-center justify-between mt-1">
+            {s.detailLine && <span className={`text-[10px] ${colText(s.status)} truncate max-w-[100px]`}>{s.detailLine}</span>}
+            {s.dur != null && <span className={`text-[10px] font-mono tabular-nums ${colText(s.status)} ml-auto`}>{s.dur}ms</span>}
           </div>
         </div>
       ))}
@@ -429,15 +428,19 @@ function PresetCard({ preset, selected, disabled, onClick }: {
 }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`rounded-lg border p-3 text-left transition-all ${selected ? "border-accent/40 bg-accent/5 ring-1 ring-accent/30" : "border-border bg-surface hover:border-border/80 hover:bg-surface-elevated/50"} ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+      className={`rounded-xl border p-3 text-left transition-colors duration-150 ${
+        selected
+          ? "border-accent bg-accent-soft"
+          : "border-border bg-surface hover:border-border-strong hover:bg-surface-elevated"
+      } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
     >
-      <div className="text-xs font-medium text-foreground">{preset.name}</div>
-      <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">{preset.description}</p>
+      <div className="text-[13px] font-medium text-foreground">{preset.name}</div>
+      <p className="mt-1 text-[12px] text-muted-foreground leading-relaxed">{preset.description}</p>
       <div className="mt-2 flex items-center gap-2">
         <Badge variant={preset.category === "Attack" ? "danger" : "success"}>{preset.steps.length} step{preset.steps.length > 1 ? "s" : ""}</Badge>
         {preset.steps.map((s, i) => (
-          <span key={i} className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
-            {i > 0 && <span className="text-muted">→</span>}
+          <span key={i} className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+            {i > 0 && <span className="text-muted-foreground">→</span>}
             <span className="inline-block h-3 w-3 rounded-full" style={{ background: agentColor(s.sender) }} />
             {agentInitials(s.sender)}→{agentInitials(s.receiver)}
           </span>

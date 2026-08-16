@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState, useRef } from "react";
 export function usePolling<T>(
   fetcher: (signal: AbortSignal) => Promise<T>,
   intervalMs: number,
-  enabled = true
+  enabled = true,
+  minInitialDelayMs = 400
 ): {
   data: T | null;
   error: Error | null;
@@ -14,27 +15,46 @@ export function usePolling<T>(
 } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(enabled);
   const [tick, setTick] = useState(0);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const refresh = useCallback(() => setTick((t) => t + 1), []);
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
+    const startTime = Date.now();
     setLoading(true);
+
     fetcherRef
       .current(controller.signal)
       .then((d) => {
-        setData(d);
-        setError(null);
+        const elapsed = Date.now() - startTime;
+        const remainingDelay = Math.max(0, minInitialDelayMs - elapsed);
+        setTimeout(() => {
+          setData(d);
+          setError(null);
+          setLoading(false);
+        }, remainingDelay);
       })
       .catch((e: Error) => {
-        if (e.name !== "AbortError") setError(e);
-      })
-      .finally(() => setLoading(false));
+        if (e.name !== "AbortError") {
+          const elapsed = Date.now() - startTime;
+          const remainingDelay = Math.max(0, minInitialDelayMs - elapsed);
+          setTimeout(() => {
+            setError(e);
+            setLoading(false);
+          }, remainingDelay);
+        }
+      });
 
     const id = setInterval(() => {
       const c = new AbortController();
@@ -50,7 +70,7 @@ export function usePolling<T>(
       controller.abort();
       clearInterval(id);
     };
-  }, [enabled, intervalMs, tick]);
+  }, [enabled, intervalMs, tick, minInitialDelayMs]);
 
   return { data, error, loading, refresh };
 }

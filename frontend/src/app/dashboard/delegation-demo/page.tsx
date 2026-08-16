@@ -123,10 +123,7 @@ export default function DelegationDemoPage() {
             Static fallback
           </label>
           <div className="flex items-center gap-2 text-xs text-success">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-            </span>
+            <span className="h-2 w-2 rounded-full bg-success" />
             Real Pipeline
           </div>
         </div>
@@ -226,9 +223,9 @@ export default function DelegationDemoPage() {
                     </td>
                     <td className="px-4 py-2.5 text-xs">
                       {r.response.delegation_metadata?.signature_valid ? (
-                        <span className="text-success">✓ valid</span>
+                        <span className="text-allow font-medium">valid</span>
                       ) : (
-                        <span className="text-danger">✗ invalid</span>
+                        <span className="text-block font-medium">invalid</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted">
@@ -538,12 +535,12 @@ function DelegationResult({ result }: { result: RunResult }) {
                     {/* Gauge bar */}
                     <div className="relative h-3 rounded-full bg-surface-elevated border border-border overflow-hidden">
                       <div
-                        className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ${
+                        className={`absolute inset-y-0 left-0 rounded-full transition-all duration-300 ${
                           dm.intent_drift_score > 0.7
-                            ? "bg-gradient-to-r from-danger/60 to-danger"
+                            ? "bg-danger"
                             : dm.intent_drift_score > 0.4
-                            ? "bg-gradient-to-r from-warning/60 to-warning"
-                            : "bg-gradient-to-r from-success/60 to-success"
+                            ? "bg-warning"
+                            : "bg-success"
                         }`}
                         style={{
                           width: `${Math.min(100, dm.intent_drift_score * 100)}%`,

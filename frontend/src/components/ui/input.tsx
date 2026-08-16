@@ -1,33 +1,39 @@
 import { clsx } from "clsx";
 import { forwardRef, type InputHTMLAttributes } from "react";
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  hint?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, ...props }, ref) => (
-    <label className="block">
-      {label && (
-        <span className="mb-1 block text-xs font-medium text-muted-foreground">
-          {label}
-        </span>
-      )}
-      <input
-        ref={ref}
-        className={clsx(
-          "h-9 w-full rounded-md border border-border bg-surface-elevated px-3 text-sm text-foreground",
-          "placeholder:text-muted",
-          "focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent",
-          "disabled:opacity-40 disabled:cursor-not-allowed",
-          error && "border-danger focus:ring-danger/40 focus:border-danger",
-          className
+  ({ className, label, error, hint, id, type = "text", ...props }, ref) => {
+    const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
+    return (
+      <div className="w-full space-y-1.5">
+        {label && (
+          <label htmlFor={inputId} className="block text-[12px] font-medium text-ink-muted">
+            {label}
+          </label>
         )}
-        {...props}
-      />
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
-    </label>
-  )
+        <input
+          ref={ref}
+          id={inputId}
+          type={type}
+          className={clsx(
+            "w-full rounded-lg border bg-surface-elevated px-3 py-2 text-[13px] text-ink-primary placeholder:text-ink-faint",
+            "transition-all duration-140 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent",
+            "disabled:cursor-not-allowed disabled:opacity-40",
+            error ? "border-block focus:border-block focus:ring-block/30" : "border-hairline hover:border-hairline-strong",
+            className
+          )}
+          {...props}
+        />
+        {hint && !error && <p className="text-[11px] text-ink-muted">{hint}</p>}
+        {error && <p className="text-[11px] text-block font-medium">{error}</p>}
+      </div>
+    );
+  }
 );
 Input.displayName = "Input";

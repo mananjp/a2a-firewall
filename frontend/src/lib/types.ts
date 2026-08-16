@@ -84,6 +84,8 @@ export interface TaskDetail {
   task_type: string;
   trace_id?: string;
   span_id?: string;
+  violating_layer?: string;
+  intent_drift_score?: number;
   violations: Array<{
     layer: string;
     type: string;

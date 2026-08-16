@@ -1,6 +1,15 @@
 import { clsx } from "clsx";
 
-type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "outline";
+export type BadgeVariant =
+  | "default"
+  | "allow"
+  | "block"
+  | "review"
+  | "info"
+  | "outline"
+  | "success"
+  | "danger"
+  | "warning";
 
 interface BadgeProps {
   children: React.ReactNode;
@@ -9,19 +18,22 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: "bg-surface-elevated text-muted-foreground border-border",
-  success: "bg-success-soft text-success border-success/20",
-  danger: "bg-danger-soft text-danger border-danger/20",
-  warning: "bg-warning-soft text-warning border-warning/20",
-  info: "bg-accent-soft text-accent border-accent/20",
-  outline: "bg-transparent text-muted-foreground border-border",
+  default: "bg-surface-elevated text-ink-muted border-hairline",
+  allow:   "bg-allow/10 text-allow border-allow/30 font-medium",
+  block:   "bg-block/10 text-block border-block/30 font-medium",
+  review:  "bg-review/10 text-review border-review/30 font-medium",
+  info:    "bg-info/10 text-info border-info/30 font-medium",
+  outline: "bg-transparent text-ink-muted border-hairline",
+  success: "bg-allow/10 text-allow border-allow/30 font-medium",
+  danger:  "bg-block/10 text-block border-block/30 font-medium",
+  warning: "bg-review/10 text-review border-review/30 font-medium",
 };
 
 export function Badge({ children, variant = "default", className }: BadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium font-mono",
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-mono tracking-tight",
         variantStyles[variant],
         className
       )}
@@ -32,15 +44,17 @@ export function Badge({ children, variant = "default", className }: BadgeProps) 
 }
 
 export function decisionVariant(d: string): BadgeVariant {
-  if (d === "allow") return "success";
-  if (d === "block") return "danger";
-  if (d === "review") return "warning";
+  const norm = d.toLowerCase();
+  if (norm === "allow") return "allow";
+  if (norm === "block") return "block";
+  if (norm === "review") return "review";
   return "default";
 }
 
 export function severityVariant(s: string): BadgeVariant {
-  if (s === "critical" || s === "high") return "danger";
-  if (s === "medium") return "warning";
-  if (s === "low") return "info";
+  const norm = s.toLowerCase();
+  if (norm === "critical" || norm === "high") return "block";
+  if (norm === "medium") return "review";
+  if (norm === "low") return "info";
   return "default";
 }

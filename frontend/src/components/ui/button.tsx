@@ -3,39 +3,54 @@
 import { clsx } from "clsx";
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
-type Size = "sm" | "md" | "lg";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "outline"
+  | "danger"
+  | "success";
+export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  size?: Size;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 }
 
-const variantStyles: Record<Variant, string> = {
-  primary: "bg-accent text-white hover:bg-accent/90 active:bg-accent/80",
+const variantStyles: Record<ButtonVariant, string> = {
+  primary:
+    "bg-accent text-white border border-accent hover:bg-accent-strong hover:border-accent-strong shadow-sm",
   secondary:
-    "bg-surface-elevated text-foreground border border-border hover:bg-surface-elevated/80 active:bg-surface-elevated/60",
-  ghost: "text-muted-foreground hover:text-foreground hover:bg-surface-elevated active:bg-surface-elevated/80",
-  danger: "bg-danger text-white hover:bg-danger/90 active:bg-danger/80",
+    "bg-surface-elevated text-ink-primary border border-hairline hover:bg-surface hover:border-hairline-strong shadow-sm",
+  ghost:
+    "bg-transparent text-ink-muted border border-transparent hover:bg-surface-elevated hover:text-ink-primary",
   outline:
-    "bg-transparent text-foreground border border-border hover:bg-surface-elevated active:bg-surface-elevated/80",
+    "bg-transparent text-ink-primary border border-hairline hover:bg-surface-elevated hover:border-hairline-strong",
+  danger:
+    "bg-block text-white border border-block hover:bg-block/90 shadow-sm",
+  success:
+    "bg-allow text-bg-base font-semibold border border-allow hover:bg-allow/90 shadow-sm",
 };
 
-const sizeStyles: Record<Size, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5",
-  md: "h-9 px-4 text-sm gap-2",
-  lg: "h-11 px-6 text-sm gap-2",
+const sizeStyles: Record<ButtonSize, string> = {
+  sm: "h-8 px-3 text-[12px] gap-1.5",
+  md: "h-9 px-4 text-[13px] gap-2",
+  lg: "h-10 px-5 text-[14px] gap-2.5",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", disabled, ...props }, ref) => (
+  (
+    { className, variant = "primary", size = "md", disabled, type = "button", ...props },
+    ref
+  ) => (
     <button
       ref={ref}
+      type={type}
       disabled={disabled}
       className={clsx(
-        "inline-flex items-center justify-center rounded-md font-medium transition-colors",
+        "inline-flex items-center justify-center rounded-lg font-medium tracking-tight",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-        "disabled:opacity-40 disabled:pointer-events-none",
+        "disabled:opacity-35 disabled:pointer-events-none",
         variantStyles[variant],
         sizeStyles[size],
         className

@@ -8,6 +8,7 @@ import type { TraceEvent } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CardSkeleton } from "@/components/ui/skeleton";
 import { Activity } from "lucide-react";
 
 export default function TraceDetailPage() {
@@ -25,7 +26,7 @@ export default function TraceDetailPage() {
     return <Card>No trace_id in URL.</Card>;
   }
   if (loading && !data) {
-    return <Card className="text-muted">Loading trace...</Card>;
+    return <CardSkeleton lines={6} hasHeader={true} />;
   }
   if (error) {
     return <Card className="text-danger">{error.message}</Card>;
@@ -33,7 +34,7 @@ export default function TraceDetailPage() {
   if (!data || data.length === 0) {
     return (
       <EmptyState
-        icon={<Activity size={24} />}
+        icon={<Activity size={20} />}
         title="No events for this trace yet"
       />
     );
@@ -43,29 +44,29 @@ export default function TraceDetailPage() {
 
   return (
     <div>
-      <PageHeader title="Trace Timeline" description={`trace_id: ${traceId}`} />
+      <PageHeader
+        eyebrow="Trace"
+        title="Trace Timeline"
+        description={`trace_id: ${traceId}`}
+      />
 
       <Card className="space-y-3">
         {data.map((e) => {
           const widthPct = ((e.duration_ms ?? 0) / maxDuration) * 100;
           return (
-            <div key={e.id} className="border-l-2 border-border pl-3">
-              <div className="flex items-center justify-between text-xs">
+            <div key={e.id} className="border-l-2 border-accent pl-3">
+              <div className="flex items-center justify-between text-[12.5px]">
                 <div>
-                  <span className="font-mono text-foreground">
-                    {e.event_name}
-                  </span>
-                  <span className="text-muted ml-2">
-                    span {e.span_id.slice(0, 8)}
-                  </span>
+                  <span className="font-mono text-foreground">{e.event_name}</span>
+                  <span className="text-muted-foreground ml-2">span {e.span_id.slice(0, 8)}</span>
                 </div>
-                <div className="text-muted-foreground">
+                <div className="text-muted-foreground tabular-nums">
                   {e.duration_ms != null ? `${e.duration_ms}ms` : "-"}
                 </div>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded bg-surface-elevated">
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
                 <div
-                  className="h-full rounded bg-accent transition-all duration-500"
+                  className="h-full rounded-full bg-accent transition-[width] duration-500"
                   style={{ width: `${Math.max(2, widthPct)}%` }}
                 />
               </div>
