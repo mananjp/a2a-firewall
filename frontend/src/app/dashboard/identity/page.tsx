@@ -94,8 +94,10 @@ function AgentIdentityCard() {
         ["sign", "verify"]
       );
       const pubRaw = await crypto.subtle.exportKey("raw", keypair.publicKey);
-      const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
-      const result = await identity.register(selectedId, pubB64);
+      const pubHex = Array.from(new Uint8Array(pubRaw))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const result = await identity.register(selectedId, pubHex);
       setIdentityData(result);
     } catch {
       // Error handled silently

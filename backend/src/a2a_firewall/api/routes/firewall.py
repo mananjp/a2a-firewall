@@ -26,6 +26,7 @@ class InspectRequest(BaseModel):
     resource_type: str | None = None  # e.g. "account", "payment", "customer_data"
     resource_id: str | None = None  # e.g. "ACC-42", "TX-100"
     action: str | None = None  # e.g. "read", "transfer", "delete", "approve"
+    declared_intent: str | None = None  # root task's purpose statement for intent-binding
     trace_id: str | None = None
     parent_span_id: str | None = None
     sdk_version: str | None = None

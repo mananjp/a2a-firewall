@@ -185,3 +185,511 @@ async def demo_run(
     inspection_result["demo_payload"] = scenario["payload"]
 
     return inspection_result
+
+
+# ---------------------------------------------------------------------------
+# Delegation demo — exercises the full delegation pipeline
+# ---------------------------------------------------------------------------
+
+DELEGATION_SCENARIOS: dict[str, dict[str, Any]] = {
+    "delegation_clean": {
+        "label": "Clean Delegation",
+        "description": "Valid delegation chain with consistent intent — should be allowed.",
+        "category": "Normal",
+        "root_intent": "Verify customer identity for account ACC-42",
+        "root_task_type": "investigation",
+        "root_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "reason": "Scheduled identity re-verification",
+        },
+        "child_task_type": "investigation",
+        "child_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "query": "Cross-check customer identity documents for ACC-42",
+        },
+        "initial_caveats": ["task_type=investigation", "max_risk=0.5"],
+        "child_caveats": ["max_risk=0.3"],
+        "tamper_token": False,
+    },
+    "delegation_drift": {
+        "label": "Intent Drift",
+        "description": "Child payload drifts from root intent — flagged by Groq semantic analysis.",
+        "category": "Attack",
+        "root_intent": "Verify customer identity for account ACC-42",
+        "root_task_type": "investigation",
+        "root_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "reason": "Scheduled identity re-verification",
+        },
+        "child_task_type": "investigation",
+        "child_payload": {
+            "action": "initiate_wire",
+            "from": "ACC-42",
+            "to": "ACC-OFFSHORE-999",
+            "amount": 500000,
+            "currency": "USD",
+            "beneficiary": "Shell Company LLC",
+        },
+        "initial_caveats": ["task_type=investigation", "max_risk=0.5"],
+        "child_caveats": [],
+        "tamper_token": False,
+    },
+    "delegation_escalation": {
+        "label": "Scope Escalation",
+        "description": "Child requests capabilities beyond parent's caveats — non-amplification violation.",
+        "category": "Attack",
+        "root_intent": "Verify customer identity for account ACC-42",
+        "root_task_type": "investigation",
+        "root_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "reason": "Scheduled identity re-verification",
+        },
+        "child_task_type": "payment_processing",
+        "child_payload": {
+            "action": "process_payment",
+            "transaction_id": "TXN-ESCALATE-001",
+            "amount": 999999,
+            "currency": "CHF",
+        },
+        "initial_caveats": ["task_type=investigation", "max_risk=0.3"],
+        "child_caveats": [],
+        "tamper_token": False,
+    },
+    "delegation_tampered": {
+        "label": "Tampered Token",
+        "description": "Delegation token signature is corrupted — should be blocked.",
+        "category": "Attack",
+        "root_intent": "Verify customer identity for account ACC-42",
+        "root_task_type": "investigation",
+        "root_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "reason": "Scheduled identity re-verification",
+        },
+        "child_task_type": "investigation",
+        "child_payload": {
+            "action": "investigate",
+            "account_id": "ACC-42",
+            "query": "Cross-check customer identity documents for ACC-42",
+        },
+        "initial_caveats": ["task_type=investigation", "max_risk=0.5"],
+        "child_caveats": ["max_risk=0.3"],
+        "tamper_token": True,
+    },
+}
+
+
+# Static fallback responses for when the pipeline can't run (e.g. no Groq)
+STATIC_DELEGATION_RESULTS: dict[str, dict[str, Any]] = {
+    "delegation_clean": {
+        "decision": "allow",
+        "risk_score": 0.0,
+        "violations": [],
+        "block_reason": None,
+        "latency_ms": 42,
+        "is_static": True,
+        "delegation_metadata": {
+            "root_token_caveats": ["task_type=investigation", "max_risk=0.5"],
+            "child_token_caveats": ["task_type=investigation", "max_risk=0.3"],
+            "delegation_depth": 1,
+            "intent_declared": "Verify customer identity for account ACC-42",
+            "intent_drift_score": 0.05,
+            "signature_valid": True,
+            "chain_hops": [
+                {
+                    "from": "Orchestrator Agent",
+                    "to": "Research Agent",
+                    "caveats_added": ["max_risk=0.3"],
+                    "valid": True,
+                }
+            ],
+        },
+    },
+    "delegation_drift": {
+        "decision": "block",
+        "risk_score": 1.0,
+        "violations": [
+            {
+                "layer": "semantic",
+                "violation_type": "intent_drift",
+                "severity": "critical",
+                "details": {
+                    "declared_intent": "Verify customer identity for account ACC-42",
+                    "intent_drift_score": 0.92,
+                    "threshold": 0.7,
+                    "rationale": "Child payload requests wire transfer to offshore account — completely unrelated to identity verification intent.",
+                },
+            },
+            {
+                "layer": "rule",
+                "violation_type": "suspicious_beneficiary",
+                "severity": "high",
+                "details": {"beneficiary": "Shell Company LLC", "pattern": "(?i)shell\\b"},
+            },
+            {
+                "layer": "rule",
+                "violation_type": "high_value_transaction",
+                "severity": "high",
+                "details": {"amount": 500000, "currency": "USD", "threshold": 100000},
+            },
+        ],
+        "block_reason": "intent_drift",
+        "latency_ms": 187,
+        "is_static": True,
+        "delegation_metadata": {
+            "root_token_caveats": ["task_type=investigation", "max_risk=0.5"],
+            "child_token_caveats": ["task_type=investigation", "max_risk=0.5"],
+            "delegation_depth": 1,
+            "intent_declared": "Verify customer identity for account ACC-42",
+            "intent_drift_score": 0.92,
+            "signature_valid": True,
+            "chain_hops": [
+                {
+                    "from": "Orchestrator Agent",
+                    "to": "Research Agent",
+                    "caveats_added": [],
+                    "valid": True,
+                }
+            ],
+        },
+    },
+    "delegation_escalation": {
+        "decision": "block",
+        "risk_score": 1.0,
+        "violations": [
+            {
+                "layer": "delegation",
+                "violation_type": "non_amplification_violation",
+                "severity": "critical",
+                "details": {
+                    "requested": ["task_type=payment_processing"],
+                    "parent_caveats": ["task_type=investigation", "max_risk=0.3"],
+                },
+            },
+        ],
+        "block_reason": "permission_denied",
+        "latency_ms": 12,
+        "is_static": True,
+        "delegation_metadata": {
+            "root_token_caveats": ["task_type=investigation", "max_risk=0.3"],
+            "child_token_caveats": ["task_type=investigation", "max_risk=0.3"],
+            "delegation_depth": 1,
+            "intent_declared": "Verify customer identity for account ACC-42",
+            "intent_drift_score": None,
+            "signature_valid": True,
+            "chain_hops": [
+                {
+                    "from": "Orchestrator Agent",
+                    "to": "Research Agent",
+                    "caveats_added": [],
+                    "valid": True,
+                }
+            ],
+        },
+    },
+    "delegation_tampered": {
+        "decision": "block",
+        "risk_score": 1.0,
+        "violations": [
+            {
+                "layer": "delegation",
+                "violation_type": "invalid_delegation_token",
+                "severity": "critical",
+                "details": {"reason": "signature_mismatch"},
+            },
+        ],
+        "block_reason": "invalid_delegation_token",
+        "latency_ms": 8,
+        "is_static": True,
+        "delegation_metadata": {
+            "root_token_caveats": ["task_type=investigation", "max_risk=0.5"],
+            "child_token_caveats": ["task_type=investigation", "max_risk=0.3"],
+            "delegation_depth": 1,
+            "intent_declared": "Verify customer identity for account ACC-42",
+            "intent_drift_score": None,
+            "signature_valid": False,
+            "chain_hops": [
+                {
+                    "from": "Orchestrator Agent",
+                    "to": "Research Agent",
+                    "caveats_added": ["max_risk=0.3"],
+                    "valid": False,
+                }
+            ],
+        },
+    },
+}
+
+
+DELEGATION_DEMO_AGENTS = [
+    {
+        "name": "Orchestrator Agent",
+        "description": "Root orchestrator that delegates tasks across the mesh",
+        "capabilities": ["task_routing", "investigation"],
+    },
+    {
+        "name": "Research Agent",
+        "description": "Retrieves and summarises information, verifies identity",
+        "capabilities": ["research", "investigation", "identity_verification"],
+    },
+    {
+        "name": "Payments Agent",
+        "description": "Processes payments, holds, and wire transfers",
+        "capabilities": ["payment_processing", "wire_transfer"],
+    },
+]
+
+
+class DelegationDemoRunRequest(BaseModel):
+    scenario: str
+    use_static: bool = False
+
+
+@router.get("/delegation-bootstrap")
+async def delegation_demo_bootstrap() -> dict[str, Any]:
+    """Return available delegation demo scenarios."""
+    return {
+        "scenarios": [
+            {
+                "id": k,
+                "label": v["label"],
+                "description": v["description"],
+                "category": v.get("category", "Normal"),
+            }
+            for k, v in DELEGATION_SCENARIOS.items()
+        ]
+    }
+
+
+@router.post("/run-delegation")
+async def demo_run_delegation(
+    body: DelegationDemoRunRequest,
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Run a delegation scenario through the real firewall pipeline.
+
+    Exercises: token minting → attenuation → delegation verification →
+    intent drift detection → non-amplification enforcement.
+    """
+    scenario = DELEGATION_SCENARIOS.get(body.scenario)
+    if not scenario:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown delegation scenario '{body.scenario}'. "
+            f"Available: {', '.join(DELEGATION_SCENARIOS.keys())}",
+        )
+
+    # ── Static fallback ──
+    if body.use_static:
+        static = STATIC_DELEGATION_RESULTS.get(body.scenario, {})
+        return {
+            "task_id": str(uuid.uuid4()),
+            "trace_id": uuid.uuid4().hex,
+            "demo_scenario": body.scenario,
+            "demo_label": scenario["label"],
+            "demo_description": scenario["description"],
+            "demo_payload": scenario["child_payload"],
+            **static,
+        }
+
+    # ── Provision agents ──
+    from a2a_firewall.core.security import generate_api_key
+
+    result = await db.execute(
+        select(Agent).where(
+            Agent.workspace_id == workspace.id, Agent.status == "active"
+        )
+    )
+    existing = {a.name.lower(): a for a in result.scalars().all()}
+
+    created_any = False
+    for agent_def in DELEGATION_DEMO_AGENTS:
+        key = str(agent_def["name"]).lower()
+        if key not in existing:
+            _, key_hash = generate_api_key("agt")
+            agent = Agent(
+                workspace_id=workspace.id,
+                name=agent_def["name"],
+                description=agent_def["description"],
+                api_key_hash=key_hash,
+                status="active",
+                capabilities=agent_def["capabilities"],
+            )
+            db.add(agent)
+            existing[key] = agent
+            created_any = True
+
+    if created_any:
+        await db.flush()
+        # Ensure permissions exist for delegation demo agents
+        names = [d["name"].lower() for d in DELEGATION_DEMO_AGENTS]
+        for sn in names:
+            for rn in names:
+                if sn != rn:
+                    sender_agent = existing.get(sn)
+                    receiver_agent = existing.get(rn)
+                    if sender_agent and receiver_agent:
+                        # Check if permission already exists
+                        existing_perm = await db.execute(
+                            select(AgentPermission).where(
+                                AgentPermission.workspace_id == workspace.id,
+                                AgentPermission.sender_id == sender_agent.id,
+                                AgentPermission.receiver_id == receiver_agent.id,
+                                AgentPermission.task_type.is_(None),
+                            )
+                        )
+                        if not existing_perm.scalar_one_or_none():
+                            db.add(
+                                AgentPermission(
+                                    workspace_id=workspace.id,
+                                    sender_id=sender_agent.id,
+                                    receiver_id=receiver_agent.id,
+                                    task_type=None,
+                                    allowed=True,
+                                )
+                            )
+        await db.flush()
+
+    orchestrator = existing.get("orchestrator agent")
+    research = existing.get("research agent")
+    payments = existing.get("payments agent")
+
+    if not orchestrator or not research or not payments:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not provision delegation demo agents.",
+        )
+
+    # ── Mint root delegation token ──
+    from a2a_firewall.core.delegation import (
+        attenuate_token,
+        mint_token,
+        token_to_compact,
+    )
+    from a2a_firewall.core.security import hash_api_key
+
+    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+
+    initial_caveats: list[str] = scenario["initial_caveats"]
+    root_token = mint_token(
+        root_key,
+        str(workspace.id),
+        str(orchestrator.id),
+        initial_caveats,
+    )
+
+    # ── Step 1: Create the root task ──
+    root_task_id = str(uuid.uuid4())
+    root_trace_id = uuid.uuid4().hex
+    root_request = {
+        "task_id": root_task_id,
+        "parent_task_id": None,
+        "root_task_id": root_task_id,
+        "receiver_agent_id": str(research.id),
+        "task_type": scenario["root_task_type"],
+        "schema_version": "v1",
+        "payload": scenario["root_payload"],
+        "trace_id": root_trace_id,
+        "parent_span_id": None,
+        "sdk_version": "delegation-demo-v1",
+        "depth": 0,
+        "declared_intent": scenario["root_intent"],
+        "delegation_token": token_to_compact(root_token),
+    }
+
+    root_result = await run_inspection(root_request, orchestrator, workspace, db)
+
+    # ── Step 2: Attenuate the token for the child hop ──
+    child_caveats: list[str] = scenario["child_caveats"]
+    if child_caveats:
+        child_token = attenuate_token(root_token, root_key, child_caveats)
+    else:
+        child_token = root_token
+
+    child_token_caveats = list(child_token.caveats)
+
+    # Tamper the token if this scenario requires it
+    if scenario.get("tamper_token"):
+        child_token.signature = "deadbeef" * 8  # corrupt the HMAC
+
+    token_compact = token_to_compact(child_token)
+
+    # ── Step 3: Child delegated task ──
+    # Determine receiver: escalation goes to Payments, others go to Research
+    child_receiver = payments if scenario.get("child_task_type") == "payment_processing" else research
+
+    child_task_id = str(uuid.uuid4())
+    child_trace_id = uuid.uuid4().hex
+    child_request = {
+        "task_id": child_task_id,
+        "parent_task_id": root_task_id,
+        "root_task_id": root_task_id,
+        "receiver_agent_id": str(child_receiver.id),
+        "task_type": scenario["child_task_type"],
+        "schema_version": "v1",
+        "payload": scenario["child_payload"],
+        "trace_id": child_trace_id,
+        "parent_span_id": None,
+        "sdk_version": "delegation-demo-v1",
+        "depth": 1,
+        "delegation_token": token_compact,
+    }
+
+    try:
+        child_result = await run_inspection(child_request, orchestrator, workspace, db)
+    except Exception as e:
+        # If the pipeline fails, return the static fallback
+        static = STATIC_DELEGATION_RESULTS.get(body.scenario, {})
+        return {
+            "task_id": child_task_id,
+            "trace_id": child_trace_id,
+            "demo_scenario": body.scenario,
+            "demo_label": scenario["label"],
+            "demo_description": scenario["description"],
+            "demo_payload": scenario["child_payload"],
+            "pipeline_error": str(e)[:200],
+            **static,
+        }
+
+    # ── Build delegation metadata ──
+    chain_hops = [
+        {
+            "from": "Orchestrator Agent",
+            "to": child_receiver.name,
+            "caveats_added": child_caveats,
+            "valid": not scenario.get("tamper_token", False),
+        }
+    ]
+
+    delegation_metadata = {
+        "root_token_caveats": list(initial_caveats),
+        "child_token_caveats": child_token_caveats,
+        "delegation_depth": 1,
+        "intent_declared": scenario["root_intent"],
+        "intent_drift_score": child_result.get("risk_score", 0.0)
+        if body.scenario == "delegation_drift"
+        else None,
+        "signature_valid": not scenario.get("tamper_token", False),
+        "chain_hops": chain_hops,
+    }
+
+    # Enrich the child result with delegation + demo metadata
+    child_result["demo_scenario"] = body.scenario
+    child_result["demo_label"] = scenario["label"]
+    child_result["demo_description"] = scenario["description"]
+    child_result["demo_payload"] = scenario["child_payload"]
+    child_result["delegation_metadata"] = delegation_metadata
+    child_result["root_task"] = {
+        "task_id": root_task_id,
+        "decision": root_result.get("decision"),
+        "risk_score": root_result.get("risk_score", 0.0),
+        "trace_id": root_trace_id,
+    }
+    child_result["is_static"] = False
+
+    return child_result

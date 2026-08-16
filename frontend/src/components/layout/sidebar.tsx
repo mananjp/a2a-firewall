@@ -13,17 +13,21 @@ import {
   Flame,
   Activity,
   KeyRound,
+  GitFork,
   Settings2,
   LogOut,
   ChevronRight,
+  Link2,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
 import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/audit", label: "Delegation Audit", icon: GitFork },
   { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
   { href: "/dashboard/demo", label: "Live Demo", icon: Flame },
+  { href: "/dashboard/delegation-demo", label: "Delegation Demo", icon: Link2 },
   { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
   { href: "/dashboard/telemetry", label: "Telemetry", icon: Activity },
   { href: "/dashboard/identity", label: "Identity", icon: KeyRound },

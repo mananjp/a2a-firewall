@@ -47,7 +47,7 @@ async def preflight(
             ],
         }
     depth = request_data.get("depth", 0)
-    if depth > 10:
+    if depth > settings.DELEGATION_MAX_DEPTH:
         return {
             "block": True,
             "reason": "max_depth_exceeded",

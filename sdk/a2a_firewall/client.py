@@ -192,8 +192,11 @@ class A2AFirewall:
 
     # -- Signing --
 
-    def _sign_payload(self, payload: dict[str, Any], receiver_id: str) -> tuple[str, str, str]:
-        """Sign a payload and compute chain hash. Returns (message_hash, chain_hash, signature)."""
+    def _sign_payload(self, payload: dict[str, Any], receiver_id: str) -> tuple[str, str, str, float]:
+        """Sign a payload and compute chain hash.
+
+        Returns (message_hash, chain_hash, signature, timestamp).
+        """
         now = time.time()
         msg_hash = _compute_message_hash(payload, self.config.agent_id, receiver_id, now)
         chain_hash = _compute_chain_hash(self._chain_hash, msg_hash)
@@ -203,7 +206,7 @@ class A2AFirewall:
             signature = _ed25519_sign(self.config.agent_private_key, bytes.fromhex(msg_hash))
 
         self._chain_hash = chain_hash
-        return msg_hash, chain_hash, signature
+        return msg_hash, chain_hash, signature, now
 
     # -- Delegation --
 
@@ -246,13 +249,14 @@ class A2AFirewall:
         action: str | None = None,
         parent_task_id: str | None = None,
         root_task_id: str | None = None,
+        declared_intent: str | None = None,
         raise_on_block: bool = True,
         schema_version: str = "v1",
         depth: int = 0,
     ) -> FirewallResponse:
         """Send a message through the firewall with automatic signing and delegation."""
         task_id = str(uuid.uuid4())
-        msg_hash, chain_hash, signature = self._sign_payload(payload, receiver_agent_id)
+        msg_hash, chain_hash, signature, timestamp = self._sign_payload(payload, receiver_agent_id)
 
         body: dict[str, Any] = {
             "task_id": task_id,
@@ -265,21 +269,15 @@ class A2AFirewall:
             "resource_id": resource_id,
             "action": action,
             "payload": payload,
+            "declared_intent": declared_intent,
             "trace_id": self._ctx.get("trace_id"),
             "parent_span_id": self._ctx.get("span_id"),
             "sdk_version": "0.2.0",
             "depth": depth,
             "sender_signature": signature,
-            "sender_public_key": "",  # populated if key is available
+            "message_hash": msg_hash,
+            "timestamp": timestamp,
         }
-
-        # Include public key if we have a private key
-        if self.config.agent_private_key:
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-            raw = bytes.fromhex(self.config.agent_private_key)
-            priv = Ed25519PrivateKey.from_private_bytes(raw)
-            from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-            body["sender_public_key"] = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
 
         # Include delegation token if active
         if self._delegation_token:

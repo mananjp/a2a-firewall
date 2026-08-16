@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from a2a_firewall.api.routes import (
     agents,
+    audit,
     auth,
     delegation,
     demo,
@@ -118,6 +119,7 @@ app.include_router(identity.router, prefix="/v1/identity", tags=["identity"])
 app.include_router(delegation.router, prefix="/v1/delegation", tags=["delegation"])
 app.include_router(telemetry.router, prefix="/v1/telemetry", tags=["telemetry"])
 app.include_router(simulation.router, prefix="/v1/simulation", tags=["simulation"])
+app.include_router(audit.router, prefix="/v1/audit", tags=["audit"])
 
 
 @app.get("/health")

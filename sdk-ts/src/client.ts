@@ -150,6 +150,7 @@ export class A2AFirewall {
       resource_id: options.resourceId,
       action: options.action,
       payload: options.payload,
+      declared_intent: options.declaredIntent,
       trace_id: this.ctx.trace_id,
       parent_span_id: this.ctx.span_id,
       sdk_version: '0.2.0-ts',

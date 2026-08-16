@@ -46,8 +46,20 @@ graph TD
 | **Layer 1** | **JSON Schema Validation** | Validates the message structure against registered JSON schemas matching the specified `task_type`. |
 | **Layer 2** | **Permissions Matrix** | Validates if the sender agent is explicitly authorized to message the receiver agent for that `task_type`. |
 | **Layer 3** | **Rule Engine & Policies** | Executes regex matching against forbidden strings (like prompt injection patterns) and custom workspace policies. |
-| **Layer 4** | **Groq Semantic Guard** | Uses LLM-based reasoning (via `llama-3.1-8b-instant`) to detect complex prompt injections, jailbreaks, and sensitive data leakage. |
+| **Layer 4** | **Groq Semantic Guard** | Uses LLM-based reasoning (via `llama-3.1-8b-instant`) to detect complex prompt injections, jailbreaks, sensitive data leakage, and intent drift. |
 | **Layer 5** | **Decision Synthesis** | Evaluates results from all layers. Decisions falling between the `review_threshold` and `block_threshold` are held in a manual review queue. |
+
+---
+
+## 🔒 Confused-Deputy & Delegation-Chain Trust Defense
+
+Unlike general prompt safety tools that focus solely on single-prompt or single-tool safety (e.g. Lakera), A2A Firewall specifically secures **multi-agent delegation trust relationships**:
+
+1. **Non-Amplification Scope Enforcement (Phase 2 / ADR-0001)**: At every delegation hop, a sub-agent's requested capabilities (`task_type`, `resource_type`, `action`, `max_risk`) must be a **STRICT SUBSET** of the delegator's parent caveats. A delegatee can never widen permissions or ask for more than it was granted.
+2. **Intent-Binding & Drift Verification (Phase 3 / ADR-0002)**: Multi-hop payloads are verified against the **root task's declared intent** (`declared_intent`). Groq scores payload semantic drift (`intent_drift_score`). If drift exceeds `INTENT_DRIFT_THRESHOLD` (0.7), the firewall blocks confused-deputy prompt injections that attempt to hijack sub-agents.
+3. **Macaroon Delegation Tokens**: Scoped, short-lived tokens carrying HMAC-SHA256 caveat chains. Each hop attenuates capabilities without re-signing or trusting delegatees.
+4. **Ed25519 Cryptographic Agent Identity**: Outgoing messages carry Ed25519 signatures verified against registered agent public keys to prevent identity spoofing and card tampering.
+5. **First-Class Delegation Audit Trail (Phase 4)**: Audit endpoint (`GET /v1/audit/tasks/{task_id}/delegation-chain`) and CSV compliance export (`GET /v1/audit/delegation-chains?format=csv`) with interactive tree visualization in the dashboard.
 
 ---
 

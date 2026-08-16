@@ -66,6 +66,7 @@ export interface SendOptions {
   action?: string;
   parentTaskId?: string;
   rootTaskId?: string;
+  declaredIntent?: string;
   raiseOnBlock?: boolean;
   schemaVersion?: string;
   depth?: number;
@@ -86,6 +87,7 @@ export interface InspectRequest {
   sender_signature?: string;
   sender_public_key?: string;
   delegation_token?: string;
+  declared_intent?: string;
 }
 
 export interface VerifyResult {
