@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { demo, tasks } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { auth, demo, getApiKey, setApiKey, tasks, ApiError } from "@/lib/api";
 import type { DemoRunResponse } from "@/lib/api";
 import type { TraceEvent } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge, decisionVariant, severityVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Play, Loader2, ExternalLink } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { Play, Loader2, ExternalLink, KeyRound, AlertCircle, Sparkles } from "lucide-react";
 
 interface Scenario { id: string; label: string; description: string }
 interface RunResult {
@@ -19,23 +21,51 @@ interface RunResult {
 
 const FALLBACK_SCENARIOS: Scenario[] = [
   { id: "clean", label: "Clean Request", description: "Normal research query — should pass all layers." },
-  { id: "injection", label: "Prompt Injection", description: "Instruction smuggling — blocked at rules layer." },
+  { id: "injection", label: "Prompt Injection", description: "Instruction smuggling — blocked at semantic/rules layer." },
   { id: "review", label: "Suspicious Request", description: "Ambiguous data export — flagged for review." },
 ];
 
 export default function LiveDemoPage() {
+  const router = useRouter();
+  const { toast } = useToast();
   const [scenarios, setScenarios] = useState<Scenario[]>(FALLBACK_SCENARIOS);
   const [selected, setSelected] = useState("clean");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true);
   const [currentResult, setCurrentResult] = useState<RunResult | null>(null);
   const [history, setHistory] = useState<RunResult[]>([]);
 
   useEffect(() => {
+    const key = getApiKey();
+    setHasApiKey(Boolean(key));
     demo.bootstrap().then((res) => {
       if (res.scenarios?.length) setScenarios(res.scenarios);
     }).catch(() => {});
   }, []);
+
+  async function handleQuickAuth() {
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await auth.login("admin@a2afirewall.dev");
+      setApiKey(res.api_key);
+      setHasApiKey(true);
+      toast({
+        title: "Workspace Connected",
+        description: "Authenticated with demo workspace key.",
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: "Authentication Failed",
+        description: err instanceof Error ? err.message : "Could not provision demo key. Please use Sign In.",
+        variant: "error",
+      });
+    } finally {
+      setRunning(false);
+    }
+  }
 
   async function runDemo() {
     if (running) return;
@@ -50,7 +80,17 @@ export default function LiveDemoPage() {
       setCurrentResult(result);
       setHistory((prev) => [result, ...prev].slice(0, 20));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Demo failed");
+      if (err instanceof ApiError && (err.status === 401 || err.message.toLowerCase().includes("workspace key"))) {
+        setHasApiKey(false);
+        setError("Invalid or missing workspace key. Please connect credentials.");
+        toast({
+          title: "Authentication Required",
+          description: "Your workspace key is missing or expired. Click 'Quick Connect' or sign in.",
+          variant: "error",
+        });
+      } else {
+        setError(err instanceof Error ? err.message : "Demo failed");
+      }
     } finally { setRunning(false); }
   }
 
@@ -67,6 +107,27 @@ export default function LiveDemoPage() {
           Real Pipeline
         </div>
       </div>
+
+      {!hasApiKey && (
+        <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-warning/30 bg-warning-soft/60 p-4 text-warning">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={18} className="shrink-0" />
+            <div className="text-[13px]">
+              <span className="font-semibold">Workspace Authentication Required:</span> You need a valid workspace key to inspect live traffic.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={handleQuickAuth} disabled={running} variant="secondary" className="text-[12px] h-8">
+              <Sparkles size={13} className="mr-1 text-accent" />
+              Quick Connect
+            </Button>
+            <Button onClick={() => router.push("/login")} variant="secondary" className="text-[12px] h-8">
+              <KeyRound size={13} className="mr-1" />
+              Sign In
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         {scenarios.map((sc) => {

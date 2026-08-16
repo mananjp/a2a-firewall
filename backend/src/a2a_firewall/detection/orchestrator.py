@@ -502,85 +502,80 @@ async def run_inspection(
         except Exception:  # noqa: BLE001
             pass  # root task not found — intent-binding simply won't activate
 
-    # ---------- Layer 4: groq (semantic intent verification) ----------
-    # Always called when risk > 0 so regex false positives can be corrected
-    # by LLM intent analysis. The rules layer no longer short-circuits —
-    # Groq must weigh in before any block decision.
-    # Also called when a declared_intent exists on a delegated request
-    # (even if risk is 0) to score intent consistency.
-    groq_called = False
-    groq_model: str | None = None
-    needs_groq = risk_score > 0 or (declared_intent and parent_caveats is not None)
-    if needs_groq:
-        layer_start = time.monotonic()
-        groq_result = await groq_inspect(
-            request_data,
-            sender,
-            workspace,
-            payload_hash,
-            declared_intent=declared_intent if parent_caveats is not None else None,
-        )
-        groq_called = True
-        groq_model = groq_result.get("model")
-        groq_ms = int((time.monotonic() - layer_start) * 1000)
-        trace_events.append(
+    # ---------- Layer 4: groq (semantic intent verification & injection guard) ----------
+    # Always called so that:
+    # 1. Real prompt injections that evade simple regex rules are detected (preventing 0-risk bypass)
+    # 2. Benign false-positives flagged by regex can be downgraded by LLM intent analysis
+    # 3. Intent consistency is verified on delegation-bound requests
+    # 4. In injection_only mode (when risk is 0 and no delegation), uses a streamlined prompt to minimize latency
+    groq_called = True
+    injection_only = risk_score == 0 and not (declared_intent and parent_caveats is not None)
+    layer_start = time.monotonic()
+    groq_result = await groq_inspect(
+        request_data,
+        sender,
+        workspace,
+        payload_hash,
+        declared_intent=declared_intent if parent_caveats is not None else None,
+        injection_only=injection_only,
+        rules_risk_delta=rule_result.get("risk_delta", 0.0),
+    )
+    groq_model = groq_result.get("model")
+    groq_ms = int((time.monotonic() - layer_start) * 1000)
+    trace_events.append(
+        {
+            "name": "firewall.groq",
+            "span_id": uuid.uuid4().hex,
+            "parent_span_id": parent_span_id,
+            "duration_ms": groq_ms,
+            "attributes": {
+                "called": True,
+                "injection_detected": bool(groq_result.get("injection_detected")),
+                "hallucination_count": len(groq_result.get("hallucination_flags") or []),
+                "hallucination_flags": groq_result.get("hallucination_flags") or [],
+                "model": groq_model,
+                "rationale_excerpt": (groq_result.get("rationale") or "")[:120],
+                "risk_delta": groq_result.get("risk_score_delta", 0),
+                "injection_only": injection_only,
+            },
+        }
+    )
+    if groq_result.get("injection_detected"):
+        violations.append(
             {
-                "name": "firewall.groq",
-                "span_id": uuid.uuid4().hex,
-                "parent_span_id": parent_span_id,
-                "duration_ms": groq_ms,
-                "attributes": {
-                    "called": True,
-                    "injection_detected": bool(groq_result.get("injection_detected")),
-                    "hallucination_count": len(groq_result.get("hallucination_flags") or []),
-                    "model": groq_model,
-                    "rationale_excerpt": (groq_result.get("rationale") or "")[:120],
-                    "risk_delta": groq_result.get("risk_score_delta", 0),
-                },
+                "layer": "semantic",
+                "violation_type": "prompt_injection",
+                "severity": "critical",
+                "details": groq_result,
             }
         )
-        if groq_result.get("injection_detected"):
+        # Ensure detected injection triggers high risk
+        risk_score = min(1.0, max(risk_score, 0.8) + groq_result.get("risk_score_delta", 0.8))
+    else:
+        # Apply delta (which may be negative to downgrade regex false-positives)
+        risk_score = max(0.0, min(1.0, risk_score + groq_result.get("risk_score_delta", 0)))
+
+    # Intent-binding: check if the payload drifts from the declared intent
+    if declared_intent and parent_caveats is not None:
+        intent_drift_score = groq_result.get("intent_consistency")
+        if (
+            isinstance(intent_drift_score, (int, float))
+            and intent_drift_score > settings.INTENT_DRIFT_THRESHOLD
+        ):
             violations.append(
                 {
                     "layer": "semantic",
-                    "violation_type": "prompt_injection",
+                    "violation_type": "intent_drift",
                     "severity": "critical",
-                    "details": groq_result,
+                    "details": {
+                        "declared_intent": declared_intent,
+                        "intent_drift_score": intent_drift_score,
+                        "threshold": settings.INTENT_DRIFT_THRESHOLD,
+                        "rationale": groq_result.get("rationale", ""),
+                    },
                 }
             )
-        risk_score = min(1.0, risk_score + groq_result.get("risk_score_delta", 0))
-
-        # Intent-binding: check if the payload drifts from the declared intent
-        if declared_intent and parent_caveats is not None:
-            intent_drift_score = groq_result.get("intent_consistency")
-            if (
-                isinstance(intent_drift_score, (int, float))
-                and intent_drift_score > settings.INTENT_DRIFT_THRESHOLD
-            ):
-                violations.append(
-                    {
-                        "layer": "semantic",
-                        "violation_type": "intent_drift",
-                        "severity": "critical",
-                        "details": {
-                            "declared_intent": declared_intent,
-                            "intent_drift_score": intent_drift_score,
-                            "threshold": settings.INTENT_DRIFT_THRESHOLD,
-                            "rationale": groq_result.get("rationale", ""),
-                        },
-                    }
-                )
-                risk_score = 1.0
-    else:
-        trace_events.append(
-            {
-                "name": "firewall.groq",
-                "span_id": uuid.uuid4().hex,
-                "parent_span_id": parent_span_id,
-                "duration_ms": 0,
-                "attributes": {"called": False, "reason": "below_threshold"},
-            }
-        )
+            risk_score = 1.0
 
     # ---------- Layer 5: decision ----------
     decision = make_decision(risk_score, rule_result.get("matched_rule_action"), workspace)

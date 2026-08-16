@@ -310,7 +310,8 @@ async def test_no_declared_intent_skips_evaluation(
     mock_preflight: AsyncMock,
     mock_rate: MagicMock,
 ) -> None:
-    """Without a declared_intent, Groq isn't called for intent-binding (only for risk)."""
+    """Without a declared_intent, intent-drift evaluation is skipped."""
+    mock_groq.return_value = _groq_result_with_intent(intent_consistency=None)
     ws = FakeWorkspace()
     sender = FakeSender(workspace_id=ws.id)
     db = _make_fake_db()
@@ -320,8 +321,8 @@ async def test_no_declared_intent_skips_evaluation(
 
     result = await run_inspection(req, sender, ws, db)
 
-    # Groq should NOT be called (risk_delta=0, no declared intent)
-    mock_groq.assert_not_called()
+    # Groq is called with declared_intent=None (intent-drift not evaluated)
+    assert mock_groq.call_args.kwargs.get("declared_intent") is None
     intent_violations = [
         v for v in result["violations"] if v.get("violation_type") == "intent_drift"
     ]
@@ -357,6 +358,7 @@ async def test_declared_intent_without_delegation_token_skips(
     mock_rate: MagicMock,
 ) -> None:
     """declared_intent alone (no delegation token) should NOT trigger intent-binding."""
+    mock_groq.return_value = _groq_result_with_intent(intent_consistency=None)
     ws = FakeWorkspace()
     sender = FakeSender(workspace_id=ws.id)
     db = _make_fake_db()
@@ -368,10 +370,14 @@ async def test_declared_intent_without_delegation_token_skips(
         # No delegation_token
     )
 
-    _ = await run_inspection(req, sender, ws, db)
+    result = await run_inspection(req, sender, ws, db)
 
-    # Groq should NOT be called (risk_delta=0, parent_caveats is None)
-    mock_groq.assert_not_called()
+    # declared_intent passed to groq should be None because parent_caveats is None
+    assert mock_groq.call_args.kwargs.get("declared_intent") is None
+    intent_violations = [
+        v for v in result["violations"] if v.get("violation_type") == "intent_drift"
+    ]
+    assert len(intent_violations) == 0
 
 
 @pytest.mark.asyncio
