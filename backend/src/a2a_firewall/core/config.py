@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         return self
 
     GROQ_API_KEY: str = "test_key"
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_TIMEOUT_SECONDS: float = 2.0
     GROQ_CACHE_TTL_SECONDS: int = 3600
     GROQ_CACHE_ENABLED: bool = True

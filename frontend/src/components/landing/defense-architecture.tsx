@@ -150,7 +150,7 @@ export function DefenseArchitecture() {
                   Real-time intent drift scoring & injection detection
                 </h3>
                 <p className="text-[14px] leading-relaxed text-ink-muted">
-                  Running Llama 3.1 8B on Groq LPUs in under 20ms. Evaluates whether a subordinate agent&apos;s
+                  Running GPT-OSS 120B on Groq LPUs in under 20ms. Evaluates whether a subordinate agent&apos;s
                   message deviates from the declared root goal or attempts prompt injection/jailbreaking.
                 </p>
                 <ul className="space-y-2 text-[13px] text-ink-primary font-mono">
@@ -173,7 +173,7 @@ export function DefenseArchitecture() {
                 <div className="text-accent font-semibold text-[11px] pb-1 border-b border-hairline">
                   // Groq LPU Inference Evaluation
                 </div>
-                <div><span className="text-ink-faint">Model:</span> &quot;llama-3.1-8b-instant&quot;</div>
+                <div><span className="text-ink-faint">Model:</span> &quot;openai/gpt-oss-120b&quot;</div>
                 <div><span className="text-ink-faint">Inference Time:</span> 18.5ms</div>
                 <div><span className="text-ink-faint">Intent Drift Score:</span> 0.94 <span className="text-block font-bold">[CRITICAL]</span></div>
                 <div><span className="text-ink-faint">Injection Flag:</span> true</div>

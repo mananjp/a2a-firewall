@@ -48,7 +48,7 @@ export const SCENARIOS: SimulationScenario[] = [
     totalLatencyMs: 14,
     failingGate: 7,
     explanation:
-      "Clean payload: Valid Ed25519 signature, nonces fresh, strict JSON schema conformant, RBAC route authorized, and Llama 3.1 8B confirms zero intent drift or injection.",
+      "Clean payload: Valid Ed25519 signature, nonces fresh, strict JSON schema conformant, RBAC route authorized, and GPT-OSS 120B confirms zero intent drift or injection.",
     headers: {
       xAgentId: "portfolio-manager-01",
       xSignature: "ed25519:7f8a9e2b1c4d0e91a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5",
@@ -82,7 +82,7 @@ export const SCENARIOS: SimulationScenario[] = [
     totalLatencyMs: 22,
     failingGate: 6,
     explanation:
-      "Groq Semantic Guard (Llama 3.1 8B Instant) detected adversarial instruction override and unauthorized data exfiltration intent.",
+      "Groq Semantic Guard (GPT-OSS 120B) detected adversarial instruction override and unauthorized data exfiltration intent.",
     headers: {
       xAgentId: "untrusted-agent-ext",
       xSignature: "ed25519:3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b",
@@ -179,7 +179,7 @@ export const FEATURES = [
     Icon: GitFork,
   },
   {
-    title: "Groq Llama 3.1 Semantic Guard",
+    title: "Groq GPT-OSS 120B Semantic Guard",
     desc: "Sub-20ms ultra-fast inference catches indirect prompt injections, jailbreaks, and tracks drift from the root task's declared intent in real time.",
     tag: "Layer 6",
     Icon: Activity,

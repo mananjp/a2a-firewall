@@ -745,7 +745,7 @@ export function LiveInspectionSandbox() {
                         ADVERSARIAL_INJECTION_DETECTED: Intent Drift Score 0.98!
                       </div>
                       <div className="text-[11px] text-rose-300/90 font-mono">
-                        Groq LPU (Llama 3.1 8B Instant): Prompt contains instruction override and data exfiltration payload.
+                        Groq LPU (GPT-OSS 120B): Prompt contains instruction override and data exfiltration payload.
                       </div>
                       <div className="text-[11px] text-rose-400 font-bold">
                         &gt;&gt; ACTION: Malicious packet quarantined. Zero internal exposure.

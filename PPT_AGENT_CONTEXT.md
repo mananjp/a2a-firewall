@@ -127,7 +127,7 @@ We chose this problem because the velocity of AI adoption in banking is creating
 | Backend | Python 3.12, FastAPI, SQLAlchemy async, Pydantic 2, asyncpg, Alembic |
 | Frontend | React 18, TypeScript, Vite 8, Tailwind CSS, React Flow |
 | Database | PostgreSQL 16 |
-| AI / Threat Intelligence | Groq `llama-3.1-8b-instant` (semantic analysis, fraud pattern detection) |
+| AI / Threat Intelligence | Groq `openai/gpt-oss-120b` (semantic analysis, fraud pattern detection) |
 | Observability | OpenTelemetry, Jaeger, Grafana Cloud, Grafana Tempo |
 | Infra | Docker Compose (local), Render Blueprint (production) |
 | SDK | Python A2A Firewall SDK (intercept, trace, propagate lineage) |

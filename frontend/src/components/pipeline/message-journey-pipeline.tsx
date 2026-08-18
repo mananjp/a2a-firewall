@@ -163,7 +163,7 @@ export function MessageJourneyPipeline({
           : groqCalled
           ? "Clean semantic score (no injection/drift)"
           : "Bypassed (safe path)",
-      details: "Llama-3.1-8B-Instant inference evaluates semantic intent drift and indirect prompt injection attempts.",
+      details: "GPT-OSS-120B inference evaluates semantic intent drift and indirect prompt injection attempts.",
       metadata: effectiveDrift !== undefined ? { intentDriftScore: effectiveDrift } : undefined,
     },
   ];

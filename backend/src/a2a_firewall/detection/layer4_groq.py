@@ -164,7 +164,7 @@ async def groq_inspect(
     injection_only: bool = False,
     rules_risk_delta: float = 0.0,
 ) -> dict[str, Any]:
-    """Inspect message payload using Groq LLaMA for prompt injection and semantic anomalies.
+    """Inspect message payload using Groq GPT-OSS 120B for prompt injection and semantic anomalies.
 
     Features:
     - Fast async execution using AsyncGroq (non-blocking)

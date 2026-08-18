@@ -756,14 +756,17 @@ async def _save_and_return(
     db.add(task)
     await db.flush()
 
+    _VALID_DB_LAYERS = {"schema", "rule", "semantic", "policy"}
     for v in violations:
+        raw_layer = v.get("layer", "rule")
+        db_layer = raw_layer if raw_layer in _VALID_DB_LAYERS else "rule"
         db.add(
             Violation(
                 workspace_id=workspace.id,
                 task_id=task_id,
-                layer=v["layer"],
+                layer=db_layer,
                 violation_type=v["violation_type"],
-                severity=v["severity"],
+                severity=v.get("severity", "medium"),
                 details=v.get("details", {}),
             )
         )
@@ -886,15 +889,18 @@ async def _rate_limit_response(
         span_id=parent_span_id,
     )
     db.add(task)
+    _VALID_DB_LAYERS = {"schema", "rule", "semantic", "policy"}
     for v in violations:
+        raw_layer = v.get("layer", "rule")
+        db_layer = raw_layer if raw_layer in _VALID_DB_LAYERS else "rule"
         db.add(
             Violation(
                 workspace_id=workspace.id,
                 task_id=task_id,
-                layer=v["layer"],
+                layer=db_layer,
                 violation_type=v["violation_type"],
-                severity=v["severity"],
-                details=v["details"],
+                severity=v.get("severity", "medium"),
+                details=v.get("details", {}),
             )
         )
     for ev in trace_events:

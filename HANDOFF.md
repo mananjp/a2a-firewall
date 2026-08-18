@@ -22,7 +22,7 @@ the lineage. The full MVP plan lives at `a2a_firewall_mvp_plan.md`.
 ## Stack (locked decisions)
 
 - **Backend**: Python 3.12 (NOT 3.14 — pydantic-core wheels missing), FastAPI 0.138,
-  SQLAlchemy 2.0 async, asyncpg, Alembic, Pydantic 2.13, Groq (`llama-3.1-8b-instant`),
+  SQLAlchemy 2.0 async, asyncpg, Alembic, Pydantic 2.13, Groq (`openai/gpt-oss-120b`),
   OpenTelemetry, custom in-memory rate limiter (no slowapi to avoid CVE concerns).
 - **Frontend**: React 18, TypeScript, Vite 8, Tailwind 3, react-flow 11, react-router-dom 6.30.
 - **Database**: Postgres 16 (no Redis — explicitly removed by user).
@@ -232,7 +232,7 @@ gh run watch <RUN_ID> --repo mananjp/a2a-firewall
 5. **Layer 3 (rules)** — forbidden patterns (`INJECTION_PATTERNS` list) plus
    `policy_rules` table. Each layer's outcome is appended to `trace_events`.
 6. **Layer 4 (Groq)** — only if `risk_score >= workspace.groq_threshold`. Calls
-   `llama-3.1-8b-instant`. 429/graceful degradation handled.
+   `openai/gpt-oss-120b`. 429/graceful degradation handled.
 7. **Layer 5 (decision)** — final allow/block/review from `make_decision()`.
 
 All task rows, violation rows, review rows, and trace events are written in **one

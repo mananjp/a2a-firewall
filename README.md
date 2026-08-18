@@ -47,7 +47,7 @@ graph TD
 | **Layer 1** | **JSON Schema Validation** | Enforces strict type-safety and parameter bounds against registered task schemas matching `task_type`. |
 | **Layer 2** | **Permissions Matrix & Scopes** | Validates sender-receiver trust relationships, capability bounds, and delegation depth attenuation. |
 | **Layer 3** | **Rule Engine & SQL Guard** | Scans for forbidden prompt injection strings, SQL injection (`UNION SELECT`, tautologies, stacked queries), offshore beneficiary flags, and Base64/Hex obfuscated payloads. |
-| **Layer 4** | **Groq Semantic Guard** | Uses Llama-3.1-8B-Instant inference to evaluate semantic intent drift, confused-deputy redirection, and indirect prompt injection attempts. |
+| **Layer 4** | **Groq Semantic Guard** | Uses GPT-OSS-120B inference to evaluate semantic intent drift, confused-deputy redirection, and indirect prompt injection attempts. |
 | **Layer 5** | **Declarative Policy Synthesis** | Priority-ranked policy evaluation rules with customizable action gates (`BLOCK`, `REVIEW`, `ALLOW`). |
 
 ---
