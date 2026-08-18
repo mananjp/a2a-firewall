@@ -1,37 +1,106 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useApiKey } from "@/hooks/use-api-key";
-import { Shell } from "@/components/layout/shell";
+import { Logo } from "@/components/site/Chrome";
+
+const NAV: { href: string; label: string; group: string }[] = [
+  { href: "/dashboard", label: "Overview", group: "Operations" },
+  { href: "/dashboard/inspector", label: "Live Inspector", group: "Operations" },
+  { href: "/dashboard/delegation-audit", label: "Delegation Audit", group: "Operations" },
+  { href: "/dashboard/delegation-demo", label: "Delegation Demo", group: "Operations" },
+  { href: "/dashboard/review-queue", label: "Review Queue", group: "Governance" },
+  { href: "/dashboard/violations", label: "Violations", group: "Governance" },
+  { href: "/dashboard/simulation", label: "Simulation", group: "Labs" },
+  { href: "/dashboard/attack-demo", label: "Live Attack Demo", group: "Labs" },
+  { href: "/dashboard/identity", label: "Identity & Keys", group: "Control" },
+  { href: "/dashboard/registry", label: "Agent Registry", group: "Control" },
+  { href: "/dashboard/policies", label: "Firewall Policies", group: "Control" },
+  { href: "/dashboard/workspace", label: "Workspace", group: "Control" },
+];
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { apiKey } = useApiKey();
-  const router = useRouter();
+  const [time, setTime] = useState("--:--:--");
+  const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const tick = () => setTime(new Date().toISOString().slice(11, 19));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    if (mounted && !apiKey) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-    }
-  }, [mounted, apiKey, router, pathname]);
+  const groups = [...new Set(NAV.map((n) => n.group))];
 
-  if (!mounted || !apiKey) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
+  return (
+    <div className="min-h-screen bg-paper">
+      <header className="sticky top-0 z-40 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-ink bg-paper/90 px-4 py-3 backdrop-blur lg:px-8">
+        <div className="flex min-w-0 items-center gap-4">
+          <Logo />
+          <span className="hidden border-l border-ink/20 pl-4 label-mono text-muted-foreground sm:block">
+            SOC / demo workspace
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="hidden border border-ink/20 px-3 py-1.5 font-mono text-[10px] leading-tight text-muted-foreground md:block">
+            <div>SYS.TIME</div>
+            <div className="text-ink">{time}</div>
+          </div>
+          <span className="hidden border border-ink bg-lime px-3 py-2 label-mono text-lime-foreground sm:inline-block">
+            Mesh secure
+          </span>
+          <Link href="/login" className="border border-ink px-4 py-2 label-mono hover:bg-secondary">
+            Sign out
+          </Link>
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="border border-ink px-3 py-2 label-mono lg:hidden"
+            aria-label="Toggle navigation"
+          >
+            Menu
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-[1600px] lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside
+          className={`${
+            open ? "block" : "hidden"
+          } border-b border-ink/20 lg:sticky lg:top-[61px] lg:block lg:h-[calc(100vh-61px)] lg:overflow-y-auto lg:border-b-0 lg:border-r`}
+        >
+          {groups.map((g) => (
+            <div key={g} className="border-b border-ink/15 py-3">
+              <div className="px-4 pb-2 label-mono text-muted-foreground">{g}</div>
+              {NAV.filter((n) => n.group === g).map((n) => {
+                const isActive =
+                  n.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname === n.href || pathname?.startsWith(`${n.href}/`);
+                return (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setOpen(false)}
+                    className={`block px-4 py-2 font-mono text-xs transition-colors hover:bg-secondary ${
+                      isActive ? "bg-violet text-violet-foreground" : ""
+                    }`}
+                  >
+                    {n.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </aside>
+
+        <main className="min-w-0 px-4 py-8 lg:px-8">{children}</main>
       </div>
-    );
-  }
-
-  return <Shell>{children}</Shell>;
+    </div>
+  );
 }
