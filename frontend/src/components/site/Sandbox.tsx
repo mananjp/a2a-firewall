@@ -100,6 +100,42 @@ const SCENARIOS: Scenario[] = [
       "L6 groq_guard: skipped (fail-closed)",
     ],
   },
+  {
+    id: "05",
+    backendScenarioKey: "sql_injection",
+    name: "SQL Injection Attack",
+    intent: "db.query_unfiltered",
+    failAt: 4,
+    verdict: "BLOCK",
+    risk: 99,
+    reason: "Malicious UNION SELECT targeting credential store — blocked by deterministic L5 rule engine.",
+    logs: [
+      "L1 rate_limiter: 19/600 rpm — pass",
+      "L2 preflight: signature valid, nonce fresh",
+      "L3 schema: payload conforms — pass",
+      "L4 permissions: scope:db.read — pass",
+      "L5 rules: SQL_INJECTION pattern matched in WHERE clause — DENY fail-closed",
+      "L6 groq_guard: skipped (fail-closed)",
+    ],
+  },
+  {
+    id: "06",
+    backendScenarioKey: "agentic_pentest",
+    name: "Anti-Pentest Canary",
+    intent: "recon.probe_canary",
+    failAt: 1,
+    verdict: "BLOCK",
+    risk: 100,
+    reason: "Automated honeypot canary probe detected — agent quarantined at L2 preflight.",
+    logs: [
+      "L1 rate_limiter: burst threshold exceeded",
+      "L2 preflight: CANARY HONEYPOT TRIGGERED — agent quarantined",
+      "L3 schema: skipped (fail-closed)",
+      "L4 permissions: skipped (fail-closed)",
+      "L5 rules: skipped (fail-closed)",
+      "L6 groq_guard: skipped (fail-closed)",
+    ],
+  },
 ];
 
 type GateState = "idle" | "active" | "pass" | "fail" | "skip";
