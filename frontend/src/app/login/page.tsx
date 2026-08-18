@@ -2,22 +2,108 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { Logo } from "@/components/site/Chrome";
+import { auth, setApiKey, workspaces } from "@/lib/api";
 
 const TABS = ["Sign In", "Provision", "API Key"] as const;
 
 const PERSONAS = [
-  ["Admin", "Full permissions"],
-  ["Auditor", "Read-only access"],
-  ["Trial", "Standard bounds"],
-  ["Traffic", "Agent gateway"],
+  { name: "Admin", desc: "Full permissions & policy control", email: "admin@mesh.dev" },
+  { name: "Auditor", desc: "Read-only inspection & lineage audit", email: "auditor@mesh.dev" },
+  { name: "Operator", desc: "Review queue adjudication", email: "operator@mesh.dev" },
+  { name: "Traffic", desc: "Direct agent inspection gateway", email: "traffic@mesh.dev" },
 ];
 
 export default function LoginPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Sign In");
+  const [email, setEmail] = useState("");
+  const [slug, setSlug] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (tab === "API Key") {
+        if (!apiKeyInput.trim()) {
+          throw new Error("Please enter a valid Bearer API key");
+        }
+        setApiKey(apiKeyInput.trim());
+        router.push("/dashboard");
+        return;
+      }
+
+      if (tab === "Provision") {
+        const workspaceName = slug.trim() || "Production Mesh";
+        const adminEmail = email.trim() || "admin@mesh.dev";
+        const res = await workspaces.register({
+          name: workspaceName,
+          admin_email: adminEmail,
+        });
+        if (res.api_key) {
+          setApiKey(res.api_key);
+        }
+        router.push("/dashboard");
+        return;
+      }
+
+      // Sign In
+      const userEmail = email.trim() || "operator@mesh.dev";
+      try {
+        const res = await auth.login(userEmail);
+        if (res.api_key) {
+          setApiKey(res.api_key);
+        }
+      } catch {
+        // If user doesn't exist, auto-provision for seamless demo experience
+        const res = await workspaces.register({
+          name: "Default Workspace",
+          admin_email: userEmail,
+        });
+        if (res.api_key) {
+          setApiKey(res.api_key);
+        }
+      }
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePersonaLogin = async (personaEmail: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      try {
+        const res = await auth.login(personaEmail);
+        if (res.api_key) {
+          setApiKey(res.api_key);
+        }
+      } catch {
+        const res = await workspaces.register({
+          name: `${personaEmail.split("@")[0]} Workspace`,
+          admin_email: personaEmail,
+        });
+        if (res.api_key) {
+          setApiKey(res.api_key);
+        }
+      }
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Persona login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
@@ -48,7 +134,7 @@ export default function LoginPage() {
         <pre className="relative font-mono text-[11px] leading-relaxed text-paper/50">{`> auth.handshake --mode=ed25519
 > ledger.lookup  --agent=soc-operator
 > session.mint   --ttl=900s
-STATUS: awaiting operator credentials_`}</pre>
+STATUS: live backend connected_`}</pre>
       </div>
 
       {/* right panel */}
@@ -74,7 +160,10 @@ STATUS: awaiting operator credentials_`}</pre>
               <button
                 key={t}
                 type="button"
-                onClick={() => setTab(t)}
+                onClick={() => {
+                  setTab(t);
+                  setError(null);
+                }}
                 className={`px-2 py-3 label-mono transition-colors ${
                   tab === t ? "bg-ink text-paper" : "bg-paper hover:bg-secondary"
                 }`}
@@ -84,29 +173,57 @@ STATUS: awaiting operator credentials_`}</pre>
             ))}
           </div>
 
-          <form
-            className="mt-8 space-y-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              router.push("/dashboard");
-            }}
-          >
+          {error && (
+            <div className="mt-4 flex items-center gap-2 border border-destructive bg-destructive/10 p-3 font-mono text-xs text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form className="mt-8 space-y-5" onSubmit={handleLogin}>
             {tab === "API Key" ? (
-              <Field label="Bearer API key" type="password" placeholder="a2a_sk_live_••••••••••••" />
+              <label className="block">
+                <span className="label-mono text-muted-foreground">Bearer API key</span>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="a2a_sk_live_••••••••••••"
+                  className="mt-2 w-full border border-ink bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-muted-foreground/60 focus:border-violet focus:ring-1 focus:ring-violet"
+                />
+              </label>
             ) : (
               <>
-                <Field label="Administrator email" type="email" placeholder="operator@mesh.io" />
-                <Field label="Passphrase" type="password" placeholder="••••••••••••" />
+                <label className="block">
+                  <span className="label-mono text-muted-foreground">Administrator email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="operator@mesh.io"
+                    className="mt-2 w-full border border-ink bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-muted-foreground/60 focus:border-violet focus:ring-1 focus:ring-violet"
+                  />
+                </label>
                 {tab === "Provision" && (
-                  <Field label="Workspace slug" type="text" placeholder="acme-agent-mesh" />
+                  <label className="block">
+                    <span className="label-mono text-muted-foreground">Workspace name</span>
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={(e) => setSlug(e.target.value)}
+                      placeholder="acme-agent-mesh"
+                      className="mt-2 w-full border border-ink bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-muted-foreground/60 focus:border-violet focus:ring-1 focus:ring-violet"
+                    />
+                  </label>
                 )}
               </>
             )}
             <button
               type="submit"
-              className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-ink px-6 py-4 label-mono text-paper transition-colors hover:border-violet hover:bg-violet"
+              disabled={loading}
+              className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-ink px-6 py-4 label-mono text-paper transition-colors hover:border-violet hover:bg-violet disabled:opacity-50"
             >
-              {tab === "Provision" ? "Provision workspace" : "Sign in to dashboard"}
+              {loading ? "Authenticating..." : tab === "Provision" ? "Provision workspace" : "Sign in to dashboard"}
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </button>
           </form>
@@ -114,33 +231,21 @@ STATUS: awaiting operator credentials_`}</pre>
           <div className="mt-12">
             <span className="label-mono text-muted-foreground">Fast demo persona access</span>
             <div className="mt-4 grid gap-px border border-ink bg-ink/15 sm:grid-cols-2">
-              {PERSONAS.map(([name, desc]) => (
-                <Link
+              {PERSONAS.map(({ name, desc, email: pEmail }) => (
+                <button
                   key={name}
-                  href="/dashboard"
-                  className="bg-paper px-4 py-4 transition-colors hover:bg-violet hover:text-violet-foreground"
+                  type="button"
+                  onClick={() => handlePersonaLogin(pEmail)}
+                  className="bg-paper px-4 py-4 text-left transition-colors hover:bg-violet hover:text-violet-foreground"
                 >
                   <span className="block font-display text-sm font-bold uppercase">{name}</span>
                   <span className="mt-1 block font-mono text-[11px] opacity-70">{desc}</span>
-                </Link>
+                </button>
               ))}
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function Field({ label, type, placeholder }: { label: string; type: string; placeholder: string }) {
-  return (
-    <label className="block">
-      <span className="label-mono text-muted-foreground">{label}</span>
-      <input
-        type={type}
-        placeholder={placeholder}
-        className="mt-2 w-full border border-ink bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-muted-foreground/60 focus:border-violet focus:ring-1 focus:ring-violet"
-      />
-    </label>
   );
 }

@@ -1,6 +1,21 @@
 import type { Metadata } from "next";
+import { Archivo, JetBrains_Mono } from "next/font/google";
 import { SocProvider } from "@/components/soc/store";
 import "./globals.css";
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-archivo",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "A2A Firewall — Zero-Trust Agent Mesh",
@@ -13,18 +28,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
-        />
-      </head>
+    <html lang="en" className={`${archivo.variable} ${jetbrainsMono.variable}`}>
       <body>
         <SocProvider>{children}</SocProvider>
       </body>
     </html>
   );
 }
+

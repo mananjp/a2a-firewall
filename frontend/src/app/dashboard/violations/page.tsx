@@ -7,12 +7,22 @@ import { Btn, PageHead, Panel, Stat, StatGrid, Tag, inputCls } from "@/component
 const SEV = ["all", "critical", "high", "medium", "low"] as const;
 
 export default function ViolationsPage() {
-  const { violations, ackViolation } = useSoc();
+  const { violations, ackViolation, isConnected } = useSoc();
   const [sev, setSev] = useState<(typeof SEV)[number]>("all");
   const [q, setQ] = useState("");
+  const [ackingId, setAckingId] = useState<string | null>(null);
+
+  const handleAck = async (id: string) => {
+    setAckingId(id);
+    try {
+      await ackViolation(id);
+    } finally {
+      setAckingId(null);
+    }
+  };
 
   const rows = violations.filter(
-    (v) => (sev === "all" || v.severity === sev) && (v.agent + v.rule).toLowerCase().includes(q.toLowerCase())
+    (v) => (sev === "all" || v.severity === sev) && (v.agent + v.rule + v.id).toLowerCase().includes(q.toLowerCase())
   );
 
   return (
@@ -33,13 +43,17 @@ export default function ViolationsPage() {
           label="Unacknowledged"
           value={String(violations.filter((v) => !v.acknowledged).length)}
         />
-        <Stat label="Top gate" value="L4" note="permissions" />
+        <Stat
+          label="Engine"
+          value={isConnected ? "LIVE REST" : "OFFLINE"}
+          note="Resolution audit enabled"
+        />
       </StatGrid>
 
       <div className="flex flex-wrap gap-2">
         <input
           className={`${inputCls} max-w-xs`}
-          placeholder="search rule or agent…"
+          placeholder="search rule, agent or ID…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -57,8 +71,8 @@ export default function ViolationsPage() {
               <tr className="border-b border-ink/20 text-left label-mono text-muted-foreground">
                 <th className="py-2 pr-4">ID</th>
                 <th className="py-2 pr-4">Time</th>
-                <th className="py-2 pr-4">Agent</th>
-                <th className="py-2 pr-4">Rule</th>
+                <th className="py-2 pr-4">Agent / Task</th>
+                <th className="py-2 pr-4">Rule Broken</th>
                 <th className="py-2 pr-4">Gate</th>
                 <th className="py-2 pr-4">Severity</th>
                 <th className="py-2">Action</th>
@@ -67,7 +81,7 @@ export default function ViolationsPage() {
             <tbody>
               {rows.map((v) => (
                 <tr key={v.id} className="border-b border-ink/10">
-                  <td className="py-3 pr-4 text-muted-foreground">{v.id}</td>
+                  <td className="py-3 pr-4 text-muted-foreground">{v.id.slice(0, 8)}...</td>
                   <td className="py-3 pr-4">{v.ts}</td>
                   <td className="py-3 pr-4">{v.agent}</td>
                   <td className="py-3 pr-4">{v.rule}</td>
@@ -89,14 +103,23 @@ export default function ViolationsPage() {
                     {v.acknowledged ? (
                       <Tag tone="lime">acked</Tag>
                     ) : (
-                      <Btn onClick={() => ackViolation(v.id)}>Acknowledge</Btn>
+                      <Btn
+                        disabled={ackingId === v.id}
+                        onClick={() => handleAck(v.id)}
+                      >
+                        {ackingId === v.id ? "Saving..." : "Acknowledge"}
+                      </Btn>
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!rows.length && <p className="py-6 font-mono text-xs text-muted-foreground">// no violations match</p>}
+          {!rows.length && (
+            <p className="py-6 font-mono text-xs text-muted-foreground">
+              {"// No violations found matching criteria."}
+            </p>
+          )}
         </div>
       </Panel>
     </div>

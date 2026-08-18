@@ -7,17 +7,31 @@ import { Btn, PageHead, Panel, Stat, StatGrid, Tag, Terminal, inputCls } from "@
 export default function IdentityPage() {
   const { keys, rotateKey, revokeKey, workspace } = useSoc();
   const [q, setQ] = useState("");
-  const [log, setLog] = useState<string[]>(["// key operations will appear here"]);
+  const [log, setLog] = useState<string[]>([
+    "// Ed25519 identity ledger armed with cryptographic verification",
+  ]);
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  const rows = keys.filter((k) => (k.agent + k.fingerprint).toLowerCase().includes(q.toLowerCase()));
+  const rows = keys.filter((k) => (k.agent + k.fingerprint + k.id).toLowerCase().includes(q.toLowerCase()));
 
-  const doRotate = (id: string, agent: string) => {
-    rotateKey(id);
-    setLog((l) => [`rotate ${agent} → new ed25519 pair staged, old key valid 300s`, ...l].slice(0, 20));
+  const doRotate = async (id: string, agent: string) => {
+    setActingId(id);
+    try {
+      await rotateKey(id);
+      setLog((l) => [`rotate ${agent} → new ed25519 pair minted, previous key invalidated`, ...l].slice(0, 20));
+    } finally {
+      setActingId(null);
+    }
   };
-  const doRevoke = (id: string, agent: string) => {
-    revokeKey(id);
-    setLog((l) => [`revoke ${agent} → key blacklisted, sessions terminated fail-closed`, ...l].slice(0, 20));
+
+  const doRevoke = async (id: string, agent: string) => {
+    setActingId(id);
+    try {
+      await revokeKey(id);
+      setLog((l) => [`revoke ${agent} → agent suspended, sessions terminated fail-closed`, ...l].slice(0, 20));
+    } finally {
+      setActingId(null);
+    }
   };
 
   return (
@@ -37,7 +51,7 @@ export default function IdentityPage() {
 
       <input
         className={`${inputCls} max-w-sm`}
-        placeholder="search agent or fingerprint…"
+        placeholder="search agent, fingerprint or ID…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
@@ -59,7 +73,7 @@ export default function IdentityPage() {
             <tbody>
               {rows.map((k) => (
                 <tr key={k.id} className="border-b border-ink/10">
-                  <td className="py-3 pr-4">{k.agent}</td>
+                  <td className="py-3 pr-4 font-bold">{k.agent}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{k.alg}</td>
                   <td className="py-3 pr-4 text-muted-foreground">{k.fingerprint}</td>
                   <td className="py-3 pr-4">{k.issued}</td>
@@ -71,11 +85,18 @@ export default function IdentityPage() {
                   </td>
                   <td className="py-3">
                     <div className="flex gap-2">
-                      <Btn onClick={() => doRotate(k.id, k.agent)} disabled={k.status === "revoked"}>
-                        Rotate
+                      <Btn
+                        disabled={k.status === "revoked" || actingId === k.id}
+                        onClick={() => doRotate(k.id, k.agent)}
+                      >
+                        {actingId === k.id ? "Rotating..." : "Rotate"}
                       </Btn>
-                      <Btn variant="danger" onClick={() => doRevoke(k.id, k.agent)} disabled={k.status === "revoked"}>
-                        Revoke
+                      <Btn
+                        variant="danger"
+                        disabled={k.status === "revoked" || actingId === k.id}
+                        onClick={() => doRevoke(k.id, k.agent)}
+                      >
+                        {actingId === k.id ? "Revoking..." : "Revoke"}
                       </Btn>
                     </div>
                   </td>
@@ -83,6 +104,11 @@ export default function IdentityPage() {
               ))}
             </tbody>
           </table>
+          {!rows.length && (
+            <p className="py-6 font-mono text-xs text-muted-foreground">
+              {"// No keys registered. Register agents in the registry to mint keys."}
+            </p>
+          )}
         </div>
       </Panel>
 

@@ -5,20 +5,29 @@ import { useSoc } from "@/components/soc/store";
 import { Btn, Field, PageHead, Panel, Stat, StatGrid, Tag, Terminal, inputCls } from "@/components/soc/ui";
 
 const MEMBERS: [string, string, string][] = [
-  ["ada@mesh.dev", "Owner", "full control"],
-  ["kai@mesh.dev", "Admin", "policies, registry"],
-  ["mira@mesh.dev", "Auditor", "read-only"],
-  ["ops-bot@mesh.dev", "Service", "review queue"],
+  ["admin@mesh.dev", "Owner", "full control"],
+  ["security@mesh.dev", "Admin", "policies, registry"],
+  ["auditor@mesh.dev", "Auditor", "read-only lineage"],
+  ["soc-bot@mesh.dev", "Service", "review queue & auto-quarantine"],
 ];
 
 export default function WorkspacePage() {
-  const { workspace, setWorkspace, agents, policies } = useSoc();
+  const { workspace, setWorkspace, saveWorkspace, agents, policies, isConnected } = useSoc();
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2200);
+    setSaving(true);
+    try {
+      const ok = await saveWorkspace();
+      if (ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -33,7 +42,7 @@ export default function WorkspacePage() {
         <Stat label="Workspace" value={workspace.region} note={workspace.name} />
         <Stat label="Agents" value={String(agents.length)} />
         <Stat label="Active rules" value={String(policies.filter((p) => p.enabled).length)} />
-        <Stat label="Fail mode" value={workspace.failMode} />
+        <Stat label="Backend" value={isConnected ? "CONNECTED" : "OFFLINE"} note={`fail mode ${workspace.failMode}`} />
       </StatGrid>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
@@ -66,11 +75,33 @@ export default function WorkspacePage() {
                   value={workspace.failMode}
                   onChange={(e) => setWorkspace({ failMode: e.target.value as "CLOSED" | "OPEN" })}
                 >
-                  <option value="CLOSED">CLOSED (recommended)</option>
-                  <option value="OPEN">OPEN</option>
+                  <option value="CLOSED">CLOSED (Fail-secure, drop unverified)</option>
+                  <option value="OPEN">OPEN (Fail-open, log only)</option>
                 </select>
               </Field>
             </div>
+            <Field label={`Groq Semantic Drift Threshold — ${(workspace.groqThreshold * 100).toFixed(0)}%`}>
+              <input
+                type="range"
+                min={0.1}
+                max={1.0}
+                step={0.05}
+                value={workspace.groqThreshold}
+                onChange={(e) => setWorkspace({ groqThreshold: Number(e.target.value) })}
+                className="w-full accent-violet"
+              />
+            </Field>
+            <Field label={`Hard Block Threshold — ${(workspace.blockThreshold * 100).toFixed(0)}%`}>
+              <input
+                type="range"
+                min={0.5}
+                max={1.0}
+                step={0.05}
+                value={workspace.blockThreshold}
+                onChange={(e) => setWorkspace({ blockThreshold: Number(e.target.value) })}
+                className="w-full accent-violet"
+              />
+            </Field>
             <Field label={`Max delegation depth — ${workspace.maxDepth}`}>
               <input
                 type="range"
@@ -92,17 +123,6 @@ export default function WorkspacePage() {
                 className="w-full accent-violet"
               />
             </Field>
-            <Field label={`Rate limit — ${workspace.rpmLimit} rpm`}>
-              <input
-                type="range"
-                min={100}
-                max={3000}
-                step={100}
-                value={workspace.rpmLimit}
-                onChange={(e) => setWorkspace({ rpmLimit: Number(e.target.value) })}
-                className="w-full accent-violet"
-              />
-            </Field>
             <Field label="Notification email">
               <input
                 className={inputCls}
@@ -120,10 +140,10 @@ export default function WorkspacePage() {
               <span className="font-mono text-xs">Auto-quarantine agents after 3 critical violations</span>
             </label>
             <div className="flex items-center gap-3">
-              <Btn type="submit" variant="solid">
-                Save configuration
+              <Btn type="submit" variant="solid" disabled={saving}>
+                {saving ? "Saving to server..." : "Save configuration"}
               </Btn>
-              {saved && <Tag tone="lime">saved</Tag>}
+              {saved && <Tag tone="lime">Saved to DB ✓</Tag>}
             </div>
           </form>
         </Panel>
@@ -146,14 +166,15 @@ export default function WorkspacePage() {
           <Terminal
             title="workspace.toml"
             lines={[
-              `name           = "${workspace.name}"`,
-              `region         = "${workspace.region}"`,
-              `fail_mode      = "${workspace.failMode}"`,
-              `max_depth      = ${workspace.maxDepth}`,
-              `replay_window  = ${workspace.replayWindow}`,
-              `rpm_limit      = ${workspace.rpmLimit}`,
-              `auto_quarantine = ${workspace.autoQuarantine}`,
-              `notify         = "${workspace.notifyEmail}"`,
+              `name             = "${workspace.name}"`,
+              `region           = "${workspace.region}"`,
+              `fail_mode        = "${workspace.failMode}"`,
+              `groq_threshold   = ${workspace.groqThreshold}`,
+              `block_threshold  = ${workspace.blockThreshold}`,
+              `max_depth        = ${workspace.maxDepth}`,
+              `replay_window    = ${workspace.replayWindow}`,
+              `auto_quarantine  = ${workspace.autoQuarantine}`,
+              `notify           = "${workspace.notifyEmail}"`,
             ]}
           />
         </div>

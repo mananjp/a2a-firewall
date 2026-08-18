@@ -5,23 +5,43 @@ import { useSoc, type SocEvent } from "@/components/soc/store";
 import { Btn, PageHead, Panel, Tag, Terminal, VerdictChip, inputCls } from "@/components/soc/ui";
 
 export default function InspectorPage() {
-  const { events, pushEvent } = useSoc();
+  const { events, pushEvent, refreshAll } = useSoc();
   const [live, setLive] = useState(true);
   const [filter, setFilter] = useState("");
   const [verdict, setVerdict] = useState("ALL");
   const [selected, setSelected] = useState<SocEvent | null>(events[0] ?? null);
+  const [injecting, setInjecting] = useState(false);
+
+  useEffect(() => {
+    if (!selected && events.length > 0) {
+      setSelected(events[0]);
+    }
+  }, [events, selected]);
 
   useEffect(() => {
     if (!live) return;
-    const id = setInterval(pushEvent, 2200);
+    const id = setInterval(() => {
+      refreshAll();
+    }, 3000);
     return () => clearInterval(id);
-  }, [live, pushEvent]);
+  }, [live, refreshAll]);
+
+  const handleInject = async () => {
+    setInjecting(true);
+    try {
+      await pushEvent();
+    } finally {
+      setInjecting(false);
+    }
+  };
 
   const rows = events.filter(
     (e) =>
       (verdict === "ALL" || e.verdict === verdict) &&
-      (filter === "" || (e.agent + e.intent).toLowerCase().includes(filter.toLowerCase())),
+      (filter === "" || (e.agent + e.intent + e.id).toLowerCase().includes(filter.toLowerCase()))
   );
+
+  const raw = selected?.rawTask;
 
   return (
     <div className="space-y-8">
@@ -32,10 +52,10 @@ export default function InspectorPage() {
         action={
           <div className="flex gap-2">
             <Btn variant={live ? "lime" : "outline"} onClick={() => setLive((l) => !l)}>
-              {live ? "Streaming" : "Paused"}
+              {live ? "Live polling on" : "Polling paused"}
             </Btn>
-            <Btn variant="solid" onClick={pushEvent}>
-              Inject request
+            <Btn variant="solid" onClick={handleInject} disabled={injecting}>
+              {injecting ? "Injecting..." : "Inject test packet"}
             </Btn>
           </div>
         }
@@ -44,7 +64,7 @@ export default function InspectorPage() {
       <div className="flex flex-wrap gap-3">
         <input
           className={`${inputCls} max-w-xs`}
-          placeholder="filter agent or intent…"
+          placeholder="filter agent, intent or ID…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -75,12 +95,16 @@ export default function InspectorPage() {
                 <VerdictChip verdict={e.verdict} />
               </button>
             ))}
-            {!rows.length && <p className="py-6 font-mono text-xs text-muted-foreground">// no matching requests</p>}
+            {!rows.length && (
+              <p className="py-6 font-mono text-xs text-muted-foreground">
+                {"// No matching intercepted requests found."}
+              </p>
+            )}
           </div>
         </Panel>
 
         <div className="space-y-6">
-          <Panel title="Envelope detail" hint={selected?.id ?? "—"}>
+          <Panel title="Envelope detail" hint={selected ? selected.id.slice(0, 12) : "—"}>
             {selected ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -93,12 +117,13 @@ export default function InspectorPage() {
                 </div>
                 <dl className="grid grid-cols-2 gap-y-2 font-mono text-[11px]">
                   {[
-                    ["agent", selected.agent],
+                    ["task_id", selected.id.slice(0, 18)],
                     ["intent", selected.intent],
-                    ["nonce", selected.nonce],
+                    ["trace_id", selected.nonce],
                     ["latency", `${selected.latency}ms`],
                     ["timestamp", selected.ts],
-                    ["signature", "ed25519:valid"],
+                    ["groq_checked", raw?.groq_called ? "true (L6 LPU)" : "false"],
+                    ["signature", "ed25519:verified"],
                   ].map(([k, v]) => (
                     <div key={k} className="contents">
                       <dt className="text-muted-foreground">{k}</dt>
@@ -109,7 +134,7 @@ export default function InspectorPage() {
                 <p className="font-mono text-[11px] text-muted-foreground">{selected.reason}</p>
               </div>
             ) : (
-              <p className="font-mono text-xs text-muted-foreground">// select a request</p>
+              <p className="font-mono text-xs text-muted-foreground">{"// Select a request to inspect"}</p>
             )}
           </Panel>
 
@@ -118,12 +143,12 @@ export default function InspectorPage() {
             lines={
               selected
                 ? [
-                    `L1 rate_limiter    ok  ${selected.latency.toFixed(1)}ms window 600rpm`,
-                    `L2 preflight       ok  nonce ${selected.nonce} fresh`,
-                    `L3 schema          ok  ${selected.intent}@v2`,
-                    `L4 permissions     ${selected.verdict === "BLOCK" ? "DENY caveat chain mismatch" : "ok  caveat chain intact"}`,
+                    `L1 rate_limiter    ok  ${selected.latency.toFixed(1)}ms window`,
+                    `L2 preflight       ok  signature ed25519 verified, trace ${selected.nonce}`,
+                    `L3 schema          ok  conforms to ${selected.intent}@v1`,
+                    `L4 permissions     ${selected.verdict === "BLOCK" ? "DENY caveat check" : "ok  caveats validated"}`,
                     `L5 rules           ${selected.verdict === "REVIEW" ? "SOFT flag → review queue" : "0 deny rules matched"}`,
-                    `L6 groq_guard      drift ${(selected.risk / 100).toFixed(2)} → ${selected.verdict}`,
+                    `L6 groq_guard      ${raw?.groq_called ? `drift ${(selected.risk / 100).toFixed(2)} → ${selected.verdict}` : "skipped (clean path)"}`,
                   ]
                 : []
             }

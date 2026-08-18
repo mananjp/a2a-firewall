@@ -161,7 +161,7 @@ export default function LandingPage() {
             </ul>
           </div>
           <div className="border border-ink bg-ink p-6 text-paper">
-            <div className="label-mono text-paper/50">// a2a wire protocol headers</div>
+            <div className="label-mono text-paper/50">{"// a2a wire protocol headers"}</div>
             <pre className="mt-4 overflow-x-auto font-mono text-[11px] leading-relaxed">{`X-Agent-ID:   "portfolio-manager-01"
 X-Signature:  "ed25519:7f8a9e2b1c4d0e91a2b3c4d5e6f7a8b9"
 X-Nonce:      "0x9f18a24c00ef12ab"

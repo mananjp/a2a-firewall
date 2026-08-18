@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, RotateCcw, ShieldCheck, ShieldAlert, ShieldX } from "lucide-react";
+import { demo as demoApi } from "@/lib/api";
 
 export type Verdict = "ALLOW" | "BLOCK" | "REVIEW";
 
@@ -16,6 +17,7 @@ const GATES = [
 
 type Scenario = {
   id: string;
+  backendScenarioKey: string;
   name: string;
   intent: string;
   failAt: number | null;
@@ -28,8 +30,9 @@ type Scenario = {
 const SCENARIOS: Scenario[] = [
   {
     id: "01",
-    name: "Clean Task",
-    intent: "market_analytics.summarize",
+    backendScenarioKey: "clean",
+    name: "Clean Research Task",
+    intent: "research.summarize",
     failAt: null,
     verdict: "ALLOW",
     risk: 3,
@@ -37,57 +40,60 @@ const SCENARIOS: Scenario[] = [
     logs: [
       "L1 rate_limiter: 12/600 rpm — pass",
       "L2 preflight: ed25519 signature valid, nonce fresh (120ms)",
-      "L3 schema: payload conforms to market_analytics.summarize@v2",
-      "L4 permissions: macaroon caveat scope:market_analytics.read — ok",
-      "L5 rules: 0/48 deny rules matched",
+      "L3 schema: payload conforms to research@v1",
+      "L4 permissions: macaroon caveat scope:research — ok",
+      "L5 rules: 0 deny rules matched",
       "L6 groq_guard: intent drift 0.04 — aligned",
     ],
   },
   {
     id: "02",
-    name: "Prompt Injection",
-    intent: "market_analytics.summarize",
+    backendScenarioKey: "injection",
+    name: "Indirect Prompt Injection",
+    intent: "research.extract",
     failAt: 5,
     verdict: "BLOCK",
-    risk: 94,
-    reason: "Indirect prompt injection detected in tool output at semantic gate L6.",
+    risk: 96,
+    reason: "Instruction smuggling detected in payload context at semantic gate L6.",
     logs: [
       "L1 rate_limiter: 41/600 rpm — pass",
       "L2 preflight: ed25519 signature valid",
       "L3 schema: payload conforms — pass",
       "L4 permissions: caveat chain intact — pass",
       "L5 rules: heuristic 'ignore previous instructions' — soft flag",
-      "L6 groq_guard: injection confidence 0.97 — DENY",
+      "L6 groq_guard: injection confidence 0.97 — DENY fail-closed",
     ],
   },
   {
     id: "03",
-    name: "Privilege Escalation",
-    intent: "treasury.transfer",
-    failAt: 3,
-    verdict: "BLOCK",
-    risk: 88,
-    reason: "Sub-delegated agent requested scope wider than its attenuated macaroon.",
+    backendScenarioKey: "review",
+    name: "Suspicious PII Export",
+    intent: "data_export.restricted",
+    failAt: 4,
+    verdict: "REVIEW",
+    risk: 68,
+    reason: "Access to employee records with PII held for human review adjudication.",
     logs: [
       "L1 rate_limiter: 7/600 rpm — pass",
-      "L2 preflight: signature valid, depth:2",
-      "L3 schema: treasury.transfer@v1 — pass",
-      "L4 permissions: scope:treasury.write not in caveat chain — DENY",
-      "L5 rules: skipped (fail-closed)",
-      "L6 groq_guard: skipped (fail-closed)",
+      "L2 preflight: signature valid, nonce fresh",
+      "L3 schema: data_export@v1 — pass",
+      "L4 permissions: scope:data_export — pass",
+      "L5 rules: pii_export policy matched — ESCALATE TO REVIEW QUEUE",
+      "L6 groq_guard: skipped pending human decision",
     ],
   },
   {
     id: "04",
+    backendScenarioKey: "clean",
     name: "Cryptographic Replay",
-    intent: "market_analytics.summarize",
+    intent: "treasury.transfer",
     failAt: 1,
     verdict: "BLOCK",
-    risk: 76,
-    reason: "Nonce already observed within the 300s replay cache window.",
+    risk: 84,
+    reason: "Monotonic nonce already observed in 300s replay cache window.",
     logs: [
       "L1 rate_limiter: 3/600 rpm — pass",
-      "L2 preflight: nonce 0x9f18a24c seen 41s ago — DENY",
+      "L2 preflight: nonce 0x9f18a24c seen 41s ago — REPLAY DETECTED — DENY",
       "L3 schema: skipped (fail-closed)",
       "L4 permissions: skipped (fail-closed)",
       "L5 rules: skipped (fail-closed)",
@@ -103,12 +109,16 @@ export function Sandbox() {
   const [step, setStep] = useState(-1);
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [realLatency, setRealLatency] = useState<number | null>(null);
+  const [serverLog, setServerLog] = useState<string[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reset = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setRunning(false);
     setStep(-1);
+    setServerLog([]);
+    setRealLatency(null);
   }, []);
 
   useEffect(() => reset, [reset]);
@@ -119,16 +129,40 @@ export function Sandbox() {
       setRunning(false);
       return;
     }
-    timer.current = setTimeout(() => setStep((s) => s + 1), 620 / speed);
+    timer.current = setTimeout(() => setStep((s) => s + 1), 600 / speed);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [running, step, speed]);
 
-  const dispatch = () => {
+  const dispatch = async () => {
     setStep(-1);
     setRunning(true);
     setTimeout(() => setStep(0), 10);
+
+    // Concurrently trigger real backend demo endpoint
+    try {
+      const res = await demoApi.run(scenario.backendScenarioKey);
+      if (res) {
+        setRealLatency(res.latency_ms);
+        const logs: string[] = [
+          `[BACKEND] Task ID: ${res.task_id}`,
+          `[BACKEND] Decision: ${res.decision.toUpperCase()} | Risk: ${(res.risk_score * 100).toFixed(0)}%`,
+          `[BACKEND] Latency: ${res.latency_ms}ms`,
+        ];
+        if (res.violations && res.violations.length > 0) {
+          res.violations.forEach((v) => {
+            logs.push(`[VIOLATION] ${v.layer.toUpperCase()}: ${v.violation_type} (${v.severity})`);
+          });
+        }
+        if (res.review_token) {
+          logs.push(`[REVIEW] Escalated with token: ${res.review_token}`);
+        }
+        setServerLog(logs);
+      }
+    } catch {
+      // Offline fallback
+    }
   };
 
   const failIdx = scenario.failAt;
@@ -138,12 +172,12 @@ export function Sandbox() {
   const gateState = (i: number): GateState => {
     if (step < i) return "idle";
     if (failIdx !== null && i > failIdx && step >= failIdx) return "skip";
-    if (failIdx === i) return "fail";
+    if (failIdx === i) return scenario.verdict === "REVIEW" ? "fail" : "fail";
     if (step === i && running) return "active";
     return "pass";
   };
 
-  const latency = step < 0 ? 0 : Math.min((step + 1) * 2.9, 17.4);
+  const latency = realLatency ? realLatency : step < 0 ? 0 : Math.min((step + 1) * 2.9, 17.4);
   const risk = step < 0 ? 0 : blocked ? scenario.risk : Math.max(3, 3 + step);
 
   return (
@@ -151,7 +185,7 @@ export function Sandbox() {
       {/* control bar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-ink bg-ink px-4 py-3 text-paper">
         <span className="label-mono">Live Sandbox</span>
-        <span className="label-mono text-paper/50">inter-agent request flow</span>
+        <span className="label-mono text-paper/50">Inter-agent request flow & 6-gate kernel</span>
         <div className="ml-auto flex items-center gap-2">
           <span className="label-mono text-paper/50">Speed</span>
           {[1, 2, 4].map((s) => (
@@ -222,7 +256,7 @@ export function Sandbox() {
         <div className="grid-paper">
           <div className="grid grid-cols-2 border-b border-ink/20 sm:grid-cols-4">
             <Metric label="Status" value={step < 0 ? "READY" : running ? "INSPECTING" : scenario.verdict} />
-            <Metric label="Latency" value={`${latency.toFixed(1)}ms`} />
+            <Metric label="Latency" value={`${Number(latency).toFixed(1)}ms`} />
             <Metric label="Risk" value={`${risk}%`} />
             <Metric label="Fail Mode" value="CLOSED" />
           </div>
@@ -258,17 +292,21 @@ export function Sandbox() {
             <pre className="mt-3 min-h-[132px] overflow-x-auto font-mono text-[11px] leading-relaxed">
               {step < 0
                 ? "// awaiting dispatch..."
-                : scenario.logs
-                    .slice(0, step + 1)
-                    .map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`)
-                    .join("\n")}
+                : [
+                    ...scenario.logs.slice(0, step + 1).map((l, i) => `${String(i + 1).padStart(2, "0")}  ${l}`),
+                    ...serverLog,
+                  ].join("\n")}
             </pre>
           </div>
 
           {finished && (
             <div
               className={`flex flex-wrap items-center gap-3 border-t border-ink px-4 py-4 ${
-                scenario.verdict === "ALLOW" ? "bg-lime text-lime-foreground" : "bg-danger text-destructive-foreground"
+                scenario.verdict === "ALLOW"
+                  ? "bg-lime text-lime-foreground"
+                  : scenario.verdict === "REVIEW"
+                    ? "bg-violet text-violet-foreground"
+                    : "bg-danger text-destructive-foreground"
               }`}
             >
               {scenario.verdict === "ALLOW" ? (

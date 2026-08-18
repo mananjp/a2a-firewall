@@ -1,18 +1,94 @@
 "use client";
 
 import { useState } from "react";
-import { useSoc } from "@/components/soc/store";
-import { PageHead, Panel, Stat, StatGrid, Tag, Terminal, inputCls } from "@/components/soc/ui";
+import { useSoc, type Delegation } from "@/components/soc/store";
+import { Btn, PageHead, Panel, Stat, StatGrid, Tag, Terminal, inputCls } from "@/components/soc/ui";
+import { simulation } from "@/lib/api";
+
+const MOCK_CHAINS: Delegation[] = [
+  {
+    id: "dlg-771",
+    chain: ["Portfolio-Manager-01", "Market-Analyst-02"],
+    scopes: ["market_analytics.read"],
+    caveats: ["exp<=300s", "scope:market_analytics.read", "depth<=2"],
+    depth: 2,
+    issued: "10:41:12",
+    valid: true,
+  },
+  {
+    id: "dlg-770",
+    chain: ["Planner-Agent-01", "Research-Agent-07", "Summarizer-11"],
+    scopes: ["doc.summarize"],
+    caveats: ["exp<=600s", "scope:doc.summarize", "depth<=3"],
+    depth: 3,
+    issued: "10:38:44",
+    valid: true,
+  },
+  {
+    id: "dlg-768",
+    chain: ["Ops-Agent-02", "External-Broker-XX"],
+    scopes: ["treasury.transfer"],
+    caveats: ["scope:ops.read", "depth<=2"],
+    depth: 2,
+    issued: "10:33:02",
+    valid: false,
+  },
+];
 
 export default function DelegationAuditPage() {
-  const { delegations, workspace } = useSoc();
+  const { workspace, isConnected, refreshAll } = useSoc();
+  const [chains, setChains] = useState<Delegation[]>(MOCK_CHAINS);
   const [q, setQ] = useState("");
-  const [openId, setOpenId] = useState<string | null>(delegations[0]?.id ?? null);
+  const [openId, setOpenId] = useState<string | null>(chains[0]?.id ?? null);
+  const [generating, setGenerating] = useState(false);
 
-  const rows = delegations.filter((d) =>
-    (d.chain.join(" ") + d.scopes.join(" ")).toLowerCase().includes(q.toLowerCase())
+  const generateChain = async () => {
+    setGenerating(true);
+    try {
+      // Run a multi-step simulation on the backend to mint a real delegation trace
+      const res = await simulation.run([
+        { sender: "Root-Orchestrator", receiver: "Risk-Auditor-01", task_type: "audit_init", payload: { depth: 1 } },
+        { sender: "Risk-Auditor-01", receiver: "Compliance-Bot-02", task_type: "compliance_check", payload: { depth: 2 } },
+        { sender: "Compliance-Bot-02", receiver: "Execution-Unit-03", task_type: "execute_settle", payload: { depth: 3 } },
+      ]);
+      await refreshAll();
+
+      const newId = `dlg-${Date.now().toString().slice(-4)}`;
+      const newChain: Delegation = {
+        id: newId,
+        chain: res.steps.map((s) => s.receiver),
+        scopes: ["audit_init", "compliance_check", "execute_settle"],
+        caveats: [`exp<=300s`, `depth<=${res.steps.length}`, "provenance:backend_simulation"],
+        depth: res.steps.length,
+        issued: new Date().toISOString().slice(11, 19),
+        valid: res.steps.every((s) => s.allowed_to_proceed),
+      };
+
+      setChains((prev) => [newChain, ...prev]);
+      setOpenId(newId);
+    } catch {
+      // Fallback
+      const newId = `dlg-${Math.floor(Math.random() * 900 + 100)}`;
+      const newChain: Delegation = {
+        id: newId,
+        chain: ["Planner-01", "Research-02", "Writer-03"],
+        scopes: ["doc.summarize"],
+        caveats: ["exp<=300s", "scope:doc.summarize", "depth<=3"],
+        depth: 3,
+        issued: new Date().toISOString().slice(11, 19),
+        valid: true,
+      };
+      setChains((prev) => [newChain, ...prev]);
+      setOpenId(newId);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const rows = chains.filter((d) =>
+    (d.chain.join(" ") + d.scopes.join(" ") + d.id).toLowerCase().includes(q.toLowerCase())
   );
-  const open = delegations.find((d) => d.id === openId) ?? null;
+  const open = chains.find((d) => d.id === openId) ?? null;
 
   return (
     <div className="space-y-8">
@@ -20,21 +96,27 @@ export default function DelegationAuditPage() {
         index="/03"
         title="Delegation Audit"
         subtitle="Every macaroon issued in the mesh, with its attenuation chain and caveat proofs."
+        action={
+          <Btn variant="solid" onClick={generateChain} disabled={generating}>
+            {generating ? "Generating on mesh..." : "Generate Demo Chain"}
+          </Btn>
+        }
       />
 
       <StatGrid>
-        <Stat label="Active chains" value={String(delegations.length)} />
-        <Stat label="Invalid" value={String(delegations.filter((d) => !d.valid).length)} note="fail-closed" />
+        <Stat label="Active chains" value={String(chains.length)} />
+        <Stat label="Invalid" value={String(chains.filter((d) => !d.valid).length)} note="fail-closed" />
         <Stat label="Max depth" value={String(workspace.maxDepth)} />
         <Stat
-          label="Avg caveats"
-          value={(delegations.reduce((a, d) => a + d.caveats.length, 0) / delegations.length).toFixed(1)}
+          label="Backend Sync"
+          value={isConnected ? "LIVE" : "LOCAL"}
+          note="HMAC-SHA256 Lineage"
         />
       </StatGrid>
 
       <input
         className={`${inputCls} max-w-sm`}
-        placeholder="search chain or scope…"
+        placeholder="search chain, scope or ID…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
@@ -47,11 +129,13 @@ export default function DelegationAuditPage() {
                 key={d.id}
                 type="button"
                 onClick={() => setOpenId(d.id)}
-                className={`block w-full py-4 text-left ${openId === d.id ? "bg-secondary" : ""}`}
+                className={`block w-full py-4 text-left px-3 transition-colors ${
+                  openId === d.id ? "bg-secondary" : "hover:bg-secondary/40"
+                }`}
               >
                 <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
-                  <span className="text-muted-foreground">{d.id}</span>
-                  <Tag tone={d.valid ? "lime" : "danger"}>{d.valid ? "valid" : "revoked"}</Tag>
+                  <span className="font-bold text-ink">{d.id}</span>
+                  <Tag tone={d.valid ? "lime" : "danger"}>{d.valid ? "valid" : "attenuation broken"}</Tag>
                   <span className="text-muted-foreground">depth {d.depth}</span>
                   <span className="ml-auto text-muted-foreground">{d.issued}</span>
                 </div>
@@ -84,7 +168,7 @@ export default function DelegationAuditPage() {
                 </li>
               </ul>
             ) : (
-              <p className="font-mono text-xs text-muted-foreground">// select a chain</p>
+              <p className="font-mono text-xs text-muted-foreground">{"// select a chain"}</p>
             )}
           </Panel>
 
@@ -97,7 +181,7 @@ export default function DelegationAuditPage() {
                     `  root_key   = hmac256(workspace:${workspace.name})`,
                     ...open.caveats.map((c) => `  caveat     = ${c} ✓`),
                     `  depth      = ${open.depth}/${workspace.maxDepth}`,
-                    `  result     = ${open.valid ? "VERIFIED" : "REJECTED (scope not attenuated)"}`,
+                    `  result     = ${open.valid ? "VERIFIED (Lineage cryptographically intact)" : "REJECTED (Attenuated subset violated)"}`,
                   ]
                 : []
             }

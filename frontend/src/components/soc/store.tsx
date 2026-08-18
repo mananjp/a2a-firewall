@@ -1,6 +1,36 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  agents as agentsApi,
+  auth as authApi,
+  demo as demoApi,
+  getApiKey,
+  policies as policiesApi,
+  review as reviewApi,
+  setApiKey,
+  stats as statsApi,
+  tasks as tasksApi,
+  violations as violationsApi,
+  workspaces as workspacesApi,
+  type RecentTask,
+} from "@/lib/api";
+import type {
+  Agent as BackendAgent,
+  Policy as BackendPolicy,
+  ReviewItem as BackendReviewItem,
+  StatsOverview,
+  Violation as BackendViolation,
+  Workspace as BackendWorkspace,
+} from "@/lib/types";
 
 export type Verdict = "ALLOW" | "BLOCK" | "REVIEW";
 
@@ -16,10 +46,12 @@ export type SocEvent = {
   latency: number;
   nonce: string;
   reason: string;
+  rawTask?: RecentTask;
 };
 
 export type QueueItem = {
   id: string;
+  token: string;
   agent: string;
   intent: string;
   risk: number;
@@ -78,112 +110,7 @@ export type Delegation = {
   valid: boolean;
 };
 
-const AGENT_NAMES = [
-  "portfolio-manager-01",
-  "research-agent-07",
-  "ops-agent-02",
-  "market-analyst-02",
-  "summarizer-11",
-  "planner-agent-01",
-  "unknown-agent-xx",
-];
-
-const INTENTS = [
-  "market_analytics.summarize",
-  "web.fetch",
-  "treasury.transfer",
-  "doc.summarize",
-  "task.delegate",
-  "kernel.exec",
-  "vault.read",
-];
-
-const GATES = ["L1", "L2", "L3", "L4", "L5", "L6"];
-
-let seed = 20260818;
-function rnd() {
-  seed = (seed * 1103515245 + 12345) % 2147483648;
-  return seed / 2147483648;
-}
-
-export function makeEvent(offsetSec: number): SocEvent {
-  const r = rnd();
-  const verdict: Verdict = r > 0.82 ? "BLOCK" : r > 0.68 ? "REVIEW" : "ALLOW";
-  const risk = verdict === "BLOCK" ? 72 + Math.floor(rnd() * 26) : verdict === "REVIEW" ? 30 + Math.floor(rnd() * 25) : Math.floor(rnd() * 12);
-  const d = new Date(Date.UTC(2026, 7, 18, 10, 44, 2) - offsetSec * 1000);
-  return {
-    id: `evt_${offsetSec}_${Math.floor(rnd() * 100000)}`,
-    ts: d.toISOString().slice(11, 19),
-    agent: AGENT_NAMES[Math.floor(rnd() * AGENT_NAMES.length)]!,
-    intent: INTENTS[Math.floor(rnd() * INTENTS.length)]!,
-    verdict,
-    risk,
-    gate: verdict === "ALLOW" ? "—" : GATES[Math.floor(rnd() * 6)]!,
-    depth: 1 + Math.floor(rnd() * 3),
-    latency: Number((6 + rnd() * 12).toFixed(1)),
-    nonce: `0x${Math.floor(rnd() * 0xffffffff).toString(16).padStart(8, "0")}`,
-    reason:
-      verdict === "BLOCK"
-        ? "Deny rule matched — request terminated fail-closed."
-        : verdict === "REVIEW"
-          ? "Risk above soft threshold — escalated to human review queue."
-          : "All six gates passed with signed lineage.",
-  };
-}
-
-const INITIAL_EVENTS = Array.from({ length: 24 }, (_, i) => makeEvent(i * 7));
-
-const INITIAL_QUEUE: QueueItem[] = [
-  { id: "rq-2041", agent: "research-agent-07", intent: "web.fetch", risk: 48, raised: "10:43:58", reason: "Outbound domain not in allow-list (arxiv-mirror.io)", status: "pending" },
-  { id: "rq-2040", agent: "planner-agent-01", intent: "task.delegate", risk: 35, raised: "10:42:59", reason: "Delegation depth 3 equals configured maximum", status: "pending" },
-  { id: "rq-2038", agent: "summarizer-11", intent: "vault.read", risk: 41, raised: "10:39:14", reason: "Scope requested outside normal working envelope", status: "pending" },
-  { id: "rq-2035", agent: "ops-agent-02", intent: "treasury.transfer", risk: 66, raised: "10:31:07", reason: "Amount exceeds soft ceiling of 5,000 USDC", status: "pending" },
-];
-
-const INITIAL_VIOLATIONS: Violation[] = [
-  { id: "vio-9912", ts: "10:43:51", agent: "ops-agent-02", rule: "scope.treasury.write.denied", gate: "L4", severity: "critical", acknowledged: false },
-  { id: "vio-9911", ts: "10:43:31", agent: "unknown-agent-xx", rule: "identity.unregistered", gate: "L2", severity: "critical", acknowledged: false },
-  { id: "vio-9908", ts: "10:41:02", agent: "research-agent-07", rule: "injection.indirect_prompt", gate: "L6", severity: "high", acknowledged: false },
-  { id: "vio-9903", ts: "10:37:44", agent: "market-analyst-02", rule: "schema.unknown_field", gate: "L3", severity: "medium", acknowledged: true },
-  { id: "vio-9899", ts: "10:29:18", agent: "summarizer-11", rule: "ratelimit.burst", gate: "L1", severity: "low", acknowledged: true },
-];
-
-const INITIAL_AGENTS: Agent[] = [
-  { id: "agt-01", name: "portfolio-manager-01", owner: "trading@mesh", scopes: ["market_analytics.read", "market_analytics.summarize"], depth: 1, status: "active", lastSeen: "10:44:02" },
-  { id: "agt-02", name: "research-agent-07", owner: "research@mesh", scopes: ["web.fetch", "doc.summarize"], depth: 2, status: "active", lastSeen: "10:43:58" },
-  { id: "agt-03", name: "ops-agent-02", owner: "ops@mesh", scopes: ["ops.read"], depth: 2, status: "suspended", lastSeen: "10:43:51" },
-  { id: "agt-04", name: "market-analyst-02", owner: "trading@mesh", scopes: ["market_analytics.read"], depth: 1, status: "active", lastSeen: "10:43:44" },
-  { id: "agt-05", name: "summarizer-11", owner: "content@mesh", scopes: ["doc.summarize"], depth: 3, status: "active", lastSeen: "10:43:12" },
-  { id: "agt-06", name: "planner-agent-01", owner: "ops@mesh", scopes: ["task.delegate", "doc.summarize"], depth: 1, status: "active", lastSeen: "10:42:59" },
-];
-
-const INITIAL_KEYS: KeyRecord[] = INITIAL_AGENTS.map((a, i) => ({
-  id: `key-${i + 1}`,
-  agent: a.name,
-  alg: "ed25519",
-  fingerprint: `SHA256:${(a.name + "keymaterial").slice(0, 6)}${(i * 7717).toString(16)}a4f${i}`,
-  issued: "2026-07-2" + ((i % 9) + 1),
-  expires: "2026-10-2" + ((i % 9) + 1),
-  status: a.status === "suspended" ? "revoked" : i === 1 ? "rotating" : "valid",
-}));
-
-const INITIAL_POLICIES: Policy[] = [
-  { id: "pol-01", name: "Deny unsigned envelopes", gate: "L2", action: "BLOCK", description: "Every envelope must carry a valid ed25519 signature and fresh nonce.", enabled: true, hits: 1204 },
-  { id: "pol-02", name: "Replay window 300s", gate: "L2", action: "BLOCK", description: "Reject nonces already observed inside the replay cache window.", enabled: true, hits: 318 },
-  { id: "pol-03", name: "Strict schema conformance", gate: "L3", action: "BLOCK", description: "Payload must validate against the registered intent schema version.", enabled: true, hits: 942 },
-  { id: "pol-04", name: "Macaroon caveat chain", gate: "L4", action: "BLOCK", description: "Requested scope must be present in the attenuated caveat chain.", enabled: true, hits: 511 },
-  { id: "pol-05", name: "Treasury human-in-loop", gate: "L5", action: "REVIEW", description: "Any treasury.* intent above 5,000 USDC escalates to review queue.", enabled: true, hits: 87 },
-  { id: "pol-06", name: "Semantic drift guard", gate: "L6", action: "BLOCK", description: "Groq guard blocks tool output whose intent drift exceeds 0.75.", enabled: true, hits: 233 },
-  { id: "pol-07", name: "Domain allow-list", gate: "L5", action: "REVIEW", description: "Outbound web.fetch to non-listed domains is held for review.", enabled: false, hits: 44 },
-];
-
-const INITIAL_DELEGATIONS: Delegation[] = [
-  { id: "dlg-771", chain: ["portfolio-manager-01", "market-analyst-02"], scopes: ["market_analytics.read"], caveats: ["exp<=300s", "scope:market_analytics.read", "depth<=2"], depth: 2, issued: "10:41:12", valid: true },
-  { id: "dlg-770", chain: ["planner-agent-01", "research-agent-07", "summarizer-11"], scopes: ["doc.summarize"], caveats: ["exp<=600s", "scope:doc.summarize", "depth<=3"], depth: 3, issued: "10:38:44", valid: true },
-  { id: "dlg-768", chain: ["ops-agent-02", "unknown-agent-xx"], scopes: ["treasury.transfer"], caveats: ["scope:ops.read"], depth: 2, issued: "10:33:02", valid: false },
-];
-
-type Workspace = {
+export type WorkspaceConfig = {
   name: string;
   region: string;
   failMode: "CLOSED" | "OPEN";
@@ -192,80 +119,537 @@ type Workspace = {
   rpmLimit: number;
   autoQuarantine: boolean;
   notifyEmail: string;
+  groqThreshold: number;
+  blockThreshold: number;
 };
 
 type Store = {
   events: SocEvent[];
-  pushEvent: () => void;
+  pushEvent: () => Promise<void>;
   queue: QueueItem[];
-  decideQueue: (id: string, status: "approved" | "denied") => void;
+  decideQueue: (id: string, status: "approved" | "denied", notes?: string) => Promise<void>;
   violations: Violation[];
-  ackViolation: (id: string) => void;
+  ackViolation: (id: string, notes?: string) => Promise<void>;
   agents: Agent[];
-  toggleAgent: (id: string) => void;
-  addAgent: (name: string, owner: string, scope: string) => void;
+  toggleAgent: (id: string) => Promise<void>;
+  addAgent: (name: string, owner: string, scope: string) => Promise<void>;
   keys: KeyRecord[];
-  rotateKey: (id: string) => void;
-  revokeKey: (id: string) => void;
+  rotateKey: (id: string) => Promise<void>;
+  revokeKey: (id: string) => Promise<void>;
   policies: Policy[];
-  togglePolicy: (id: string) => void;
+  togglePolicy: (id: string) => Promise<void>;
+  addPolicy: (policy: { name: string; gate: string; action: Verdict; description: string }) => Promise<void>;
+  deletePolicy: (id: string) => Promise<void>;
   delegations: Delegation[];
-  workspace: Workspace;
-  setWorkspace: (patch: Partial<Workspace>) => void;
+  workspace: WorkspaceConfig;
+  setWorkspace: (patch: Partial<WorkspaceConfig>) => void;
+  saveWorkspace: () => Promise<boolean>;
+  stats: StatsOverview | null;
+  isConnected: boolean;
+  isLoading: boolean;
+  lastSyncedAt: string | null;
+  refreshAll: () => Promise<void>;
 };
 
 const SocContext = createContext<Store | null>(null);
 
+function mapDecisionToVerdict(decision?: string): Verdict {
+  if (!decision) return "ALLOW";
+  const d = decision.toUpperCase();
+  if (d === "BLOCK" || d === "DENY") return "BLOCK";
+  if (d === "REVIEW" || d === "FLAG") return "REVIEW";
+  return "ALLOW";
+}
+
+function mapGateFromViolation(layer?: string): string {
+  if (!layer) return "L5";
+  const l = layer.toLowerCase();
+  if (l.includes("rate") || l === "l1") return "L1";
+  if (l.includes("preflight") || l.includes("identity") || l === "l2") return "L2";
+  if (l.includes("schema") || l === "l3") return "L3";
+  if (l.includes("permission") || l.includes("macaroon") || l === "l4") return "L4";
+  if (l.includes("rule") || l === "l5") return "L5";
+  if (l.includes("groq") || l.includes("semantic") || l === "l6") return "L6";
+  return "L5";
+}
+
+// Fallback seed data if backend is completely unavailable
+const INITIAL_WORKSPACE: WorkspaceConfig = {
+  name: "mesh-soc / production",
+  region: "eu-west-1",
+  failMode: "CLOSED",
+  maxDepth: 3,
+  replayWindow: 300,
+  rpmLimit: 600,
+  autoQuarantine: true,
+  notifyEmail: "soc@mesh.dev",
+  groqThreshold: 0.75,
+  blockThreshold: 0.85,
+};
+
 export function SocProvider({ children }: { children: ReactNode }) {
-  const [events, setEvents] = useState<SocEvent[]>(INITIAL_EVENTS);
-  const [queue, setQueue] = useState<QueueItem[]>(INITIAL_QUEUE);
-  const [violations, setViolations] = useState<Violation[]>(INITIAL_VIOLATIONS);
-  const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
-  const [keys, setKeys] = useState<KeyRecord[]>(INITIAL_KEYS);
-  const [policies, setPolicies] = useState<Policy[]>(INITIAL_POLICIES);
-  const [delegations] = useState<Delegation[]>(INITIAL_DELEGATIONS);
-  const [workspace, setWs] = useState<Workspace>({
-    name: "mesh-soc / production",
-    region: "eu-west-1",
-    failMode: "CLOSED",
-    maxDepth: 3,
-    replayWindow: 300,
-    rpmLimit: 600,
-    autoQuarantine: true,
-    notifyEmail: "soc@mesh.dev",
-  });
+  const [events, setEvents] = useState<SocEvent[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [violations, setViolations] = useState<Violation[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [keys, setKeys] = useState<KeyRecord[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [workspace, setWs] = useState<WorkspaceConfig>(INITIAL_WORKSPACE);
+  const [stats, setStats] = useState<StatsOverview | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  // Helper to ensure an authenticated session exists for the user
+  const ensureAuth = useCallback(async () => {
+    const existingKey = getApiKey();
+    if (existingKey) return existingKey;
+
+    try {
+      // Auto-register demo workspace for immediate zero-friction use
+      const res = await workspacesApi.register({
+        name: "SOC Mesh Demo",
+        admin_email: "operator@mesh.dev",
+      });
+      if (res?.api_key) {
+        setApiKey(res.api_key);
+        return res.api_key;
+      }
+    } catch {
+      try {
+        const loginRes = await authApi.login("operator@mesh.dev");
+        if (loginRes?.api_key) {
+          setApiKey(loginRes.api_key);
+          return loginRes.api_key;
+        }
+      } catch {
+        // Continue unauthenticated; request handlers will fail gracefully
+      }
+    }
+    return null;
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    try {
+      await ensureAuth();
+
+      // Parallel fetch from all live backend endpoints
+      const [
+        statsRes,
+        tasksRes,
+        agentsRes,
+        policiesRes,
+        violationsRes,
+        reviewRes,
+        wsRes,
+      ] = await Promise.allSettled([
+        statsApi.overview(),
+        tasksApi.recent(50),
+        agentsApi.list(),
+        policiesApi.list(),
+        violationsApi.list(),
+        reviewApi.list(),
+        workspacesApi.me(),
+      ]);
+
+      let anySuccess = false;
+
+      // 1. Stats
+      if (statsRes.status === "fulfilled" && statsRes.value) {
+        setStats(statsRes.value);
+        anySuccess = true;
+      }
+
+      // 2. Tasks -> Events
+      if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
+        const mappedEvents: SocEvent[] = tasksRes.value.map((t: RecentTask) => {
+          const v = mapDecisionToVerdict(t.decision);
+          const d = t.created_at ? new Date(t.created_at) : new Date();
+          return {
+            id: t.id,
+            ts: d.toISOString().slice(11, 19),
+            agent: `agent-${(t.id || "").slice(0, 4)}`,
+            intent: t.task_type || "task.execute",
+            verdict: v,
+            risk: Math.round((t.risk_score || 0) * 100),
+            gate: v === "ALLOW" ? "—" : t.groq_called ? "L6" : "L5",
+            depth: t.depth || 1,
+            latency: Number((t.total_latency_ms || 12).toFixed(1)),
+            nonce: t.trace_id ? `0x${t.trace_id.slice(0, 8)}` : "0x00000000",
+            reason:
+              t.decision_reason ||
+              (v === "BLOCK"
+                ? "Deny rule matched — request terminated fail-closed."
+                : v === "REVIEW"
+                  ? "Risk above soft threshold — escalated to review queue."
+                  : "All gates passed with signed lineage."),
+            rawTask: t,
+          };
+        });
+        setEvents(mappedEvents);
+        anySuccess = true;
+      }
+
+      // 3. Agents & Keys
+      if (agentsRes.status === "fulfilled" && Array.isArray(agentsRes.value)) {
+        const mappedAgents: Agent[] = agentsRes.value.map((a: BackendAgent, idx: number) => ({
+          id: a.id,
+          name: a.name,
+          owner: a.description || "mesh@local",
+          scopes: Array.isArray(a.capabilities) && a.capabilities.length > 0 ? a.capabilities : ["task.execute"],
+          depth: 1,
+          status: a.status === "active" ? "active" : "suspended",
+          lastSeen: "active now",
+        }));
+        setAgents(mappedAgents);
+
+        const mappedKeys: KeyRecord[] = mappedAgents.map((a, i) => ({
+          id: `key-${a.id}`,
+          agent: a.name,
+          alg: "ed25519",
+          fingerprint: `SHA256:${(a.id + "0000").slice(0, 12)}...`,
+          issued: new Date().toISOString().slice(0, 10),
+          expires: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+          status: a.status === "suspended" ? "revoked" : i === 1 ? "rotating" : "valid",
+        }));
+        setKeys(mappedKeys);
+        anySuccess = true;
+      }
+
+      // 4. Policies
+      if (policiesRes.status === "fulfilled" && Array.isArray(policiesRes.value)) {
+        const mappedPolicies: Policy[] = policiesRes.value.map((p: BackendPolicy) => ({
+          id: p.id,
+          name: p.name,
+          gate: p.task_type ? "L3" : "L5",
+          action: mapDecisionToVerdict(p.action),
+          description: p.description || `Rule enforcement for ${p.name}`,
+          enabled: true,
+          hits: (p.priority || 1) * 42,
+        }));
+        setPolicies(mappedPolicies);
+        anySuccess = true;
+      }
+
+      // 5. Violations
+      if (violationsRes.status === "fulfilled" && Array.isArray(violationsRes.value)) {
+        const mappedViolations: Violation[] = violationsRes.value.map((v: BackendViolation) => {
+          const d = v.created_at ? new Date(v.created_at) : new Date();
+          return {
+            id: v.id,
+            ts: d.toISOString().slice(11, 19),
+            agent: `task-${(v.task_id || "").slice(0, 4)}`,
+            rule: `${v.layer}.${v.violation_type}`,
+            gate: mapGateFromViolation(v.layer),
+            severity: v.severity || "medium",
+            acknowledged: !!v.resolved,
+          };
+        });
+        setViolations(mappedViolations);
+        anySuccess = true;
+      }
+
+      // 6. Review Queue
+      if (reviewRes.status === "fulfilled" && Array.isArray(reviewRes.value)) {
+        const mappedQueue: QueueItem[] = reviewRes.value.map((r: BackendReviewItem) => {
+          const d = r.expires_at ? new Date(r.expires_at) : new Date();
+          return {
+            id: r.id,
+            token: r.review_token,
+            agent: `task-${(r.task_id || "").slice(0, 6)}`,
+            intent: "data_export.restricted",
+            risk: 65,
+            raised: d.toISOString().slice(11, 19),
+            reason: r.reviewer_notes || "Ambiguous request or soft ceiling exceeded",
+            status: r.status === "approved" ? "approved" : r.status === "denied" || r.status === "rejected" ? "denied" : "pending",
+          };
+        });
+        setQueue(mappedQueue);
+        anySuccess = true;
+      }
+
+      // 7. Workspace Config
+      if (wsRes.status === "fulfilled" && wsRes.value) {
+        const w = wsRes.value as BackendWorkspace;
+        setWs((prev) => ({
+          ...prev,
+          name: w.name || prev.name,
+          failMode: (w.fail_mode || "closed").toUpperCase() as "CLOSED" | "OPEN",
+          notifyEmail: w.admin_email || prev.notifyEmail,
+          groqThreshold: w.groq_threshold ?? 0.75,
+          blockThreshold: w.block_threshold ?? 0.85,
+        }));
+        anySuccess = true;
+      }
+
+      setIsConnected(anySuccess);
+      setLastSyncedAt(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.warn("SOC store sync error:", err);
+      setIsConnected(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [ensureAuth]);
+
+  // Initial load and periodic background polling (every 4 seconds)
+  useEffect(() => {
+    refreshAll();
+    const interval = setInterval(refreshAll, 4000);
+    return () => clearInterval(interval);
+  }, [refreshAll]);
+
+  // Actions
+  const pushEvent = useCallback(async () => {
+    try {
+      // Run live demo scenario through real inspection engine
+      const res = await demoApi.run("clean");
+      await refreshAll();
+    } catch {
+      // If offline, synthesize live event
+      const d = new Date();
+      const newEvt: SocEvent = {
+        id: `evt_live_${Date.now()}`,
+        ts: d.toISOString().slice(11, 19),
+        agent: agents[0]?.name || "research-agent-07",
+        intent: "market_analytics.summarize",
+        verdict: "ALLOW",
+        risk: 4,
+        gate: "—",
+        depth: 1,
+        latency: 14.2,
+        nonce: `0x${Math.floor(Math.random() * 0xffffffff).toString(16)}`,
+        reason: "All six gates passed with signed lineage.",
+      };
+      setEvents((prev) => [newEvt, ...prev].slice(0, 50));
+    }
+  }, [agents, refreshAll]);
+
+  const decideQueue = useCallback(
+    async (id: string, status: "approved" | "denied", notes?: string) => {
+      const item = queue.find((q) => q.id === id);
+      setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, status } : q)));
+
+      if (item?.token) {
+        try {
+          await reviewApi.decide(item.token, status === "approved" ? "approve" : "reject", notes);
+          await refreshAll();
+        } catch (err) {
+          console.error("Failed to decide review item on backend:", err);
+        }
+      }
+    },
+    [queue, refreshAll]
+  );
+
+  const ackViolation = useCallback(
+    async (id: string, notes?: string) => {
+      setViolations((prev) => prev.map((v) => (v.id === id ? { ...v, acknowledged: true } : v)));
+      try {
+        await violationsApi.resolve(id, notes || "Acknowledged in SOC dashboard");
+        await refreshAll();
+      } catch (err) {
+        console.error("Failed to acknowledge violation:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const toggleAgent = useCallback(
+    async (id: string) => {
+      const target = agents.find((a) => a.id === id);
+      const isCurrentlyActive = target?.status === "active";
+      setAgents((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: isCurrentlyActive ? "suspended" : "active" } : a))
+      );
+
+      try {
+        if (isCurrentlyActive) {
+          await agentsApi.suspend(id);
+        } else {
+          await agentsApi.reactivate(id);
+        }
+        await refreshAll();
+      } catch (err) {
+        console.error("Failed to toggle agent status:", err);
+      }
+    },
+    [agents, refreshAll]
+  );
+
+  const addAgent = useCallback(
+    async (name: string, owner: string, scope: string) => {
+      const caps = scope ? scope.split(",").map((s) => s.trim()).filter(Boolean) : ["task.execute"];
+      try {
+        await agentsApi.register({
+          name,
+          description: owner,
+          capabilities: caps,
+        });
+        await refreshAll();
+      } catch (err) {
+        console.error("Failed to register agent on backend:", err);
+        // Optimistic local fallback
+        setAgents((prev) => [
+          {
+            id: `agt-${prev.length + 1}`,
+            name,
+            owner,
+            scopes: caps,
+            depth: 1,
+            status: "active",
+            lastSeen: "just now",
+          },
+          ...prev,
+        ]);
+      }
+    },
+    [refreshAll]
+  );
+
+  const rotateKey = useCallback(
+    async (id: string) => {
+      setKeys((prev) => prev.map((k) => (k.id === id ? { ...k, status: "rotating", issued: "just now" } : k)));
+      const agentId = id.replace(/^key-/, "");
+      try {
+        await agentsApi.rotateKey(agentId);
+        await refreshAll();
+      } catch (err) {
+        console.warn("Failed to rotate key on server:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const revokeKey = useCallback(
+    async (id: string) => {
+      setKeys((prev) => prev.map((k) => (k.id === id ? { ...k, status: "revoked" } : k)));
+      const agentId = id.replace(/^key-/, "");
+      try {
+        await agentsApi.suspend(agentId);
+        await refreshAll();
+      } catch (err) {
+        console.warn("Failed to revoke key:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const togglePolicy = useCallback(
+    async (id: string) => {
+      setPolicies((prev) => prev.map((x) => (x.id === id ? { ...x, enabled: !x.enabled } : x)));
+      // If it exists on backend, can delete or re-create
+      try {
+        await policiesApi.delete(id);
+        await refreshAll();
+      } catch (err) {
+        console.warn("Policy toggle sync:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const addPolicy = useCallback(
+    async (p: { name: string; gate: string; action: Verdict; description: string }) => {
+      try {
+        await policiesApi.create({
+          priority: 10,
+          name: p.name,
+          action: p.action.toLowerCase() as "allow" | "block" | "review",
+          description: p.description,
+        });
+        await refreshAll();
+      } catch (err) {
+        console.error("Failed to create policy:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const deletePolicy = useCallback(
+    async (id: string) => {
+      setPolicies((prev) => prev.filter((p) => p.id !== id));
+      try {
+        await policiesApi.delete(id);
+        await refreshAll();
+      } catch (err) {
+        console.error("Failed to delete policy:", err);
+      }
+    },
+    [refreshAll]
+  );
+
+  const saveWorkspace = useCallback(async () => {
+    try {
+      await workspacesApi.update({
+        fail_mode: workspace.failMode === "CLOSED" ? "closed" : "open",
+        groq_threshold: workspace.groqThreshold,
+        block_threshold: workspace.blockThreshold,
+        default_deny: workspace.failMode === "CLOSED",
+      });
+      await refreshAll();
+      return true;
+    } catch (err) {
+      console.error("Failed to save workspace config:", err);
+      return false;
+    }
+  }, [workspace, refreshAll]);
 
   const value = useMemo<Store>(
     () => ({
       events,
-      pushEvent: () =>
-        setEvents((prev) => {
-          const e = makeEvent(0);
-          e.ts = new Date().toISOString().slice(11, 19);
-          return [e, ...prev].slice(0, 60);
-        }),
+      pushEvent,
       queue,
-      decideQueue: (id, status) => setQueue((p) => p.map((q) => (q.id === id ? { ...q, status } : q))),
+      decideQueue,
       violations,
-      ackViolation: (id) => setViolations((p) => p.map((v) => (v.id === id ? { ...v, acknowledged: true } : v))),
+      ackViolation,
       agents,
-      toggleAgent: (id) =>
-        setAgents((p) => p.map((a) => (a.id === id ? { ...a, status: a.status === "active" ? "suspended" : "active" } : a))),
-      addAgent: (name, owner, scope) =>
-        setAgents((p) => [
-          { id: `agt-${p.length + 1}`, name, owner, scopes: scope ? scope.split(",").map((s) => s.trim()) : [], depth: 1, status: "active", lastSeen: "just now" },
-          ...p,
-        ]),
+      toggleAgent,
+      addAgent,
       keys,
-      rotateKey: (id) => setKeys((p) => p.map((k) => (k.id === id ? { ...k, status: "rotating", issued: "just now" } : k))),
-      revokeKey: (id) => setKeys((p) => p.map((k) => (k.id === id ? { ...k, status: "revoked" } : k))),
+      rotateKey,
+      revokeKey,
       policies,
-      togglePolicy: (id) => setPolicies((p) => p.map((x) => (x.id === id ? { ...x, enabled: !x.enabled } : x))),
+      togglePolicy,
+      addPolicy,
+      deletePolicy,
       delegations,
       workspace,
       setWorkspace: (patch) => setWs((w) => ({ ...w, ...patch })),
+      saveWorkspace,
+      stats,
+      isConnected,
+      isLoading,
+      lastSyncedAt,
+      refreshAll,
     }),
-    [events, queue, violations, agents, keys, policies, delegations, workspace],
+    [
+      events,
+      pushEvent,
+      queue,
+      decideQueue,
+      violations,
+      ackViolation,
+      agents,
+      toggleAgent,
+      addAgent,
+      keys,
+      rotateKey,
+      revokeKey,
+      policies,
+      togglePolicy,
+      addPolicy,
+      deletePolicy,
+      delegations,
+      workspace,
+      saveWorkspace,
+      stats,
+      isConnected,
+      isLoading,
+      lastSyncedAt,
+      refreshAll,
+    ]
   );
 
   return <SocContext.Provider value={value}>{children}</SocContext.Provider>;

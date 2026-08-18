@@ -41,9 +41,9 @@
   --color-violet: var(--violet);
   --color-violet-foreground: var(--violet-foreground);
   --color-danger: var(--danger);
-  --font-display: "Archivo", "Arial Black", sans-serif;
-  --font-sans: "Archivo", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: var(--font-archivo), "Archivo", "Arial Black", sans-serif;
+  --font-sans: var(--font-archivo), "Archivo", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root {

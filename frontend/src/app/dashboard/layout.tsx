@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/site/Chrome";
+import { useSoc } from "@/components/soc/store";
+import { clearApiKey } from "@/lib/api";
 
 const NAV: { href: string; label: string; group: string }[] = [
   { href: "/dashboard", label: "Overview", group: "Operations" },
@@ -28,6 +30,8 @@ export default function DashboardLayout({
   const [time, setTime] = useState("--:--:--");
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { workspace, isConnected, lastSyncedAt } = useSoc();
 
   useEffect(() => {
     const tick = () => setTime(new Date().toISOString().slice(11, 19));
@@ -35,6 +39,11 @@ export default function DashboardLayout({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+
+  const handleSignOut = () => {
+    clearApiKey();
+    router.push("/login");
+  };
 
   const groups = [...new Set(NAV.map((n) => n.group))];
 
@@ -44,7 +53,7 @@ export default function DashboardLayout({
         <div className="flex min-w-0 items-center gap-4">
           <Logo />
           <span className="hidden border-l border-ink/20 pl-4 label-mono text-muted-foreground sm:block">
-            SOC / demo workspace
+            SOC / {workspace.name}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -52,12 +61,23 @@ export default function DashboardLayout({
             <div>SYS.TIME</div>
             <div className="text-ink">{time}</div>
           </div>
-          <span className="hidden border border-ink bg-lime px-3 py-2 label-mono text-lime-foreground sm:inline-block">
-            Mesh secure
-          </span>
-          <Link href="/login" className="border border-ink px-4 py-2 label-mono hover:bg-secondary">
+          {isConnected ? (
+            <span className="hidden items-center gap-1.5 border border-ink bg-lime px-3 py-2 label-mono text-lime-foreground sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-black animate-pulse" />
+              LIVE BACKEND
+            </span>
+          ) : (
+            <span className="hidden items-center gap-1.5 border border-ink bg-amber-500/20 px-3 py-2 label-mono text-amber-900 dark:text-amber-300 sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              CONNECTING...
+            </span>
+          )}
+          <button
+            onClick={handleSignOut}
+            className="border border-ink px-4 py-2 label-mono hover:bg-secondary"
+          >
             Sign out
-          </Link>
+          </button>
           <button
             onClick={() => setOpen((o) => !o)}
             className="border border-ink px-3 py-2 label-mono lg:hidden"
@@ -97,6 +117,11 @@ export default function DashboardLayout({
               })}
             </div>
           ))}
+          {lastSyncedAt && (
+            <div className="p-4 font-mono text-[10px] text-muted-foreground">
+              Synced: {lastSyncedAt}
+            </div>
+          )}
         </aside>
 
         <main className="min-w-0 px-4 py-8 lg:px-8">{children}</main>

@@ -5,9 +5,20 @@ import { useSoc } from "@/components/soc/store";
 import { Bar, Btn, PageHead, Panel, Stat, StatGrid, Tag } from "@/components/soc/ui";
 
 export default function ReviewQueuePage() {
-  const { queue, decideQueue } = useSoc();
+  const { queue, decideQueue, isConnected } = useSoc();
   const [tab, setTab] = useState<"pending" | "approved" | "denied">("pending");
+  const [actingId, setActingId] = useState<string | null>(null);
+
   const rows = queue.filter((q) => q.status === tab);
+
+  const handleDecision = async (id: string, decision: "approved" | "denied") => {
+    setActingId(id);
+    try {
+      await decideQueue(id, decision);
+    } finally {
+      setActingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -21,7 +32,7 @@ export default function ReviewQueuePage() {
         <Stat label="Pending" value={String(queue.filter((q) => q.status === "pending").length)} />
         <Stat label="Approved" value={String(queue.filter((q) => q.status === "approved").length)} />
         <Stat label="Denied" value={String(queue.filter((q) => q.status === "denied").length)} />
-        <Stat label="SLA" value="< 5 min" note="median decision time" />
+        <Stat label="Status" value={isConnected ? "CONNECTED" : "OFFLINE"} note="Live REST review gateway" />
       </StatGrid>
 
       <div className="flex flex-wrap gap-2">
@@ -38,7 +49,7 @@ export default function ReviewQueuePage() {
             <div key={q.id} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                  <span>{q.id}</span>
+                  <span>ID: {q.id.slice(0, 12)}</span>
                   <span>{q.raised}</span>
                   <Tag tone={q.risk > 60 ? "danger" : "violet"}>risk {q.risk}%</Tag>
                 </div>
@@ -50,11 +61,19 @@ export default function ReviewQueuePage() {
               <Bar value={q.risk} tone={q.risk > 60 ? "danger" : "violet"} />
               {q.status === "pending" ? (
                 <div className="flex gap-2">
-                  <Btn variant="lime" onClick={() => decideQueue(q.id, "approved")}>
-                    Approve
+                  <Btn
+                    variant="lime"
+                    disabled={actingId === q.id}
+                    onClick={() => handleDecision(q.id, "approved")}
+                  >
+                    {actingId === q.id ? "Saving..." : "Approve"}
                   </Btn>
-                  <Btn variant="danger" onClick={() => decideQueue(q.id, "denied")}>
-                    Deny
+                  <Btn
+                    variant="danger"
+                    disabled={actingId === q.id}
+                    onClick={() => handleDecision(q.id, "denied")}
+                  >
+                    {actingId === q.id ? "Saving..." : "Deny"}
                   </Btn>
                 </div>
               ) : (
@@ -62,7 +81,11 @@ export default function ReviewQueuePage() {
               )}
             </div>
           ))}
-          {!rows.length && <p className="py-6 font-mono text-xs text-muted-foreground">// queue empty</p>}
+          {!rows.length && (
+            <p className="py-6 font-mono text-xs text-muted-foreground">
+              {"// Review queue is currently empty for "}{tab}{" items."}
+            </p>
+          )}
         </div>
       </Panel>
     </div>
