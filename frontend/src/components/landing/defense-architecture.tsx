@@ -83,7 +83,7 @@ export function DefenseArchitecture() {
 
               <div className="rounded-xl bg-surface-sunken p-4 border border-hairline font-mono text-[12px] space-y-2 text-ink-muted">
                 <div className="text-accent font-semibold text-[11px] pb-1 border-b border-hairline">
-                  // A2A Wire Protocol Header Signature
+                  {"// A2A Wire Protocol Header Signature"}
                 </div>
                 <div><span className="text-ink-faint">X-Agent-ID:</span> &quot;planner-agent-01&quot;</div>
                 <div><span className="text-ink-faint">X-Signature:</span> &quot;ed25519:7f8a9e2b1c4d...&quot;</div>
@@ -127,7 +127,7 @@ export function DefenseArchitecture() {
 
               <div className="rounded-xl bg-surface-sunken p-4 border border-hairline font-mono text-[12px] space-y-2 text-ink-muted">
                 <div className="text-accent font-semibold text-[11px] pb-1 border-b border-hairline">
-                  // Macaroon Caveat Chain Verification
+                  {"// Macaroon Caveat Chain Verification"}
                 </div>
                 <div><span className="text-ink-faint">Root Issuer:</span> admin (full_access)</div>
                 <div><span className="text-ink-faint">Hop 1 [Planner]:</span> caveat(&quot;scope:finance_read&quot;)</div>
@@ -171,7 +171,7 @@ export function DefenseArchitecture() {
 
               <div className="rounded-xl bg-surface-sunken p-4 border border-hairline font-mono text-[12px] space-y-2 text-ink-muted">
                 <div className="text-accent font-semibold text-[11px] pb-1 border-b border-hairline">
-                  // Groq LPU Inference Evaluation
+                  {"// Groq LPU Inference Evaluation"}
                 </div>
                 <div><span className="text-ink-faint">Model:</span> &quot;openai/gpt-oss-120b&quot;</div>
                 <div><span className="text-ink-faint">Inference Time:</span> 18.5ms</div>

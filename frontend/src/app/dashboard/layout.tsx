@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; group: string }[] = [
   { href: "/dashboard", label: "Overview", group: "Operations" },
   { href: "/dashboard/inspector", label: "Live Inspector", group: "Operations" },
   { href: "/dashboard/delegation-audit", label: "Delegation Audit", group: "Operations" },
+  { href: "/dashboard/audit", label: "Chain Audit Log", group: "Operations" },
   { href: "/dashboard/delegation-demo", label: "Delegation Demo", group: "Operations" },
   { href: "/dashboard/review-queue", label: "Review Queue", group: "Governance" },
   { href: "/dashboard/violations", label: "Violations", group: "Governance" },
@@ -21,6 +22,7 @@ const NAV: { href: string; label: string; group: string }[] = [
   { href: "/dashboard/policies", label: "Firewall Policies", group: "Control" },
   { href: "/dashboard/workspace", label: "Workspace", group: "Control" },
 ];
+
 
 export default function DashboardLayout({
   children,

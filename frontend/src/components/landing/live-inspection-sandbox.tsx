@@ -787,7 +787,7 @@ export function LiveInspectionSandbox() {
             {/* Headers Box */}
             <div className="rounded-xl bg-[#111622] p-4 border border-slate-800 space-y-2">
               <div className="text-indigo-400 font-bold text-[11.5px] pb-1.5 border-b border-slate-800 flex items-center justify-between">
-                <span>// A2A Wire Protocol Headers</span>
+                <span>{"// A2A Wire Protocol Headers"}</span>
                 <span className="text-[10.5px] text-slate-500">Ed25519 & Macaroon v2</span>
               </div>
               <div className="truncate">
@@ -810,7 +810,7 @@ export function LiveInspectionSandbox() {
             {/* Payload Body Box */}
             <div className="rounded-xl bg-[#111622] p-4 border border-slate-800 space-y-2">
               <div className="text-indigo-400 font-bold text-[11.5px] pb-1.5 border-b border-slate-800 flex items-center justify-between">
-                <span>// Intercepted Payload Body</span>
+                <span>{"// Intercepted Payload Body"}</span>
                 <span className="text-[10.5px] text-amber-400 font-semibold">Type: {currentScenario.taskType}</span>
               </div>
               <pre className="text-[11.5px] text-slate-200 overflow-x-auto p-1 leading-relaxed font-mono">
@@ -855,7 +855,7 @@ export function LiveInspectionSandbox() {
             <div className="p-3.5 rounded-xl bg-[#111622] border border-slate-800">
               <div className="text-indigo-400 font-bold text-[11.5px] mb-1 flex items-center gap-1.5">
                 <Bot size={13} />
-                // Downstream Receiver Agent Enclave State
+                {"// Downstream Receiver Agent Enclave State"}
               </div>
               <p className="text-[12.5px] text-slate-200 leading-relaxed pt-1">
                 {currentScenario.receiverResponse}
