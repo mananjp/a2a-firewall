@@ -31,7 +31,7 @@ export default function OverviewPage() {
         subtitle={`Aggregate posture across the six-gate kernel. Fail mode ${workspace.failMode}, all gates armed.`}
         action={
           <Link
-            href="/dashboard/attack-demo"
+            href="/dashboard/demo"
             className="group inline-flex items-center gap-2 border border-ink bg-ink px-5 py-3 label-mono text-paper transition-colors hover:border-violet hover:bg-violet"
           >
             Run attack demo

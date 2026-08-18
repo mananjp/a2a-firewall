@@ -9,16 +9,15 @@ import { clearApiKey } from "@/lib/api";
 
 const NAV: { href: string; label: string; group: string }[] = [
   { href: "/dashboard", label: "Overview", group: "Operations" },
-  { href: "/dashboard/inspector", label: "Live Inspector", group: "Operations" },
-  { href: "/dashboard/delegation-audit", label: "Delegation Audit", group: "Operations" },
-  { href: "/dashboard/audit", label: "Chain Audit Log", group: "Operations" },
+  { href: "/dashboard/telemetry", label: "Live Inspector", group: "Operations" },
+  { href: "/dashboard/audit", label: "Delegation Audit", group: "Operations" },
   { href: "/dashboard/delegation-demo", label: "Delegation Demo", group: "Operations" },
-  { href: "/dashboard/review-queue", label: "Review Queue", group: "Governance" },
+  { href: "/dashboard/review", label: "Review Queue", group: "Governance" },
   { href: "/dashboard/violations", label: "Violations", group: "Governance" },
   { href: "/dashboard/simulation", label: "Simulation", group: "Labs" },
-  { href: "/dashboard/attack-demo", label: "Live Attack Demo", group: "Labs" },
+  { href: "/dashboard/demo", label: "Live Attack Demo", group: "Labs" },
   { href: "/dashboard/identity", label: "Identity & Keys", group: "Control" },
-  { href: "/dashboard/registry", label: "Agent Registry", group: "Control" },
+  { href: "/dashboard/agents", label: "Agent Registry", group: "Control" },
   { href: "/dashboard/policies", label: "Firewall Policies", group: "Control" },
   { href: "/dashboard/workspace", label: "Workspace", group: "Control" },
 ];
