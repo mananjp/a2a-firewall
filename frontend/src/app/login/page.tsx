@@ -7,8 +7,6 @@ import { useState } from "react";
 import { Logo } from "@/components/site/Chrome";
 import { auth, setApiKey, workspaces } from "@/lib/api";
 
-import { Sandbox } from "@/components/site/Sandbox";
-
 const TABS = ["Sign In", "Provision", "API Key"] as const;
 
 const PERSONAS = [
@@ -108,31 +106,35 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.25fr_1fr]">
-      {/* left panel - interactive sandbox */}
-      <div className="relative hidden flex-col justify-between border-r border-ink bg-secondary p-8 lg:flex overflow-y-auto max-h-screen">
-        <div className="space-y-6">
-          <div className="relative flex items-center gap-2 text-ink">
-            <span className="grid h-6 w-6 grid-cols-2 grid-rows-2 gap-[2px]">
-              <span className="bg-ink" />
-              <span className="bg-violet" />
-              <span className="bg-lime" />
-              <span className="bg-ink" />
-            </span>
-            <span className="font-display text-lg font-extrabold tracking-tight">A2A_</span>
-          </div>
-          <div>
-            <h1 className="font-display text-3xl font-extrabold uppercase tracking-tight text-ink">
-              Governance Sandbox
-            </h1>
-            <p className="mt-2 max-w-sm font-mono text-xs leading-relaxed text-muted-foreground">
-              Intercept, inspect and adjudicate inter-agent messages across the six-gate kernel.
-            </p>
-          </div>
-          <div className="border border-ink bg-paper p-1">
-            <Sandbox />
-          </div>
+    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+      {/* left panel */}
+      <div className="relative hidden flex-col justify-between border-r border-ink bg-ink p-12 text-paper lg:flex">
+        <div className="grid-paper absolute inset-0 opacity-20" />
+        <div className="relative flex items-center gap-2">
+          <span className="grid h-6 w-6 grid-cols-2 grid-rows-2 gap-[2px]">
+            <span className="bg-paper" />
+            <span className="bg-violet" />
+            <span className="bg-lime" />
+            <span className="bg-paper" />
+          </span>
+          <span className="font-display text-lg font-extrabold">A2A_</span>
         </div>
+        <div className="relative">
+          <h1 className="font-display text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[0.85]">
+            Access
+            <br />
+            Governance
+            <br />
+            Mesh
+          </h1>
+          <p className="mt-6 max-w-sm font-mono text-xs leading-relaxed text-paper/60">
+            Six-gate inspection, cryptographic lineage and deterministic verdicts for every inter-agent request.
+          </p>
+        </div>
+        <pre className="relative font-mono text-[11px] leading-relaxed text-paper/50">{`> auth.handshake --mode=ed25519
+> ledger.lookup  --agent=soc-operator
+> session.mint   --ttl=900s
+STATUS: live backend connected_`}</pre>
       </div>
 
 
