@@ -142,9 +142,18 @@ export default function LoginPage() {
           <Link href="/" className="inline-flex items-center gap-2 label-mono hover:text-violet">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to home
           </Link>
-          <span className="lg:hidden">
-            <Logo />
-          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/demo"
+              className="inline-flex items-center gap-1.5 border border-ink bg-lime px-3 py-1.5 label-mono text-lime-foreground transition-colors hover:bg-ink hover:text-paper"
+            >
+              Explore Live Demo
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
+            <span className="lg:hidden">
+              <Logo />
+            </span>
+          </div>
         </div>
 
         <div className="mx-auto w-full max-w-md flex-1 px-6 py-12">
