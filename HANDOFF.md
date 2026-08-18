@@ -1,7 +1,7 @@
 # A2A Firewall — Project Handoff Context
 
-Current branch state: `main` at `feea780` (locally ahead by one commit that fixes the
-`telemetry.py` mypy regression and bumps the frontend CI job from Node 20 → 22).
+Current branch state: `main` at `4215d05` (locally ahead — see "Latest uncommitted
+changes" below for the landing-page / auth-hub work).
 Remote: `https://github.com/mananjp/a2a-firewall`.
 
 ---
@@ -22,7 +22,7 @@ the lineage. The full MVP plan lives at `a2a_firewall_mvp_plan.md`.
 ## Stack (locked decisions)
 
 - **Backend**: Python 3.12 (NOT 3.14 — pydantic-core wheels missing), FastAPI 0.138,
-  SQLAlchemy 2.0 async, asyncpg, Alembic, Pydantic 2.13, Groq (`llama-3.1-8b-instant`),
+  SQLAlchemy 2.0 async, asyncpg, Alembic, Pydantic 2.13, Groq (`openai/gpt-oss-120b`),
   OpenTelemetry, custom in-memory rate limiter (no slowapi to avoid CVE concerns).
 - **Frontend**: React 18, TypeScript, Vite 8, Tailwind 3, react-flow 11, react-router-dom 6.30.
 - **Database**: Postgres 16 (no Redis — explicitly removed by user).
@@ -79,7 +79,12 @@ a2a-firewall/
 │       ├── api/{client,client.test,types}.ts
 │       ├── hooks/{useApiKey,usePolling,usePolling.test}.ts(x)
 │       ├── components/Layout.tsx
-│       └── pages/{Login,Dashboard,Violations,TreeView,TraceDetail,
+│       ├── components/auth/{Alert,AuthPanel,SignInForm,RegisterForm,
+│       │                    ApiKeyForm,TestRoleGrid}.tsx
+│       ├── components/landing/{Logo,Hero,Features,Pipeline,Footer}.tsx
+│       ├── lib/{demoRoles.ts,authActions.ts}
+│       ├── __tests__/{setup.ts,LandingPage.test.tsx,demoRoles.test.ts}
+│       └── pages/{Landing,Dashboard,Violations,TreeView,TraceDetail,
 │                  Agents,Policies,ReviewQueue}Page.tsx
 ├── docker/
 │   ├── Dockerfile                    # backend image
@@ -93,6 +98,8 @@ a2a-firewall/
 ## Commit history (most recent first)
 
 ```
+4215d05  fix(e2e): replace bogus sender_id != planner assertion with correct sender check
+8fbcb04  fix(ci): annotate telemetry monkeypatch and bump frontend Node to 22
 feea780  fix: use Render Blueprint env format, add plan and branch fields
 c5dc234  style: ruff format telemetry.py
 254fe73  fix(ci): add frontend lint, caching, concurrency; rewrite deploy for Render;
@@ -225,7 +232,7 @@ gh run watch <RUN_ID> --repo mananjp/a2a-firewall
 5. **Layer 3 (rules)** — forbidden patterns (`INJECTION_PATTERNS` list) plus
    `policy_rules` table. Each layer's outcome is appended to `trace_events`.
 6. **Layer 4 (Groq)** — only if `risk_score >= workspace.groq_threshold`. Calls
-   `llama-3.1-8b-instant`. 429/graceful degradation handled.
+   `openai/gpt-oss-120b`. 429/graceful degradation handled.
 7. **Layer 5 (decision)** — final allow/block/review from `make_decision()`.
 
 All task rows, violation rows, review rows, and trace events are written in **one
@@ -297,13 +304,111 @@ For production: replace with proper password auth or SSO. Out of MVP scope.
 8. **Empty `frontend/src/components/ExecutionTree/`** directory is leftover
    scaffolding (ReactFlow is rendered inline in `TreeViewPage.tsx`). Safe to delete.
 
+9. **Landing page + auth hub (`/` when logged out)** — see "Latest uncommitted changes"
+   below. Replaces the old `/login` page with a marketing landing + three-tab auth
+   panel + four one-click demo-role buttons.
+
+---
+
+## Latest uncommitted changes — Landing page & auth hub
+
+### What changed
+The auth UX is now a full landing experience at `/` when the user has no API key.
+`/login` is preserved as a back-compat alias that redirects to `/`. When the user is
+signed in, the existing authenticated layout and dashboard are completely unchanged.
+
+### Files touched
+
+**New:**
+- `frontend/src/pages/LandingPage.tsx` — orchestrator (hero + auth + features + pipeline + footer).
+- `frontend/src/components/landing/Hero.tsx` — gradient hero, inline live-trace diagram, KPIs.
+- `frontend/src/components/landing/Features.tsx` — six-card capability grid (multi-layer
+  inspection, lineage, review queue, multi-tenant, policy engine, OTel).
+- `frontend/src/components/landing/Pipeline.tsx` — seven-layer inspection pipeline visual
+  with allow/review/block outcome cards.
+- `frontend/src/components/landing/Footer.tsx` — links + DEV ONLY disclaimer.
+- `frontend/src/components/landing/Logo.tsx` — inline SVG shield (no new deps).
+- `frontend/src/components/auth/AuthPanel.tsx` — tabbed shell hosting all three flows
+  + the role grid.
+- `frontend/src/components/auth/SignInForm.tsx` — wraps `POST /v1/auth/login`.
+- `frontend/src/components/auth/RegisterForm.tsx` — wraps `POST /v1/workspaces/register`,
+  shows the issued key once with a copy button.
+- `frontend/src/components/auth/ApiKeyForm.tsx` — paste a `ws_…` key, validates via
+  `GET /v1/workspaces/me`.
+- `frontend/src/components/auth/TestRoleGrid.tsx` — four one-click role buttons.
+- `frontend/src/components/auth/Alert.tsx` — shared tone-aware alert primitive
+  (error / warning / success / info).
+- `frontend/src/lib/demoRoles.ts` — typed registry of four demo roles (admin, auditor,
+  trial, traffic) with deterministic emails, landing routes, accent colors, and
+  capability tags.
+- `frontend/src/lib/authActions.ts` — `loginByEmail`, `registerWorkspace`,
+  `signInWithApiKey`, `loginAsDemoRole` helpers with friendly `ApiError` mapping
+  (strips FastAPI `{"detail":"…"}` wrapping).
+- `frontend/src/__tests__/LandingPage.test.tsx` — six component tests (render, tab
+  switching, signin, register-then-key, role-login w/ 409 fallback, pipeline list).
+- `frontend/src/__tests__/demoRoles.test.ts` — four registry tests.
+
+**Edited:**
+- `frontend/src/App.tsx` — `/` renders `<LandingPage />` when logged out; `/login`
+  redirects to `/` (alias for the legacy logout flow).
+- `frontend/src/api/client.ts` — added `workspaces.register`, plus import for
+  `WorkspaceRegisterResponse`. Updated stale comment that referenced `LoginPage`.
+- `frontend/src/api/types.ts` — added `WorkspaceRegisterResponse`.
+- `frontend/src/index.css` — added `.glass`, `.glass-strong`, `.gradient-text`,
+  `.gradient-text-accent`, `.btn-shimmer`, `.chip`, `.divider-soft`, `.ring-soft`;
+  smooth scroll, `:focus-visible` ring, and a `prefers-reduced-motion` guard that
+  disables the new animations.
+- `frontend/tailwind.config.js` — extended `firewall-*` palette (`ink`, `edge`,
+  `mute`), added `bg-hero-radial` + `bg-grid-faint` + `bg-grid-32`, keyframes
+  `shimmer / floaty / pulseRing` with the matching `animate-*` utilities.
+- `frontend/index.html` — title set to
+  `A2A Firewall — Inter-Agent Governance Mesh`, added meta description and
+  theme-color.
+
+**Removed:**
+- `frontend/src/pages/LoginPage.tsx` — superseded by `LandingPage.tsx` + the auth
+  panel. (No remaining imports of `LoginPage`.)
+
+### The four one-click test roles
+
+| Role | Backend identity | Lands at |
+|---|---|---|
+| **Workspace Admin** | `demo-admin@a2afirewall.local` | `/` (dashboard) |
+| **Read-only Auditor** | `demo-auditor@a2afirewall.local` | `/violations` |
+| **New Trial Workspace** | `demo-trial@a2afirewall.local` | `/agents` |
+| **High-traffic Workspace** | `demo-traffic@a2afirewall.local` | `/` (dashboard) |
+
+Each click calls `POST /v1/workspaces/register` first. On a `409 already registered`
+response (i.e. the demo workspace was provisioned by a prior click) the action
+falls back to `POST /v1/auth/login`, which rotates the existing workspace key and
+returns the fresh value. The key is persisted to `localStorage` under
+`a2a_workspace_key` (unchanged from the prior flow) and the user is navigated to
+the role's landing route.
+
+### Verification
+- `npm run typecheck` — ✅ clean.
+- `npm run lint` — ✅ 0 errors / 0 warnings.
+- `npm test` — ✅ 16/16 tests pass (4 demoRoles + 6 LandingPage + 6 pre-existing).
+- `npm run build` — ✅ 360 kB JS / 35 kB CSS, production bundle green.
+
+### No backend changes
+The landing page consumes only `POST /v1/workspaces/register` and `POST /v1/auth/login`
+that already exist in `backend/src/a2a_firewall/api/routes/{workspaces,auth}.py`. No
+new endpoints, no schema changes, no migrations.
+
+### Future work (out of scope)
+- Add a true password / SSO auth path so `DEBUG=false` no longer disables login.
+- Per-role permission gating on the dashboard (the auditor currently sees the same
+  UI as the admin — only the landing route differs). The data layer is already
+  tenant-scoped via the workspace API key.
+
 ---
 
 ## Useful URLs
 
 - **Plan doc**: `a2a_firewall_mvp_plan.md`
 - **Runbook**: `docs/RUNBOOK.md`
-- **Latest commit (origin/main)**: `feea780 fix: use Render Blueprint env format, add plan and branch fields`
+- **Latest commit (origin/main)**: `4215d05 fix(e2e): replace bogus sender_id != planner assertion with correct sender check`
 - **Render backend (prod)**: `https://a2a-firewall-backend.onrender.com`
 - **Render frontend (prod)**: `https://a2a-firewall-frontend.onrender.com`
 - **GitHub**: https://github.com/mananjp/a2a-firewall

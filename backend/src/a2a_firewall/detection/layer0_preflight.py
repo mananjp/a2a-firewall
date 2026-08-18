@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.anti_pentest import check_anti_pentest
 from a2a_firewall.core.config import settings
 from a2a_firewall.db.models import Task
 
@@ -17,7 +18,7 @@ async def preflight(
     payload_size: int,
     db: AsyncSession,
 ) -> dict[str, Any] | None:
-    """Layer 0: cheap pre-checks (size, agent status, depth, circular reference, idempotency)."""
+    """Layer 0: cheap pre-checks (size, agent status, depth, circular reference, canary trap, idempotency)."""
     if payload_size > settings.MAX_PAYLOAD_BYTES:
         return {
             "block": True,
@@ -47,7 +48,7 @@ async def preflight(
             ],
         }
     depth = request_data.get("depth", 0)
-    if depth > 10:
+    if depth > settings.DELEGATION_MAX_DEPTH:
         return {
             "block": True,
             "reason": "max_depth_exceeded",
@@ -74,6 +75,22 @@ async def preflight(
                     "details": {},
                 }
             ],
+        }
+
+    # Anti-pentest canary & quarantine check
+    import json
+    sender_id_str = str(getattr(sender, "id", "unknown"))
+    payload_str = json.dumps(request_data.get("payload", {})).lower()
+    pentest_check = check_anti_pentest(request_data, sender_id_str, payload_str)
+    if pentest_check.get("block") and any(
+        v.get("violation_type") in ("canary_trap_triggered", "agent_in_quarantine")
+        for v in pentest_check.get("violations", [])
+    ):
+        return {
+            "block": True,
+            "reason": pentest_check.get("reason", "agentic_pentest_blocked"),
+            "risk_score": 1.0,
+            "violations": pentest_check.get("violations", []),
         }
 
     # Idempotency check: if task_id already exists, return cached decision (replay)

@@ -130,6 +130,8 @@ class Task(Base):
     total_latency_ms = Column(Integer, nullable=True)
     trace_id = Column(String, nullable=True)
     span_id = Column(String, nullable=True)
+    declared_intent = Column(Text, nullable=True)  # root task's purpose statement
+    intent_drift_score = Column(Float, nullable=True)  # 0.0–1.0 semantic drift from root intent
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 

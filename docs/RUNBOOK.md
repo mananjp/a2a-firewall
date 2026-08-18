@@ -170,6 +170,10 @@ All settings live in `backend/src/a2a_firewall/core/config.py` and read from `.e
 | `AGENT_INSPECT_RATE_LIMIT_PER_MIN` | 60 | Per-agent inspect endpoint rate limit |
 | `RATE_LIMIT_ENABLED` | true | Master switch for both rate limiters |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Jaeger OTLP HTTP endpoint |
+| `DELEGATION_MAX_DEPTH` | 3 | Hard cap on delegation hops |
+| `DELEGATION_DEFAULT_EXPIRY_SECONDS` | 3600 | Default TTL for minted macaroon tokens |
+| `IDENTITY_CARD_TTL_SECONDS` | 86400 | Agent identity card validity (24h) |
+| `INTENT_DRIFT_THRESHOLD` | 0.7 | Max allowed semantic drift score (0.0-1.0) |
 
 ## Troubleshooting
 

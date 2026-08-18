@@ -12,6 +12,8 @@ Design rationale:
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -56,6 +58,21 @@ def hex_to_private_key(hex_str: str) -> Ed25519PrivateKey:
 
 def hex_to_public_key(hex_str: str) -> Ed25519PublicKey:
     raw = bytes.fromhex(hex_str)
+    return Ed25519PublicKey.from_public_bytes(raw)
+
+
+def parse_public_key(key_str: str) -> Ed25519PublicKey:
+    """Parse a raw Ed25519 public key that may be hex- or base64-encoded.
+
+    The Python SDK serialises public keys as hex, while the web dashboard
+    (WebCrypto ``crypto.subtle``) produces base64. Accept both so a single
+    registered key verifies regardless of which client registered it.
+    """
+    try:
+        return hex_to_public_key(key_str)
+    except (ValueError, binascii.Error):
+        pass
+    raw = base64.b64decode(key_str, validate=True)
     return Ed25519PublicKey.from_public_bytes(raw)
 
 
