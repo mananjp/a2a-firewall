@@ -228,14 +228,24 @@ STATUS: live backend connected_`}</pre>
                 )}
               </>
             )}
-            <button
-              type="submit"
-              disabled={loading}
-              className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-ink px-6 py-4 label-mono text-paper transition-colors hover:border-violet hover:bg-violet disabled:opacity-50"
-            >
-              {loading ? "Authenticating..." : tab === "Provision" ? "Provision workspace" : "Sign in to dashboard"}
-              <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            </button>
+            <div className="space-y-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-ink px-6 py-4 label-mono text-paper transition-colors hover:border-violet hover:bg-violet disabled:opacity-50"
+              >
+                {loading ? "Authenticating..." : tab === "Provision" ? "Provision workspace" : "Sign in to dashboard"}
+                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </button>
+
+              <Link
+                href="/dashboard/demo"
+                className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-lime px-6 py-4 label-mono text-lime-foreground transition-colors hover:bg-violet hover:text-violet-foreground hover:border-violet"
+              >
+                Launch Demo (Live Attack Sandbox)
+                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </Link>
+            </div>
           </form>
 
           <div className="mt-12">
