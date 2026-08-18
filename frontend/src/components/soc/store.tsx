@@ -261,15 +261,46 @@ export function SocProvider({ children }: { children: ReactNode }) {
         anySuccess = true;
       }
 
-      // 2. Tasks -> Events
+      // 2. Agents & Keys
+      let fetchedAgents: Agent[] = [];
+      if (agentsRes.status === "fulfilled" && Array.isArray(agentsRes.value) && agentsRes.value.length > 0) {
+        fetchedAgents = agentsRes.value.map((a: BackendAgent) => ({
+          id: a.id,
+          name: a.name,
+          owner: a.description || "mesh@local",
+          scopes: Array.isArray(a.capabilities) && a.capabilities.length > 0 ? a.capabilities : ["task.execute"],
+          depth: 1,
+          status: a.status === "active" ? "active" : "suspended",
+          lastSeen: "active now",
+        }));
+        setAgents(fetchedAgents);
+
+        const mappedKeys: KeyRecord[] = fetchedAgents.map((a, i) => ({
+          id: `key-${a.id}`,
+          agent: a.name,
+          alg: "ed25519",
+          fingerprint: `SHA256:${(a.id + "0000").slice(0, 12)}...`,
+          issued: new Date().toISOString().slice(0, 10),
+          expires: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+          status: a.status === "suspended" ? "revoked" : i === 1 ? "rotating" : "valid",
+        }));
+        setKeys(mappedKeys);
+        anySuccess = true;
+      }
+
+      // 3. Tasks -> Events
       if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
-        const mappedEvents: SocEvent[] = tasksRes.value.map((t: RecentTask) => {
+        const mappedEvents: SocEvent[] = tasksRes.value.map((t: RecentTask, idx: number) => {
           const v = mapDecisionToVerdict(t.decision);
           const d = t.created_at ? new Date(t.created_at) : new Date();
+          const fallbackAgent = fetchedAgents.length > 0
+            ? fetchedAgents[idx % fetchedAgents.length]!.name
+            : `agent-${(t.id || "").slice(0, 4)}`;
+
           return {
             id: t.id,
             ts: d.toISOString().slice(11, 19),
-            agent: `agent-${(t.id || "").slice(0, 4)}`,
+            agent: fallbackAgent,
             intent: t.task_type || "task.execute",
             verdict: v,
             risk: Math.round((t.risk_score || 0) * 100),
@@ -288,32 +319,6 @@ export function SocProvider({ children }: { children: ReactNode }) {
           };
         });
         setEvents(mappedEvents);
-        anySuccess = true;
-      }
-
-      // 3. Agents & Keys
-      if (agentsRes.status === "fulfilled" && Array.isArray(agentsRes.value)) {
-        const mappedAgents: Agent[] = agentsRes.value.map((a: BackendAgent, idx: number) => ({
-          id: a.id,
-          name: a.name,
-          owner: a.description || "mesh@local",
-          scopes: Array.isArray(a.capabilities) && a.capabilities.length > 0 ? a.capabilities : ["task.execute"],
-          depth: 1,
-          status: a.status === "active" ? "active" : "suspended",
-          lastSeen: "active now",
-        }));
-        setAgents(mappedAgents);
-
-        const mappedKeys: KeyRecord[] = mappedAgents.map((a, i) => ({
-          id: `key-${a.id}`,
-          agent: a.name,
-          alg: "ed25519",
-          fingerprint: `SHA256:${(a.id + "0000").slice(0, 12)}...`,
-          issued: new Date().toISOString().slice(0, 10),
-          expires: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-          status: a.status === "suspended" ? "revoked" : i === 1 ? "rotating" : "valid",
-        }));
-        setKeys(mappedKeys);
         anySuccess = true;
       }
 

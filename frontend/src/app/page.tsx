@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowUpRight, Maximize2 } from "lucide-react";
 import { SectionHead, SiteFooter, SiteHeader } from "@/components/site/Chrome";
 import { Sandbox } from "@/components/site/Sandbox";
+import { stats as statsApi } from "@/lib/api";
+import type { StatsOverview } from "@/lib/types";
 
 const PRINCIPLES = [
   { n: "L1", t: "Rate Limiting", d: "Per-agent quotas. Burst control. No flood reaches the mesh." },
@@ -36,6 +39,19 @@ const CAPABILITIES = [
 const STACK = ["ED25519", "MACAROONS", "GROQ LPU", "OPENTELEMETRY", "POSTGRES", "LLAMA 3.1", "HMAC-SHA256"];
 
 export default function LandingPage() {
+  const [liveStats, setLiveStats] = useState<StatsOverview | null>(null);
+
+  useEffect(() => {
+    statsApi
+      .overview()
+      .then((res) => {
+        if (res) setLiveStats(res);
+      })
+      .catch(() => {
+        // Offline
+      });
+  }, []);
+
   return (
     <div className="min-h-screen bg-paper">
       <SiteHeader />
@@ -226,10 +242,22 @@ X-Caveats:    "issuer:admin; scope:market_analytics.read;
             <h2 className="mt-6 font-display text-xl font-extrabold">System Status</h2>
             <div className="mt-8 space-y-5">
               {[
-                ["Gateway load", "72%", 72],
-                ["Nonce cache", "8.6 / 16 GB", 54],
-                ["Uptime", "7d 14h 22m", 99],
-                ["Mesh network", "SECURE", 100],
+                [
+                  "Inspection latency",
+                  liveStats ? `${liveStats.avg_latency_ms.toFixed(1)}ms` : "<20ms (P99)",
+                  liveStats ? Math.min(Math.round((liveStats.avg_latency_ms / 20) * 100), 100) : 72,
+                ],
+                [
+                  "Interceptions today",
+                  liveStats ? `${liveStats.total_tasks} processed` : "Active",
+                  liveStats ? Math.min(liveStats.total_tasks * 5 + 30, 95) : 84,
+                ],
+                [
+                  "Blocked / quarantined",
+                  liveStats ? `${liveStats.blocked} envelopes (${liveStats.blocked_pct.toFixed(0)}%)` : "0 bypasses",
+                  liveStats ? Math.min(Math.round(liveStats.blocked_pct), 100) : 24,
+                ],
+                ["Mesh network", "SECURE (6 gates armed)", 100],
               ].map(([l, v, p]) => (
                 <div key={l as string}>
                   <div className="flex items-baseline justify-between font-mono text-[11px]">
@@ -243,8 +271,9 @@ X-Caveats:    "issuer:admin; scope:market_analytics.read;
               ))}
             </div>
             <div className="mt-8 border border-ink bg-lime px-4 py-3 label-mono text-lime-foreground">
-              All systems operational
+              All systems operational · Fail-closed armed
             </div>
+
           </div>
         </div>
       </section>

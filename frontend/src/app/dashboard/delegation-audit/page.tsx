@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSoc, type Delegation } from "@/components/soc/store";
 import { Btn, PageHead, Panel, Stat, StatGrid, Tag, Terminal, inputCls } from "@/components/soc/ui";
-import { simulation } from "@/lib/api";
+import { audit as auditApi, simulation } from "@/lib/api";
 
 const MOCK_CHAINS: Delegation[] = [
   {
@@ -42,6 +42,54 @@ export default function DelegationAuditPage() {
   const [openId, setOpenId] = useState<string | null>(chains[0]?.id ?? null);
   const [generating, setGenerating] = useState(false);
 
+  const loadLiveChains = useCallback(async () => {
+    try {
+      const res = await auditApi.listChains(50);
+      if (res?.events && res.events.length > 0) {
+        // Group by task_id to form chains
+        const grouped = new Map<string, typeof res.events>();
+        res.events.forEach((ev) => {
+          const list = grouped.get(ev.task_id) || [];
+          list.push(ev);
+          grouped.set(ev.task_id, list);
+        });
+
+        const liveChains: Delegation[] = [];
+        grouped.forEach((eventsList, taskId) => {
+          const sorted = [...eventsList].sort((a, b) => a.delegation_depth - b.delegation_depth);
+          const first = sorted[0]!;
+          const last = sorted[sorted.length - 1]!;
+          const chainAgents = [first.sender_name, ...sorted.map((s) => s.receiver_name)];
+          const caveatsList = sorted
+            .map((s) => s.caveats)
+            .filter(Boolean)
+            .flatMap((c) => (c ? c.split(";").map((x) => x.trim()) : []));
+
+          liveChains.push({
+            id: `dlg-${taskId.slice(0, 6)}`,
+            chain: chainAgents,
+            scopes: caveatsList.filter((c) => c.startsWith("scope:")).map((c) => c.replace("scope:", "")),
+            caveats: caveatsList.length ? caveatsList : ["exp<=300s", `depth<=${last.delegation_depth}`],
+            depth: last.delegation_depth,
+            issued: first.timestamp ? new Date(first.timestamp).toLocaleTimeString() : "active",
+            valid: sorted.every((s) => s.signature_valid),
+          });
+        });
+
+        if (liveChains.length > 0) {
+          setChains(liveChains);
+          setOpenId(liveChains[0]?.id ?? null);
+        }
+      }
+    } catch {
+      // Keep initial mock chains on offline mode
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLiveChains();
+  }, [loadLiveChains]);
+
   const generateChain = async () => {
     setGenerating(true);
     try {
@@ -52,11 +100,12 @@ export default function DelegationAuditPage() {
         { sender: "Compliance-Bot-02", receiver: "Execution-Unit-03", task_type: "execute_settle", payload: { depth: 3 } },
       ]);
       await refreshAll();
+      await loadLiveChains();
 
       const newId = `dlg-${Date.now().toString().slice(-4)}`;
       const newChain: Delegation = {
         id: newId,
-        chain: res.steps.map((s) => s.receiver),
+        chain: ["Root-Orchestrator", ...res.steps.map((s) => s.receiver)],
         scopes: ["audit_init", "compliance_check", "execute_settle"],
         caveats: [`exp<=300s`, `depth<=${res.steps.length}`, "provenance:backend_simulation"],
         depth: res.steps.length,
@@ -64,7 +113,7 @@ export default function DelegationAuditPage() {
         valid: res.steps.every((s) => s.allowed_to_proceed),
       };
 
-      setChains((prev) => [newChain, ...prev]);
+      setChains((prev) => [newChain, ...prev.filter((p) => p.id !== newId)]);
       setOpenId(newId);
     } catch {
       // Fallback
@@ -84,6 +133,7 @@ export default function DelegationAuditPage() {
       setGenerating(false);
     }
   };
+
 
   const rows = chains.filter((d) =>
     (d.chain.join(" ") + d.scopes.join(" ") + d.id).toLowerCase().includes(q.toLowerCase())

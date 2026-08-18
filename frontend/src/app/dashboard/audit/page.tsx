@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { audit as auditApi, demo as demoApi } from "@/lib/api";
 import type { AuditChainExport, AuditHop, TaskAuditChain } from "@/lib/api";
 import { Btn, PageHead, Panel, Stat, StatGrid, Tag, Terminal } from "@/components/soc/ui";
@@ -50,11 +50,9 @@ export default function AuditPage() {
   }, [selectedTaskId, fetchChain]);
 
   // Auto-load on mount
-  const [loaded, setLoaded] = useState(false);
-  if (!loaded) {
-    setLoaded(true);
+  useEffect(() => {
     load();
-  }
+  }, [load]);
 
   const generateDemo = async () => {
     setGenerating(true);
