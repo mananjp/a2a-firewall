@@ -77,7 +77,6 @@ export default function LiveDemoPage() {
       .bootstrap()
       .then((res) => {
         if (res.scenarios?.length) {
-          // Merge with custom descriptions if needed
           setScenarios(
             res.scenarios.map((s) => ({
               ...s,
@@ -93,6 +92,18 @@ export default function LiveDemoPage() {
       })
       .catch(() => {});
   }, []);
+
+  const currentScenario = scenarios.find((s) => s.id === selected) ?? scenarios[0];
+  const isBenign = currentScenario?.category === "Normal" || selected === "clean";
+  const isSuspicious = currentScenario?.category === "Suspicious" || selected === "review";
+
+  const actionButtonText = running
+    ? `Inspecting: ${currentScenario?.label}...`
+    : isBenign
+    ? "Inspect Clean Baseline Request"
+    : isSuspicious
+    ? "Inspect Suspicious Data Request"
+    : `Simulate ${currentScenario?.label}`;
 
   async function handleQuickAuth() {
     setRunning(true);
@@ -124,7 +135,6 @@ export default function LiveDemoPage() {
     setCurrentResult(null);
     setActiveStep(0);
 
-    // Simulate animated packet progress through stages
     const stepInterval = setInterval(() => {
       setActiveStep((prev) => (prev < 6 ? prev + 1 : prev));
     }, 180);
@@ -138,7 +148,7 @@ export default function LiveDemoPage() {
         } catch {}
       }
       const result: RunResult = {
-        scenario: selected,
+        scenario: currentScenario?.label || selected,
         response: res,
         timestamp: Date.now(),
         traceEvents,
@@ -168,13 +178,13 @@ export default function LiveDemoPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
-          eyebrow="Interactive Attack Simulator"
-          title="Live Firewall Attack & Defense Demo"
-          description="Simulate live multi-agent attacks against the 6-layer inspection pipeline with real-time packet tracking and diagnostic explainability."
+          eyebrow="Interactive Threat & Baseline Simulator"
+          title="Live Firewall Traffic & Threat Inspection Demo"
+          description="Inspect benign baseline payloads or simulate live multi-agent attacks against the 6-layer inspection pipeline with real-time packet tracking."
         />
-        <div className="flex items-center gap-2 text-[12.5px] text-allow font-mono font-semibold px-3 py-1 rounded-full border border-allow/30 bg-allow/10">
+        <div className="flex items-center gap-2 text-[12.5px] text-allow font-mono font-semibold px-3 py-1 rounded-full border border-allow/30 bg-allow/10 shrink-0">
           <span className="h-2 w-2 rounded-full bg-allow animate-pulse" />
           Live Inspection Pipeline
         </div>
@@ -205,7 +215,7 @@ export default function LiveDemoPage() {
       <div>
         <div className="eyebrow mb-2.5 flex items-center gap-1.5">
           <Sparkles size={13} className="text-accent" />
-          <span>Select Attack Scenario or Normal Baseline</span>
+          <span>Select Scenario: Benign Baseline or Attack Vector</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
           {scenarios.map((sc) => {
@@ -242,12 +252,26 @@ export default function LiveDemoPage() {
         </div>
       </div>
 
-      {/* Run Action Bar */}
-      <div className="flex items-center gap-3">
-        <Button onClick={runDemo} disabled={running} variant="primary" size="lg" className="gap-2 font-mono text-[13px]">
+      {/* Run Action Bar with Dynamic Labels */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <Button
+          onClick={runDemo}
+          disabled={running}
+          variant={isBenign ? "secondary" : "primary"}
+          size="lg"
+          className="gap-2 font-mono text-[13px]"
+        >
           {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-          {running ? "Inspecting Wire Packet..." : "Run Live Attack Demo"}
+          {actionButtonText}
         </Button>
+
+        {running && (
+          <span className="text-[12px] font-mono text-accent flex items-center gap-1.5 animate-pulse">
+            <span className="h-2 w-2 rounded-full bg-accent" />
+            Inspecting Wire Hop ({currentScenario?.label})...
+          </span>
+        )}
+
         {error && (
           <span className="text-[12.5px] text-block bg-block/10 border border-block/30 px-3 py-1.5 rounded-lg font-mono">
             {error}
@@ -287,7 +311,6 @@ export default function LiveDemoPage() {
 
         {/* Horizontal Flow Diagram Nodes */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 relative">
-          {/* Node 1: Sender */}
           <FlowDiagramNode
             label="Planner Agent"
             sub="Sender Node"
@@ -297,7 +320,6 @@ export default function LiveDemoPage() {
             status={activeStep >= 0 ? "done" : "idle"}
           />
 
-          {/* Node 2: Ingress Sentinel */}
           <FlowDiagramNode
             label="Sentinel Gateway"
             sub="Wire Ingress"
@@ -307,7 +329,6 @@ export default function LiveDemoPage() {
             status={activeStep >= 1 ? "done" : "idle"}
           />
 
-          {/* Node 3: Layer 0 Preflight */}
           <FlowDiagramNode
             label="L0 Preflight"
             sub="Anti-Pentest & Nonce"
@@ -325,7 +346,6 @@ export default function LiveDemoPage() {
             }
           />
 
-          {/* Node 4: Layer 1 Schema */}
           <FlowDiagramNode
             label="L1 Schema"
             sub="Type Safety"
@@ -343,7 +363,6 @@ export default function LiveDemoPage() {
             }
           />
 
-          {/* Node 5: Layer 2 Permissions */}
           <FlowDiagramNode
             label="L2 Permissions"
             sub="RBAC & Scopes"
@@ -361,7 +380,6 @@ export default function LiveDemoPage() {
             }
           />
 
-          {/* Node 6: Layer 3 Rules & SQL Guard */}
           <FlowDiagramNode
             label="L3 Rules & SQL"
             sub="Regex & Queries"
@@ -379,7 +397,6 @@ export default function LiveDemoPage() {
             }
           />
 
-          {/* Node 7: Layer 4 Groq AI Guard */}
           <FlowDiagramNode
             label="L4 Groq AI"
             sub="Semantic Guard"
@@ -397,7 +414,6 @@ export default function LiveDemoPage() {
             }
           />
 
-          {/* Node 8: Final Destination / Quarantine */}
           <FlowDiagramNode
             label={
               currentResult?.response.decision === "block"
