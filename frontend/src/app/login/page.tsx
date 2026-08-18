@@ -1,258 +1,146 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { auth, workspaces, setApiKey } from "@/lib/api";
-import { useToast } from "@/components/ui/toast";
-import { ShieldAlert, ArrowRight, KeyRound, UserPlus, TestTube2, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { Logo } from "@/components/site/Chrome";
 
-type Tab = "signin" | "register" | "apikey";
+const TABS = ["Sign In", "Provision", "API Key"] as const;
 
-const DEMO_ROLES = [
-  { email: "admin@a2afirewall.dev", label: "Admin", desc: "Full access" },
-  { email: "auditor@a2afirewall.dev", label: "Auditor", desc: "Read-only" },
-  { email: "trial@a2afirewall.dev", label: "Trial", desc: "Limited" },
-  { email: "traffic@a2afirewall.dev", label: "Traffic", desc: "Agent only" },
+const PERSONAS = [
+  ["Admin", "Full permissions"],
+  ["Auditor", "Read-only access"],
+  ["Trial", "Standard bounds"],
+  ["Traffic", "Agent gateway"],
 ];
 
 export default function LoginPage() {
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Sign In");
   const router = useRouter();
-  const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("signin");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleSignIn(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await auth.login(email);
-      setApiKey(res.api_key);
-      toast({
-        title: "Signed in",
-        description: `Workspace: ${res.admin_email}`,
-        variant: "success",
-      });
-      router.push("/dashboard");
-    } catch (err) {
-      toast({
-        title: "Sign in failed",
-        description: err instanceof Error ? err.message : "Unknown error",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleRegister(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await workspaces.register({ name, admin_email: email });
-      setApiKey(res.api_key);
-      toast({
-        title: "Workspace created",
-        description: res.name,
-        variant: "success",
-      });
-      router.push("/dashboard");
-    } catch (err) {
-      toast({
-        title: "Registration failed",
-        description: err instanceof Error ? err.message : "Unknown error",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleApiKey(e: FormEvent) {
-    e.preventDefault();
-    if (apiKeyInput.trim()) {
-      setApiKey(apiKeyInput.trim());
-      toast({ title: "Connected", variant: "success" });
-      router.push("/dashboard");
-    }
-  }
-
-  async function handleDemoRole(demoEmail: string) {
-    setLoading(true);
-    try {
-      const res = await auth.login(demoEmail);
-      setApiKey(res.api_key);
-      toast({
-        title: "Demo access granted",
-        description: `${demoEmail.split("@")[0]} workspace`,
-        variant: "success",
-      });
-      router.push("/dashboard");
-    } catch (err) {
-      toast({
-        title: "Demo login failed",
-        description: err instanceof Error ? err.message : "Unknown error",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft size={13} />
-            Back to home
-          </Link>
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/15 text-accent">
-              <ShieldAlert size={15} strokeWidth={2.2} />
-            </div>
-            <span className="text-sm font-semibold">A2A Firewall</span>
-          </div>
+    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
+      {/* left panel */}
+      <div className="relative hidden flex-col justify-between border-r border-ink bg-ink p-12 text-paper lg:flex">
+        <div className="grid-paper absolute inset-0 opacity-20" />
+        <div className="relative flex items-center gap-2">
+          <span className="grid h-6 w-6 grid-cols-2 grid-rows-2 gap-[2px]">
+            <span className="bg-paper" />
+            <span className="bg-violet" />
+            <span className="bg-lime" />
+            <span className="bg-paper" />
+          </span>
+          <span className="font-display text-lg font-extrabold">A2A_</span>
         </div>
-      </header>
+        <div className="relative">
+          <h1 className="font-display text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[0.85]">
+            Access
+            <br />
+            Governance
+            <br />
+            Mesh
+          </h1>
+          <p className="mt-6 max-w-sm font-mono text-xs leading-relaxed text-paper/60">
+            Six-gate inspection, cryptographic lineage and deterministic verdicts for every inter-agent request.
+          </p>
+        </div>
+        <pre className="relative font-mono text-[11px] leading-relaxed text-paper/50">{`> auth.handshake --mode=ed25519
+> ledger.lookup  --agent=soc-operator
+> session.mint   --ttl=900s
+STATUS: awaiting operator credentials_`}</pre>
+      </div>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-xl font-semibold">Welcome</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Sign in to your workspace or create a new one.
-            </p>
-          </div>
+      {/* right panel */}
+      <div className="flex flex-col bg-paper">
+        <div className="flex items-center justify-between border-b border-ink/20 px-6 py-4">
+          <Link href="/" className="inline-flex items-center gap-2 label-mono hover:text-violet">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to home
+          </Link>
+          <span className="lg:hidden">
+            <Logo />
+          </span>
+        </div>
 
-          {/* Tabs */}
-          <div className="mb-4 flex gap-1 rounded-md border border-border bg-surface p-1">
-            {([
-              { id: "signin", label: "Sign in", icon: ArrowRight },
-              { id: "register", label: "Register", icon: UserPlus },
-              { id: "apikey", label: "API Key", icon: KeyRound },
-            ] as const).map((t) => (
+        <div className="mx-auto w-full max-w-md flex-1 px-6 py-12">
+          <span className="label-mono text-violet">SOC Authentication</span>
+          <h2 className="mt-4 font-display text-3xl font-extrabold">Sign in</h2>
+          <p className="mt-3 font-mono text-xs leading-relaxed text-muted-foreground">
+            Authenticate with workspace administrator credentials or a bearer key.
+          </p>
+
+          <div className="mt-8 grid grid-cols-3 gap-px border border-ink bg-ink/15">
+            {TABS.map((t) => (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                  tab === t.id
-                    ? "bg-surface-elevated text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`px-2 py-3 label-mono transition-colors ${
+                  tab === t ? "bg-ink text-paper" : "bg-paper hover:bg-secondary"
                 }`}
               >
-                <t.icon size={13} />
-                {t.label}
+                {t}
               </button>
             ))}
           </div>
 
-          <Card>
-            {tab === "signin" && (
-              <form onSubmit={handleSignIn} className="space-y-3">
-                <Input
-                  label="Workspace email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  required
-                />
-                <Button
-                  type="submit"
-                  disabled={loading || !email}
-                  className="w-full"
-                >
-                  {loading ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
+          <form
+            className="mt-8 space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              router.push("/dashboard");
+            }}
+          >
+            {tab === "API Key" ? (
+              <Field label="Bearer API key" type="password" placeholder="a2a_sk_live_••••••••••••" />
+            ) : (
+              <>
+                <Field label="Administrator email" type="email" placeholder="operator@mesh.io" />
+                <Field label="Passphrase" type="password" placeholder="••••••••••••" />
+                {tab === "Provision" && (
+                  <Field label="Workspace slug" type="text" placeholder="acme-agent-mesh" />
+                )}
+              </>
             )}
+            <button
+              type="submit"
+              className="group inline-flex w-full items-center justify-center gap-3 border border-ink bg-ink px-6 py-4 label-mono text-paper transition-colors hover:border-violet hover:bg-violet"
+            >
+              {tab === "Provision" ? "Provision workspace" : "Sign in to dashboard"}
+              <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </button>
+          </form>
 
-            {tab === "register" && (
-              <form onSubmit={handleRegister} className="space-y-3">
-                <Input
-                  label="Workspace name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="my-workspace"
-                  required
-                />
-                <Input
-                  label="Admin email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  required
-                />
-                <Button
-                  type="submit"
-                  disabled={loading || !name || !email}
-                  className="w-full"
+          <div className="mt-12">
+            <span className="label-mono text-muted-foreground">Fast demo persona access</span>
+            <div className="mt-4 grid gap-px border border-ink bg-ink/15 sm:grid-cols-2">
+              {PERSONAS.map(([name, desc]) => (
+                <Link
+                  key={name}
+                  href="/dashboard"
+                  className="bg-paper px-4 py-4 transition-colors hover:bg-violet hover:text-violet-foreground"
                 >
-                  {loading ? "Creating..." : "Create workspace"}
-                </Button>
-              </form>
-            )}
-
-            {tab === "apikey" && (
-              <form onSubmit={handleApiKey} className="space-y-3">
-                <Input
-                  label="API key"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="ws_..."
-                  required
-                />
-                <Button
-                  type="submit"
-                  disabled={!apiKeyInput.trim()}
-                  className="w-full"
-                >
-                  Connect
-                </Button>
-              </form>
-            )}
-          </Card>
-
-          {/* Demo roles */}
-          <div className="mt-5">
-            <div className="mb-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-              Quick demo access
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO_ROLES.map((r) => (
-                <button
-                  key={r.email}
-                  onClick={() => handleDemoRole(r.email)}
-                  disabled={loading}
-                  className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2.5 text-left text-xs transition-colors hover:border-border/80 hover:bg-surface-elevated disabled:opacity-40"
-                >
-                  <TestTube2 size={13} className="shrink-0 text-muted" />
-                  <div className="min-w-0">
-                    <div className="font-medium text-foreground">{r.label}</div>
-                    <div className="truncate text-muted-foreground">{r.desc}</div>
-                  </div>
-                </button>
+                  <span className="block font-display text-sm font-bold uppercase">{name}</span>
+                  <span className="mt-1 block font-mono text-[11px] opacity-70">{desc}</span>
+                </Link>
               ))}
             </div>
           </div>
-
-          <div className="mt-5 rounded-md border border-warning/20 bg-warning/5 p-3 text-xs text-warning/80">
-            <span className="font-semibold text-warning">Dev-only build.</span>{" "}
-            Uses localStorage and auto-provisioned workspaces. Replace before production.
-          </div>
         </div>
-      </main>
+      </div>
     </div>
+  );
+}
+
+function Field({ label, type, placeholder }: { label: string; type: string; placeholder: string }) {
+  return (
+    <label className="block">
+      <span className="label-mono text-muted-foreground">{label}</span>
+      <input
+        type={type}
+        placeholder={placeholder}
+        className="mt-2 w-full border border-ink bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-muted-foreground/60 focus:border-violet focus:ring-1 focus:ring-violet"
+      />
+    </label>
   );
 }

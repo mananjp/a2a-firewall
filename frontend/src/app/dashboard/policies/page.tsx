@@ -1,188 +1,77 @@
 "use client";
 
-import { useState, useCallback, type FormEvent } from "react";
-import { policies } from "@/lib/api";
-import { usePolling } from "@/hooks/use-polling";
-import type { Policy, PolicyAction } from "@/lib/types";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { FileText, Trash2 } from "lucide-react";
-
-const ACTIONS: PolicyAction[] = ["allow", "block", "review", "flag"];
+import { useState } from "react";
+import { useSoc } from "@/components/soc/store";
+import { Bar, Btn, PageHead, Panel, Stat, StatGrid, Tag, Terminal, VerdictChip } from "@/components/soc/ui";
 
 export default function PoliciesPage() {
-  const [priority, setPriority] = useState("100");
-  const [name, setName] = useState("");
-  const [action, setAction] = useState<PolicyAction>("block");
-  const [taskType, setTaskType] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const {
-    data,
-    loading,
-    error: loadErr,
-    refresh,
-  } = usePolling<Policy[]>(
-    useCallback((_signal) => policies.list() as Promise<Policy[]>, []),
-    10000
-  );
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await policies.create({
-        priority: Number(priority),
-        name,
-        action,
-        task_type: taskType || undefined,
-      });
-      setName("");
-      setTaskType("");
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function onDelete(id: string) {
-    try {
-      await policies.delete(id);
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
-  }
+  const { policies, togglePolicy } = useSoc();
+  const [gate, setGate] = useState("ALL");
+  const gates = ["ALL", "L1", "L2", "L3", "L4", "L5", "L6"];
+  const rows = policies.filter((p) => gate === "ALL" || p.gate === gate);
+  const maxHits = Math.max(...policies.map((p) => p.hits));
 
   return (
-    <div>
-      <PageHeader title="Policies" description="Define rules that control agent behavior." />
+    <div className="space-y-8">
+      <PageHead
+        index="/11"
+        title="Firewall Policies"
+        subtitle="Declarative deny rules compiled into the kernel. Changes take effect on the next envelope."
+      />
 
-      {(error || loadErr) && (
-        <div className="mb-4 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {error || loadErr?.message}
-        </div>
-      )}
+      <StatGrid>
+        <Stat label="Rules" value={String(policies.length)} />
+        <Stat label="Enabled" value={String(policies.filter((p) => p.enabled).length)} />
+        <Stat label="Blocking" value={String(policies.filter((p) => p.action === "BLOCK").length)} />
+        <Stat label="Hits / 24h" value={policies.reduce((a, p) => a + p.hits, 0).toLocaleString()} />
+      </StatGrid>
 
-      {/* Create form */}
-      <Card className="mb-6">
-        <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          New policy
-        </div>
-        <form onSubmit={onSubmit} className="grid grid-cols-4 gap-3">
-          <Input
-            label="Priority"
-            type="number"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            required
-          />
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="block external IPs"
-            required
-          />
-          <Select
-            label="Action"
-            value={action}
-            onChange={(e) => setAction(e.target.value as PolicyAction)}
-            options={ACTIONS.map((a) => ({ value: a, label: a }))}
-          />
-          <Input
-            label="Task type (optional)"
-            value={taskType}
-            onChange={(e) => setTaskType(e.target.value)}
-            placeholder="research"
-          />
-          <div className="col-span-4">
-            <Button type="submit" disabled={submitting || !name} size="sm">
-              {submitting ? "Adding..." : "Add policy"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      {/* Policy list */}
-      <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Active policies
+      <div className="flex flex-wrap gap-2">
+        {gates.map((g) => (
+          <Btn key={g} variant={gate === g ? "solid" : "outline"} onClick={() => setGate(g)}>
+            {g}
+          </Btn>
+        ))}
       </div>
-      {loading && !data && (
-        <Card className="text-sm text-muted">Loading...</Card>
-      )}
-      {data && data.length === 0 && (
-        <EmptyState
-          icon={<FileText size={24} />}
-          title="No policies defined"
-          description="Create one above to get started."
+
+      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+        <Panel title="Rule set" hint={`${rows.length} rules`}>
+          <div className="divide-y divide-ink/10">
+            {rows.map((p) => (
+              <div key={p.id} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-display text-sm font-bold uppercase">{p.name}</span>
+                    <Tag>{p.gate}</Tag>
+                    <VerdictChip verdict={p.action} />
+                  </div>
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">{p.description}</p>
+                  <div className="mt-2 max-w-xs">
+                    <Bar value={(p.hits / maxHits) * 100} tone={p.enabled ? "violet" : "danger"} />
+                    <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      {p.hits.toLocaleString()} hits / 24h
+                    </div>
+                  </div>
+                </div>
+                <Btn variant={p.enabled ? "lime" : "outline"} onClick={() => togglePolicy(p.id)}>
+                  {p.enabled ? "Enabled" : "Disabled"}
+                </Btn>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Terminal
+          title="policy.compiled"
+          lines={[
+            "# a2a-firewall policy bundle",
+            ...policies.map((p) => `${p.enabled ? "" : "# "}${p.gate}  ${p.action.padEnd(6)} ${p.id}  ${p.name}`),
+            "",
+            `active_rules = ${policies.filter((p) => p.enabled).length}`,
+            "fail_mode    = CLOSED",
+          ]}
         />
-      )}
-      {data && data.length > 0 && (
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Priority</th>
-                <th className="px-4 py-2.5 font-medium">Name</th>
-                <th className="px-4 py-2.5 font-medium">Action</th>
-                <th className="px-4 py-2.5 font-medium">Task type</th>
-                <th className="px-4 py-2.5 font-medium w-16"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...data]
-                .sort((a, b) => a.priority - b.priority)
-                .map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50"
-                  >
-                    <td className="px-4 py-2.5 font-mono text-xs">
-                      {p.priority}
-                    </td>
-                    <td className="px-4 py-2.5">{p.name}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge
-                        variant={
-                          p.action === "block"
-                            ? "danger"
-                            : p.action === "allow"
-                            ? "success"
-                            : p.action === "review"
-                            ? "warning"
-                            : "info"
-                        }
-                      >
-                        {p.action}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {p.task_type ?? "-"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <button
-                        onClick={() => onDelete(p.id)}
-                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
+      </div>
     </div>
   );
 }
