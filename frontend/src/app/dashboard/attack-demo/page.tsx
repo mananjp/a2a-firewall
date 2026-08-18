@@ -2,8 +2,15 @@
 
 import { Sandbox } from "@/components/site/Sandbox";
 import { PageHead, Panel, Stat, StatGrid } from "@/components/soc/ui";
+import { useSoc } from "@/components/soc/store";
 
 export default function AttackDemoPage() {
+  const { workspace, stats } = useSoc();
+
+  const avgLatency = stats?.avg_latency_ms != null
+    ? `${stats.avg_latency_ms.toFixed(1)}ms`
+    : "—";
+
   return (
     <div className="space-y-8">
       <PageHead
@@ -13,10 +20,10 @@ export default function AttackDemoPage() {
       />
 
       <StatGrid>
-        <Stat label="Scenarios" value="4" note="injection · escalation · replay · clean" />
+        <Stat label="Scenarios" value="3" note="injection · review · clean" />
         <Stat label="Gates armed" value="6" note="L1 → L6" />
-        <Stat label="Fail mode" value="CLOSED" />
-        <Stat label="Median verdict" value="17.4ms" />
+        <Stat label="Fail mode" value={workspace.failMode} />
+        <Stat label="Avg verdict latency" value={avgLatency} note="live backend" />
       </StatGrid>
 
       <Sandbox />
@@ -41,3 +48,4 @@ export default function AttackDemoPage() {
     </div>
   );
 }
+
