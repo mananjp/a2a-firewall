@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   async rewrites() {
-    const apiBase = process.env.API_BASE_URL ?? "http://localhost:8000";
+    const apiBase = process.env.API_BASE_URL ?? "http://127.0.0.1:8000";
     return [
       {
         source: "/v1/:path*",

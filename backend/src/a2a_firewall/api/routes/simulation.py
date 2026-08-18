@@ -170,6 +170,81 @@ async def _ensure_agents(workspace: Workspace, db: AsyncSession) -> dict[str, Ag
     return existing
 
 
+AGENT_PRIOR_KNOWLEDGE: dict[str, dict[str, Any]] = {
+    "Customer Service": {
+        "role": "Tier-1 Customer Onboarding & Inquiries",
+        "trust_tier": "Low / Ingress Boundary (Tier 3)",
+        "capabilities": ["customer_interaction", "ticket_creation", "identity_check"],
+        "accessible_tools": ["CRM_Lookup", "Ticket_Create", "Dispatch_Fraud_Alert"],
+        "known_context": [
+            "Customer onboarding form submissions (SSN, name, claimed address)",
+            "Active customer support session tokens and chat logs",
+            "Read-only basic account tier status (Checking/Savings)",
+        ],
+        "strictly_prohibited": [
+            "Initiating direct wire transfers or payment releases",
+            "Modifying core ledger balances or issuing approval tokens",
+            "Bypassing AML or KYC sanction screening policies",
+        ],
+        "signing_key": "ed25519:cs_ingress_key_0x8f2b1a99c0d1e2f3a4b5c6d7",
+    },
+    "Fraud Investigation": {
+        "role": "Senior AML & Fraud Anomaly Investigator",
+        "trust_tier": "Medium / Elevated Scrutiny (Tier 2)",
+        "capabilities": ["investigation", "fraud_detection", "case_management", "payment_hold", "payment_approval"],
+        "accessible_tools": ["SAR_Filing_Tool", "Anomaly_Graph_Lookup", "Payment_Hold_Action", "Sanctions_Screening"],
+        "known_context": [
+            "30-day cross-account velocity indices and geographic anomaly models",
+            "Synthetic identity correlation scores and OFAC watchlists",
+            "Authority to place temporary security holds on suspicious outbound wires",
+        ],
+        "strictly_prohibited": [
+            "Unilateral ledger balance alterations without dual-agent consensus",
+            "Exporting unmasked customer PII outside the secure boundary",
+        ],
+        "signing_key": "ed25519:fraud_sec_key_0x14a9b2c3d4e5f6a7b8c9d0e1",
+    },
+    "KYC Agent": {
+        "role": "Know Your Customer & Biometric Identity Verifier",
+        "trust_tier": "Medium / Identity Specialist (Tier 2)",
+        "capabilities": ["identity_verification", "document_check", "compliance", "verification_request"],
+        "accessible_tools": ["Passport_OCR_Verifier", "Liveness_Detection_API", "National_Identity_DB"],
+        "known_context": [
+            "Government ID document tamper verification algorithms",
+            "Biometric face-match confidence thresholds (98%+ required for tier 1)",
+            "Synthetic ID fraud signatures (mismatched SSN issue dates & shell addresses)",
+        ],
+        "strictly_prohibited": [
+            "Executing wire transactions or initiating financial payouts",
+            "Overriding KYC rejections without secondary compliance officer approval",
+        ],
+        "signing_key": "ed25519:kyc_verifier_key_0x37c8a1f2e3d4c5b6a7980123",
+    },
+    "Payments Agent": {
+        "role": "High-Value Transaction Settlement & Wire Processor",
+        "trust_tier": "High Privilege / Ledger Core (Tier 1)",
+        "capabilities": ["payment_processing", "wire_transfer", "hold_management", "payment_confirmation"],
+        "accessible_tools": ["Fedwire_Gateway", "SWIFT_Settlement_API", "Core_Banking_Ledger"],
+        "known_context": [
+            "Direct interface to banking settlement rail APIs",
+            "Enforces $100,000+ dual-authorization threshold",
+            "Offshore destination account risk classification matrix (FATF blacklists)",
+        ],
+        "strictly_prohibited": [
+            "Executing wires without cryptographically signed parent approval token",
+            "Processing payments for unverified/quarantined customer entities",
+        ],
+        "signing_key": "ed25519:payments_vault_key_0x99e1a2b3c4d5e6f7a8b9c0d1",
+    },
+}
+
+
+@router.get("/knowledge")
+async def get_simulation_agent_knowledge() -> dict[str, Any]:
+    """Return prior knowledge, memory context, and permission boundaries for all simulation agents."""
+    return {"agents": AGENT_PRIOR_KNOWLEDGE}
+
+
 @router.post("/run")
 async def run_simulation(
     body: SimulationRunRequest,

@@ -1,22 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Providers } from "@/components/providers";
+import { Archivo, JetBrains_Mono } from "next/font/google";
+import { SocProvider } from "@/components/soc/store";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const archivo = Archivo({
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-archivo",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "A2A Firewall",
+  title: "A2A Firewall — Zero-Trust Agent Mesh",
   description:
-    "Inter-agent governance mesh. Intercept, inspect, validate, and trace autonomous AI agent communication.",
+    "Six-gate cryptographic and semantic inspection for every inter-agent request.",
   icons: { icon: "/favicon.svg" },
 };
 
@@ -24,10 +28,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="min-h-screen bg-background text-foreground antialiased">
-        <Providers>{children}</Providers>
+    <html lang="en" className={`${archivo.variable} ${jetbrainsMono.variable}`}>
+      <body>
+        <SocProvider>{children}</SocProvider>
       </body>
     </html>
   );
 }
+

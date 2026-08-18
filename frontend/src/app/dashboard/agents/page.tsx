@@ -1,217 +1,141 @@
 "use client";
 
-import { useState, useCallback, type FormEvent } from "react";
-import { agents } from "@/lib/api";
-import { usePolling } from "@/hooks/use-polling";
-import type { Agent, AgentWithKey } from "@/lib/types";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Bot, Copy, Check } from "lucide-react";
+import { useState } from "react";
+import { useSoc } from "@/components/soc/store";
+import { Btn, Field, PageHead, Panel, Stat, StatGrid, Tag, inputCls } from "@/components/soc/ui";
 
-export default function AgentsPage() {
+export default function RegistryPage() {
+  const { agents, toggleAgent, addAgent, isConnected } = useSoc();
+  const [q, setQ] = useState("");
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [owner, setOwner] = useState("");
+  const [scopes, setScopes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastKey, setLastKey] = useState<{
-    name: string;
-    api_key: string;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const {
-    data,
-    loading,
-    error: loadErr,
-    refresh,
-  } = usePolling<Agent[]>(
-    useCallback((_signal) => agents.list() as Promise<Agent[]>, []),
-    10000
+  const rows = agents.filter((a) =>
+    (a.name + a.owner + a.scopes.join(" ") + a.id).toLowerCase().includes(q.toLowerCase())
   );
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return;
     setSubmitting(true);
-    setError(null);
     try {
-      const res = (await agents.register({
-        name,
-        description: description || undefined,
-      })) as AgentWithKey;
-      setLastKey({ name: res.name, api_key: res.api_key });
+      await addAgent(name.trim(), owner.trim() || "unassigned@mesh", scopes);
       setName("");
-      setDescription("");
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setOwner("");
+      setScopes("");
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
-  async function onAction(
-    id: string,
-    action: "suspend" | "reactivate" | "rotateKey"
-  ) {
+  const handleToggle = async (id: string) => {
+    setTogglingId(id);
     try {
-      if (action === "rotateKey") {
-        const res = await agents.rotateKey(id);
-        setLastKey({ name: id.slice(0, 8), api_key: res.api_key });
-      } else {
-        await agents[action](id);
-      }
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      await toggleAgent(id);
+    } finally {
+      setTogglingId(null);
     }
-  }
-
-  function copyKey() {
-    if (lastKey) {
-      navigator.clipboard.writeText(lastKey.api_key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
+  };
 
   return (
-    <div>
-      <PageHeader
-        title="Agents"
-        description="Register and manage agent identities and permissions."
+    <div className="space-y-8">
+      <PageHead
+        index="/10"
+        title="Agent Registry"
+        subtitle="The authoritative roster. Unregistered identities are refused at L2 preflight."
       />
 
-      {(error || loadErr) && (
-        <div className="mb-4 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {error || loadErr?.message}
-        </div>
-      )}
+      <StatGrid>
+        <Stat label="Registered" value={String(agents.length)} />
+        <Stat label="Active" value={String(agents.filter((a) => a.status === "active").length)} />
+        <Stat label="Suspended" value={String(agents.filter((a) => a.status === "suspended").length)} />
+        <Stat label="Backend Sync" value={isConnected ? "LIVE" : "LOCAL"} note="Database backed roster" />
+      </StatGrid>
 
-      {/* Register form */}
-      <Card className="mb-6 max-w-xl">
-        <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Register a new agent
-        </div>
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="researcher"
-            required
+      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+        <Panel title="Registered agents" hint={`${rows.length} records`}>
+          <input
+            className={`${inputCls} mb-4 max-w-sm`}
+            placeholder="search agent, owner, capability or ID…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
           />
-          <Input
-            label="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <Button type="submit" disabled={submitting || !name} size="sm">
-            {submitting ? "Registering..." : "Register"}
-          </Button>
-        </form>
-
-        {lastKey && (
-          <div className="mt-3 rounded-md border border-warning/20 bg-warning/5 p-3">
-            <div className="text-xs text-warning">
-              API key for{" "}
-              <span className="font-mono">{lastKey.name}</span> - copy now,
-              you won&apos;t see it again:
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 rounded bg-background/50 px-2 py-1.5 text-[11px] font-mono text-foreground break-all">
-                {lastKey.api_key}
-              </code>
-              <button
-                onClick={copyKey}
-                className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground"
-              >
-                {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
-              </button>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Agent list */}
-      <div className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Existing agents
-      </div>
-      {loading && !data && (
-        <Card className="text-sm text-muted">Loading...</Card>
-      )}
-      {data && data.length === 0 && (
-        <EmptyState
-          icon={<Bot size={24} />}
-          title="No agents yet"
-          description="Register one above to get started."
-        />
-      )}
-      {data && data.length > 0 && (
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Name</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium">ID</th>
-                <th className="px-4 py-2.5 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((a) => (
-                <tr
-                  key={a.id}
-                  className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50"
+          <div className="divide-y divide-ink/10">
+            {rows.map((a) => (
+              <div key={a.id} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-display text-sm font-bold uppercase">{a.name}</span>
+                    <Tag tone={a.status === "active" ? "lime" : "danger"}>{a.status}</Tag>
+                    <Tag>depth {a.depth}</Tag>
+                  </div>
+                  <div className="font-mono text-[11px] text-muted-foreground">
+                    {a.owner} · ID: {a.id.slice(0, 10)}... · {a.lastSeen}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {a.scopes.map((s) => (
+                      <Tag key={s} tone="violet">
+                        {s}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+                <Btn
+                  variant={a.status === "active" ? "danger" : "lime"}
+                  disabled={togglingId === a.id}
+                  onClick={() => handleToggle(a.id)}
                 >
-                  <td className="px-4 py-2.5 font-medium">{a.name}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      variant={a.status === "active" ? "success" : "danger"}
-                    >
-                      {a.status}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                    {a.id.slice(0, 8)}...
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex gap-1.5">
-                      {a.status === "active" ? (
-                        <Button
-                          onClick={() => onAction(a.id, "suspend")}
-                          variant="danger"
-                          size="sm"
-                        >
-                          Suspend
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => onAction(a.id, "reactivate")}
-                          variant="primary"
-                          size="sm"
-                        >
-                          Reactivate
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => onAction(a.id, "rotateKey")}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        Rotate key
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
+                  {togglingId === a.id ? "Updating..." : a.status === "active" ? "Suspend" : "Reinstate"}
+                </Btn>
+              </div>
+            ))}
+            {!rows.length && (
+              <p className="py-6 font-mono text-xs text-muted-foreground">
+                {"// No registered agents match search criteria."}
+              </p>
+            )}
+          </div>
+        </Panel>
+
+        <Panel title="Register agent" hint="issues ed25519 identity">
+          <form className="space-y-5" onSubmit={submit}>
+            <Field label="Agent name">
+              <input
+                className={inputCls}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="research-agent-08"
+                required
+              />
+            </Field>
+            <Field label="Owner / Description">
+              <input
+                className={inputCls}
+                value={owner}
+                onChange={(e) => setOwner(e.target.value)}
+                placeholder="research@mesh.dev"
+              />
+            </Field>
+            <Field label="Capabilities / Scopes (comma separated)">
+              <input
+                className={inputCls}
+                value={scopes}
+                onChange={(e) => setScopes(e.target.value)}
+                placeholder="web.fetch, doc.summarize, research"
+              />
+            </Field>
+            <Btn type="submit" variant="solid" className="w-full" disabled={submitting}>
+              {submitting ? "Registering on server..." : "Register & issue key"}
+            </Btn>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              New agents are saved into Postgres and issued unique Ed25519 identities with fail-closed defaults.
+            </p>
+          </form>
+        </Panel>
+      </div>
     </div>
   );
 }

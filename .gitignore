@@ -4,11 +4,13 @@ __pycache__/
 .env
 .venv/
 venv/
+*.env*
 node_modules/
 dist/
 build/
 *.egg-info/
 .DS_Store
+tsconfig.tsbuildinfo
 
 # Test / tooling artifacts
 .coverage
@@ -25,3 +27,6 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+
+# Temporary folders
+design-haven/

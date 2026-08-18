@@ -75,7 +75,13 @@ async function request<T>(
     throw new ApiError(res.status, message);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const text = await res.text();
+  if (!text || !text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return {} as T;
+  }
 }
 
 export class ApiError extends Error {
@@ -240,7 +246,51 @@ export const demo = {
       method: "POST",
       body: JSON.stringify({ scenario }),
     }),
+  delegationBootstrap: () =>
+    request<{
+      scenarios: Array<{
+        id: string;
+        label: string;
+        description: string;
+        category: string;
+      }>;
+    }>("/v1/demo/delegation-bootstrap"),
+  runDelegation: (scenario: string, useStatic = false) =>
+    request<DelegationDemoResponse>("/v1/demo/run-delegation", {
+      method: "POST",
+      body: JSON.stringify({ scenario, use_static: useStatic }),
+    }),
 };
+
+export interface DelegationDemoResponse extends FirewallResponse {
+  demo_scenario: string;
+  demo_label: string;
+  demo_description: string;
+  demo_payload: Record<string, unknown>;
+  is_static?: boolean;
+  pipeline_error?: string;
+  root_task?: {
+    task_id: string;
+    decision: string;
+    risk_score: number;
+    trace_id: string;
+  };
+  delegation_metadata?: {
+    root_token_caveats: string[];
+    child_token_caveats: string[];
+    delegation_depth: number;
+    intent_declared: string | null;
+    intent_drift_score: number | null;
+    signature_valid: boolean;
+    chain_hops: Array<{
+      from: string;
+      to: string;
+      caveats_added: string[];
+      valid: boolean;
+    }>;
+  };
+}
+
 
 export const simulation = {
   run: (steps: Array<{
@@ -275,6 +325,21 @@ export const simulation = {
       method: "POST",
       body: JSON.stringify({ steps }),
     }),
+  knowledge: () =>
+    request<{
+      agents: Record<
+        string,
+        {
+          role: string;
+          trust_tier: string;
+          capabilities: string[];
+          accessible_tools: string[];
+          known_context: string[];
+          strictly_prohibited: string[];
+          signing_key: string;
+        }
+      >;
+    }>("/v1/simulation/knowledge"),
 };
 
 export const telemetry = {
@@ -367,3 +432,66 @@ export const schemas = {
       body: JSON.stringify(body),
     }),
 };
+
+
+export interface AuditHop {
+  id: string;
+  task_id: string;
+  sender_id: string;
+  sender_name: string;
+  receiver_id: string;
+  receiver_name: string;
+  delegation_depth: number;
+  caveats: string[];
+  signature_valid: boolean;
+  chain_hash: string;
+  created_at: string | null;
+}
+
+export type DelegationHop = AuditHop;
+
+export interface TaskAuditChain {
+  task_id: string;
+  root_task_id: string;
+  declared_intent: string | null;
+  intent_drift_score: number | null;
+  hops_count: number;
+  hops: AuditHop[];
+}
+
+export interface AuditChainExport {
+  workspace_id: string;
+  count: number;
+  events: Array<{
+    timestamp: string;
+    task_id: string;
+    sender_id: string;
+    sender_name: string;
+    receiver_id: string;
+    receiver_name: string;
+    delegation_depth: number;
+    caveats: string;
+    signature_valid: boolean;
+    chain_hash: string;
+  }>;
+}
+
+export const audit = {
+  taskChain: (taskId: string) =>
+    request<TaskAuditChain>(`/v1/audit/tasks/${taskId}/delegation-chain`),
+  listChains: (limit = 100, since?: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    if (since) q.set("since", since);
+    return request<AuditChainExport>(`/v1/audit/delegation-chains?${q.toString()}`);
+  },
+  exportCsvUrl: (limit = 100, since?: string) => {
+    const apiKey = getApiKey();
+    const q = new URLSearchParams();
+    q.set("limit", String(limit));
+    q.set("format", "csv");
+    if (since) q.set("since", since);
+    return `${API_BASE}/v1/audit/delegation-chains?${q.toString()}`;
+  },
+};
+

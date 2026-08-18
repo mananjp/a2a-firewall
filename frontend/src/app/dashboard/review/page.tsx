@@ -1,102 +1,93 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { review } from "@/lib/api";
-import { usePolling } from "@/hooks/use-polling";
-import type { ReviewItem } from "@/lib/types";
-import { PageHeader } from "@/components/layout/page-header";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { MessageSquare, CheckCircle2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { useSoc } from "@/components/soc/store";
+import { Bar, Btn, PageHead, Panel, Stat, StatGrid, Tag } from "@/components/soc/ui";
 
 export default function ReviewQueuePage() {
-  const [error, setError] = useState<string | null>(null);
-  const {
-    data,
-    loading,
-    error: loadErr,
-    refresh,
-  } = usePolling<ReviewItem[]>(
-    useCallback((_signal) => review.list() as Promise<ReviewItem[]>, []),
-    5000
-  );
+  const { queue, decideQueue, isConnected } = useSoc();
+  const [tab, setTab] = useState<"pending" | "approved" | "denied">("pending");
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  async function onDecide(token: string, action: "approve" | "reject") {
-    setError(null);
+  const rows = queue.filter((q) => q.status === tab);
+
+  const handleDecision = async (id: string, decision: "approved" | "denied") => {
+    setActingId(id);
     try {
-      await review.decide(token, action);
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      await decideQueue(id, decision);
+    } finally {
+      setActingId(null);
     }
-  }
+  };
 
   return (
-    <div>
-      <PageHeader
+    <div className="space-y-8">
+      <PageHead
+        index="/05"
         title="Review Queue"
-        description="Tasks with ambiguous risk scores that need human decision."
+        subtitle="Requests escalated by L5 for human adjudication. Nothing proceeds until a decision is recorded."
       />
 
-      {(error || loadErr) && (
-        <div className="mb-4 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {error || loadErr?.message}
-        </div>
-      )}
+      <StatGrid>
+        <Stat label="Pending" value={String(queue.filter((q) => q.status === "pending").length)} />
+        <Stat label="Approved" value={String(queue.filter((q) => q.status === "approved").length)} />
+        <Stat label="Denied" value={String(queue.filter((q) => q.status === "denied").length)} />
+        <Stat label="Status" value={isConnected ? "CONNECTED" : "OFFLINE"} note="Live REST review gateway" />
+      </StatGrid>
 
-      {loading && !data && (
-        <Card className="text-sm text-muted">Loading...</Card>
-      )}
-      {data && data.length === 0 && (
-        <EmptyState
-          icon={<MessageSquare size={24} />}
-          title="No pending reviews"
-          description="Tasks with risk between review and block thresholds land here."
-        />
-      )}
-      {data && data.length > 0 && (
-        <div className="space-y-2">
-          {data.map((r) => (
-            <Card key={r.id} className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-2">
+        {(["pending", "approved", "denied"] as const).map((t) => (
+          <Btn key={t} variant={tab === t ? "solid" : "outline"} onClick={() => setTab(t)}>
+            {t} ({queue.filter((q) => q.status === t).length})
+          </Btn>
+        ))}
+      </div>
+
+      <Panel title={`${tab} items`} hint={`${rows.length} records`}>
+        <div className="divide-y divide-ink/10">
+          {rows.map((q) => (
+            <div key={q.id} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
               <div className="min-w-0">
-                <div className="text-sm">
-                  Task{" "}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {r.task_id}
-                  </span>
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                  <span>ID: {q.id.slice(0, 12)}</span>
+                  <span>{q.raised}</span>
+                  <Tag tone={q.risk > 60 ? "danger" : "violet"}>risk {q.risk}%</Tag>
                 </div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Token{" "}
-                  <span className="font-mono">
-                    {r.review_token.slice(0, 12)}...
-                  </span>{" "}
-                  - expires {new Date(r.expires_at).toLocaleString()}
+                <div className="mt-1 font-display text-sm font-bold uppercase">{q.agent}</div>
+                <div className="font-mono text-xs text-muted-foreground">
+                  {q.intent} — {q.reason}
                 </div>
               </div>
-              <div className="flex gap-1.5 shrink-0">
-                <Button
-                  onClick={() => onDecide(r.review_token, "approve")}
-                  size="sm"
-                  variant="primary"
-                >
-                  <CheckCircle2 size={13} />
-                  Approve
-                </Button>
-                <Button
-                  onClick={() => onDecide(r.review_token, "reject")}
-                  size="sm"
-                  variant="danger"
-                >
-                  <XCircle size={13} />
-                  Reject
-                </Button>
-              </div>
-            </Card>
+              <Bar value={q.risk} tone={q.risk > 60 ? "danger" : "violet"} />
+              {q.status === "pending" ? (
+                <div className="flex gap-2">
+                  <Btn
+                    variant="lime"
+                    disabled={actingId === q.id}
+                    onClick={() => handleDecision(q.id, "approved")}
+                  >
+                    {actingId === q.id ? "Saving..." : "Approve"}
+                  </Btn>
+                  <Btn
+                    variant="danger"
+                    disabled={actingId === q.id}
+                    onClick={() => handleDecision(q.id, "denied")}
+                  >
+                    {actingId === q.id ? "Saving..." : "Deny"}
+                  </Btn>
+                </div>
+              ) : (
+                <Tag tone={q.status === "approved" ? "lime" : "danger"}>{q.status}</Tag>
+              )}
+            </div>
           ))}
+          {!rows.length && (
+            <p className="py-6 font-mono text-xs text-muted-foreground">
+              {"// Review queue is currently empty for "}{tab}{" items."}
+            </p>
+          )}
         </div>
-      )}
+      </Panel>
     </div>
   );
 }

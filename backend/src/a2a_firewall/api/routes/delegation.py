@@ -185,9 +185,17 @@ async def get_delegation_chain(
     db: AsyncSession = Depends(get_db),
 ) -> DelegationChainResponse:
     """Get the full delegation chain for a task (audit trail)."""
+    # Find root_task_id for this task first if available
+    task_res = await db.execute(
+        select(Task).where(Task.id == task_id, Task.workspace_id == workspace.id)
+    )
+    task_obj = task_res.scalar_one_or_none()
+    root_id = task_obj.root_task_id if task_obj else task_id
+
     result = await db.execute(
         select(DelegationChain)
-        .where(DelegationChain.workspace_id == workspace.id, DelegationChain.task_id == task_id)
+        .join(Task, DelegationChain.task_id == Task.id)
+        .where(DelegationChain.workspace_id == workspace.id, Task.root_task_id == root_id)
         .order_by(DelegationChain.delegation_depth)
     )
     rows = result.scalars().all()

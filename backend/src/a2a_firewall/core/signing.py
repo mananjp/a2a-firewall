@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from a2a_firewall.core.identity import hex_to_public_key
+from a2a_firewall.core.identity import parse_public_key
 
 # ---------------------------------------------------------------------------
 # Hashing
@@ -166,7 +166,7 @@ def verify_signature(
     """
     # 1. Verify Ed25519 signature
     try:
-        pub_key = hex_to_public_key(sender_public_key_hex)
+        pub_key = parse_public_key(sender_public_key_hex)
         pub_key.verify(bytes.fromhex(message.signature), message.signing_bytes())
     except Exception:
         return SignatureVerificationResult(
