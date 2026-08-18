@@ -319,6 +319,21 @@ export const simulation = {
       method: "POST",
       body: JSON.stringify({ steps }),
     }),
+  knowledge: () =>
+    request<{
+      agents: Record<
+        string,
+        {
+          role: string;
+          trust_tier: string;
+          capabilities: string[];
+          accessible_tools: string[];
+          known_context: string[];
+          strictly_prohibited: string[];
+          signing_key: string;
+        }
+      >;
+    }>("/v1/simulation/knowledge"),
 };
 
 export const telemetry = {

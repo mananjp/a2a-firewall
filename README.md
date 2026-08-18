@@ -1,35 +1,36 @@
-# 🛡️ A2A Firewall — Inter-Agent Governance Mesh
+# 🛡️ A2A Firewall — Inter-Agent Governance Mesh (v2.2.0)
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Version-2.2.0-blue?style=for-the-badge" alt="Version 2.2.0" />
   <img src="https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-0.109-emerald?style=for-the-badge&logo=fastapi" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/React-18.2-blue?style=for-the-badge&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/OpenTelemetry-Enabled-orange?style=for-the-badge&logo=opentelemetry" alt="OpenTelemetry" />
-  <img src="https://img.shields.io/badge/Grafana%20Cloud-Supported-brightgreen?style=for-the-badge&logo=grafana" alt="Grafana Cloud" />
+  <img src="https://img.shields.io/badge/Anti--Agentic%20Pentest-Immune-red?style=for-the-badge" alt="Anti-Pentest Immune" />
 </p>
 
-A2A Firewall is a production-grade **Inter-Agent Governance Mesh** designed to intercept, inspect, validate, and trace communication between autonomous AI agents. It ensures security, schema conformity, authorization checks, custom policy enforcement, and distributed lineage tracing across complex multi-agent pipelines.
+A2A Firewall is a production-grade **Zero-Trust Inter-Agent Governance Mesh** designed to intercept, inspect, validate, and trace communication between autonomous AI agents. It provides multi-layer inspection, cryptographic Ed25519 identity verification, Macaroon caveat attenuation, anti-agentic pentest immunity, SQL injection defense, and full OpenTelemetry distributed lineage tracing across complex multi-agent pipelines.
 
 ---
 
 ## 🏗️ Architecture & Message Flow
 
-Whenever **Agent A** attempts to send a message to **Agent B**, the request is intercepted by the **A2A Firewall SDK**. The firewall processes the message through a **Multi-Layer Threat Inspection Pipeline** and synthesizes a security decision: **Allow**, **Block**, or route for manual **Review**.
+Whenever **Agent A** attempts to send a message to **Agent B**, the request is intercepted by the **A2A Sentinel Ingress Gateway**. The firewall processes the message through a **Six-Layer Threat Inspection Pipeline** and synthesizes an immediate security verdict: **Allow**, **Block**, or route for manual **Review**.
 
 ```mermaid
 graph TD
-    A["🤖 Agent A"] -->|1. Intercept Message| FW["🛡️ A2A Firewall"]
-    FW -->|Layer -1| L_M1["⏳ Rate Limiter"]
-    L_M1 -->|Layer 0| L0["⚡ Preflight & Idempotency"]
+    A["🤖 Agent A"] -->|1. Signed Payload (Ed25519)| FW["🛡️ A2A Sentinel Gateway"]
+    FW -->|Layer -1| L_M1["⏳ Rate Limiter (Token Bucket)"]
+    L_M1 -->|Layer 0| L0["⚡ Preflight, Nonces & Anti-Pentest Canaries"]
     L0 -->|Layer 1| L1["📋 JSON Schema Validation"]
-    L1 -->|Layer 2| L2["🔑 Permissions Matrix"]
-    L2 -->|Layer 3| L3["📜 Rule Engine & Regex"]
-    L3 -->|Layer 4| L4["🧠 Groq LLM Semantic Guard"]
-    L4 -->|Layer 5| L5["🎛️ Decision Synthesis"]
+    L1 -->|Layer 2| L2["🔑 Permissions Matrix & Macaroon Attenuation"]
+    L2 -->|Layer 3| L3["📜 Rule Engine, SQL Guard & Obfuscation Decoders"]
+    L3 -->|Layer 4| L4["🧠 Groq LLM Semantic Guard (Intent Drift)"]
+    L4 -->|Layer 5| L5["🎛️ Declarative Policy Synthesis Gate"]
     
-    L5 -->|Allow| B["🤖 Agent B"]
-    L5 -->|Block| Err["❌ FirewallBlockedError"]
-    L5 -->|Review| RQ["👥 Manual Review Queue"]
+    L5 -->|Allow| B["🤖 Agent B (Authorized)"]
+    L5 -->|Block| Err["❌ Dropped / Dynamic Quarantine"]
+    L5 -->|Review| RQ["👥 SOC Review Queue"]
     
     RQ -->|Admin Approved| B
     RQ -->|Admin Rejected| Err
@@ -37,195 +38,136 @@ graph TD
 
 ---
 
-## 🛡️ The Inspection Pipeline
+## 🛡️ Six-Layer Threat Inspection Pipeline
 
 | Layer | Component | Description |
 | :--- | :--- | :--- |
-| **Layer -1** | **Rate Limiter** | Sliding-window limiters restricting queries per minute at both the Workspace level and Agent level. |
-| **Layer 0** | **Preflight & Idempotency** | Prevents cascading failures by restricting maximum payload size, circular calls, depth limits (> 10), and replaying cached decisions for duplicate `task_id` submissions. |
-| **Layer 1** | **JSON Schema Validation** | Validates the message structure against registered JSON schemas matching the specified `task_type`. |
-| **Layer 2** | **Permissions Matrix** | Validates if the sender agent is explicitly authorized to message the receiver agent for that `task_type`. |
-| **Layer 3** | **Rule Engine & Policies** | Executes regex matching against forbidden strings (like prompt injection patterns) and custom workspace policies. |
-| **Layer 4** | **Groq Semantic Guard** | Uses LLM-based reasoning (via `llama-3.1-8b-instant`) to detect complex prompt injections, jailbreaks, sensitive data leakage, and intent drift. |
-| **Layer 5** | **Decision Synthesis** | Evaluates results from all layers. Decisions falling between the `review_threshold` and `block_threshold` are held in a manual review queue. |
+| **Layer -1** | **Rate Limiter** | Sliding-window token buckets restricting queries per minute at both workspace and agent levels. |
+| **Layer 0** | **Preflight & Anti-Pentest Canaries** | Detects zero-trust honeytoken traps (`__sec_canary`), automated fuzzing bursts, circular delegation loops, payload size limits, and cryptographic nonce replays (> 300s window). |
+| **Layer 1** | **JSON Schema Validation** | Enforces strict type-safety and parameter bounds against registered task schemas matching `task_type`. |
+| **Layer 2** | **Permissions Matrix & Scopes** | Validates sender-receiver trust relationships, capability bounds, and delegation depth attenuation. |
+| **Layer 3** | **Rule Engine & SQL Guard** | Scans for forbidden prompt injection strings, SQL injection (`UNION SELECT`, tautologies, stacked queries), offshore beneficiary flags, and Base64/Hex obfuscated payloads. |
+| **Layer 4** | **Groq Semantic Guard** | Uses Llama-3.1-8B-Instant inference to evaluate semantic intent drift, confused-deputy redirection, and indirect prompt injection attempts. |
+| **Layer 5** | **Declarative Policy Synthesis** | Priority-ranked policy evaluation rules with customizable action gates (`BLOCK`, `REVIEW`, `ALLOW`). |
 
 ---
 
-## 🔒 Confused-Deputy & Delegation-Chain Trust Defense
+## 🔒 Advanced Security Capabilities
 
-Unlike general prompt safety tools that focus solely on single-prompt or single-tool safety (e.g. Lakera), A2A Firewall specifically secures **multi-agent delegation trust relationships**:
+### 1. Anti-Agentic Pentest Immunity Subsystem
+- **Honeytoken Canary Traps**: Decoy canary markers (`__sec_canary`, `_admin_override`, `__probe_eval__`) automatically quarantine malicious reconnaissance agents.
+- **Fuzzing Storm Defense**: Detects high-frequency parameter mutations and prompt fuzzing seeds within short burst windows.
+- **Introspection Blocker**: Rejects prompt directives attempting to leak internal firewall rule definitions, system prompts, or tool manifests.
+- **Dynamic Quarantine**: Offending agents are immediately isolated with session nonces revoked and latency tarpits applied.
 
-1. **Non-Amplification Scope Enforcement (Phase 2 / ADR-0001)**: At every delegation hop, a sub-agent's requested capabilities (`task_type`, `resource_type`, `action`, `max_risk`) must be a **STRICT SUBSET** of the delegator's parent caveats. A delegatee can never widen permissions or ask for more than it was granted.
-2. **Intent-Binding & Drift Verification (Phase 3 / ADR-0002)**: Multi-hop payloads are verified against the **root task's declared intent** (`declared_intent`). Groq scores payload semantic drift (`intent_drift_score`). If drift exceeds `INTENT_DRIFT_THRESHOLD` (0.7), the firewall blocks confused-deputy prompt injections that attempt to hijack sub-agents.
-3. **Macaroon Delegation Tokens**: Scoped, short-lived tokens carrying HMAC-SHA256 caveat chains. Each hop attenuates capabilities without re-signing or trusting delegatees.
-4. **Ed25519 Cryptographic Agent Identity**: Outgoing messages carry Ed25519 signatures verified against registered agent public keys to prevent identity spoofing and card tampering.
-5. **First-Class Delegation Audit Trail (Phase 4)**: Audit endpoint (`GET /v1/audit/tasks/{task_id}/delegation-chain`) and CSV compliance export (`GET /v1/audit/delegation-chains?format=csv`) with interactive tree visualization in the dashboard.
+### 2. SQL Injection Defense Engine
+- Detects `UNION SELECT` credential dumps, tautologies (`OR '1'='1'`, `OR 1=1`), stacked queries (`; DROP TABLE`), comment obfuscations, and time-based blind SQL delays (`PG_SLEEP`, `BENCHMARK`).
+
+### 3. Confused-Deputy & Delegation-Chain Trust Defense
+- **Macaroon Caveat Attenuation**: Sub-agent capabilities must be a strict subset of delegator permissions; privilege amplification is strictly blocked.
+- **Intent-Binding & Drift Verification**: Multi-hop payloads are scored against root task intent. Drift exceeding threshold (0.7) is immediately blocked.
+- **Ed25519 Cryptographic Identity**: Outgoing agent messages carry cryptographic signatures verified against registered public keys.
+
+---
+
+## 🎮 Interactive Live Demo & Mesh Simulation
+
+### 1. Live Attack Demo (`/dashboard/demo`)
+- Visual 8-stage interactive wire graph with real-time animated packet traversal.
+- Live cumulative risk gauge meter ($0.0 \to 1.0$) and layer-by-layer latency breakdown.
+- Pre-packaged attack scenarios: Clean Baseline, Prompt Injection, Suspicious Export, SQL Injection Attack, and Anti-Pentest Probe.
+
+### 2. Agent Mesh Simulation & Prior Knowledge (`/dashboard/simulation`)
+- **Agent Prior Knowledge Inspector**: Inspect each agent's assigned role, trust tier, accessible tools, known memory records, strict prohibitions, and Ed25519 signing key before running simulations.
+- **Realistic KYC Fraud Scenario**: Multi-step attack demonstrating Synthetic Identity submission ➔ KYC verification anomaly alert ➔ Injected wire bypass attempt ➔ Firewall interception at Layer 3/4.
+
+### 3. Firewall Policy Visualizer & Auto-Complete (`/dashboard/policies`)
+- Visual sequential evaluation flow and policy impact indicators.
+- Real-time task type autocomplete with fuzzy matching.
+- One-click security presets: Anti-Pentest Guard, SQL Injection Shield, High-Value Wire Boundary ($100k+), Customer PII Review Gate, and Synthetic KYC Bypass Prevention.
+- Interactive Policy Simulation Sandbox.
+
+### 4. Real-Time Command Center (`/dashboard`)
+- Live streaming interception feed with Pause/Resume toggle, manual refresh, and verdict filters (`ALL`, `BLOCK`, `REVIEW`, `ALLOW`).
+- Click-to-filter hero verdict KPI cards and expandable inline diagnostics.
 
 ---
 
 ## 📊 Observability (OpenTelemetry)
 
-A2A Firewall has native OpenTelemetry instrumentation built-in, allowing you to trace complete multi-agent request chains.
+A2A Firewall includes native OpenTelemetry instrumentation for distributed lineage tracing:
 
-### 1. Local Dev Tracing (Jaeger)
-By default, the docker-compose stack starts a Jaeger instance.
+### Local Dev Tracing (Jaeger)
 * **Dashboard**: [http://localhost:16686](http://localhost:16686)
-* **Configuration**: Set in your local backend `.env`:
+* **Configuration** (`.env`):
   ```ini
   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
   OTEL_SERVICE_NAME=a2a-firewall
   ```
 
-### 2. Cloud Monitoring (Grafana Cloud / Tempo)
-To monitor traces in Grafana Cloud, configure the endpoint and Auth header keys in your `.env` or system environment variables:
+### Cloud Monitoring (Grafana Cloud / Tempo)
 ```ini
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<your-region>.grafana.net/otlp
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<your-base64-encoded-credentials>
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<your-base64-credentials>
 ```
-
-> [!TIP]
-> The SDK handles OTLP headers with or without URL-encoded spaces (`%20` or ` `) seamlessly to support copy-pasted Grafana config generators.
 
 ---
 
 ## 🚀 Quickstart
 
 ### 1. Start the Stack via Docker Compose
-Ensure you have Docker Desktop running, then run:
 ```bash
 docker compose up --build -d
 ```
 
-This starts:
-* **Frontend Web Dashboard**: [http://localhost:5173](http://localhost:5173) (Nginx + React)
-* **Backend REST API**: [http://localhost:8000](http://localhost:8000) (FastAPI + Uvicorn)
+* **Frontend Web Dashboard**: [http://localhost:3000](http://localhost:3000) (Next.js 16)
+* **Backend REST API**: [http://localhost:8000](http://localhost:8000) (FastAPI)
 * **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs) (Swagger UI)
-* **Jaeger Tracing Dashboard**: [http://localhost:16686](http://localhost:16686) (OpenTelemetry)
-* **PostgreSQL Database**: [http://localhost:5432](http://localhost:5432)
+* **Jaeger Tracing**: [http://localhost:16686](http://localhost:16686) (OpenTelemetry)
 
-### 2. Seed the Database
-Run the seed script to register a workspace, configure three demo agents (`planner`, `researcher`, `summarizer`), register sample schemas, and generate test keys:
+### 2. Run Backend Tests
 ```bash
 cd backend
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
-
-# Run seeding script
-.venv/Scripts/python scripts/seed.py
+.venv/Scripts/pytest -v
 ```
-> [!IMPORTANT]
-> Make sure to copy the outputted API keys and Workspace ID from the terminal!
+
+### 3. Build & Run Frontend
+```bash
+cd frontend
+npm install
+npm run build
+npm run dev
+```
 
 ---
 
 ## 🔌 Python SDK Usage
 
-Install the SDK locally:
-```bash
-cd sdk
-pip install -e .
-```
-
-### Basic Agent-to-Agent Message Sending
-Wrap agent requests using the SDK client. The SDK handles tracing headers, context propagation, and blocks automatically:
-
 ```python
 from a2a_firewall.client import A2AFirewall, FirewallConfig, FirewallBlockedError
 
-# 1. Configure the Client
 config = FirewallConfig(
     firewall_url="http://localhost:8000",
     workspace_id="your-workspace-uuid",
     agent_id="planner-agent-uuid",
     agent_api_key="agt_planner_key",
-    fail_mode="closed"  # Options: 'open' (allow on timeout) or 'closed' (block on timeout)
+    fail_mode="closed"
 )
 firewall = A2AFirewall(config)
 
-# 2. Intercept and Inspect Message
 try:
     response = firewall.send(
         receiver_agent_id="researcher-agent-uuid",
         task_type="research",
-        payload={
-            "query": "What is the capital of France?",
-            "max_results": 5
-        }
+        payload={"query": "Summarize renewable energy trends."}
     )
     print(f"Message Allowed! Decision: {response.decision}, Risk: {response.risk_score}")
 except FirewallBlockedError as e:
     print(f"Blocked! Task: {e.task_id}, Reason: {e.reason}, Violations: {e.violations}")
 ```
 
-### Context & Distributed Lineage Tracing
-For chained calls (e.g., Planner calling Researcher who then calls Summarizer), propagate the parent task and tracing identifiers:
-
-```python
-# In the intermediate agent (Researcher) when handling the task:
-firewall.set_context(
-    task_id="parent-task-uuid-received",
-    root_task_id="root-task-uuid-received",
-    trace_id="trace-id-received",
-    span_id="span-id-received"
-)
-
-# Subsequent send calls will automatically record parent-child relationships in the lineage tree:
-firewall.send(
-    receiver_agent_id="summarizer-agent-uuid",
-    task_type="research",
-    payload={"query": "Summarize research data"}
-)
-```
-
 ---
 
-## 🛠️ Developer Setup & Testing
-
-### Backend (FastAPI)
-Run checks and unit/integration tests locally:
-```bash
-cd backend
-# Apply database migrations
-.venv/Scripts/python -m alembic upgrade head
-
-# Run unit tests
-.venv/Scripts/pytest tests/unit -v
-
-# Format, Lint, & Typecheck code
-.venv/Scripts/ruff check src
-.venv/Scripts/ruff format --check src
-.venv/Scripts/mypy src
-```
-
-### Frontend (React + Vite)
-Build and run the Vite client:
-```bash
-cd frontend
-# Install dependencies
-npm ci
-
-# Run development server
-npm run dev
-
-# Run Vitest test suite
-npm test
-
-# Build client production bundle
-npm run build
-```
-
----
-
-## 📊 API Cheat-Sheet
-
-| Endpoint | Method | Description | Auth |
-| :--- | :--- | :--- | :--- |
-| `/v1/workspaces/register` | `POST` | Register a new developer workspace and get the Admin API Key. | None |
-| `/v1/auth/login` | `POST` | Exchange Workspace email for key rotation (DEV only). | None |
-| `/v1/agents` | `POST` | Register a new AI Agent within the Workspace. | Bearer (Workspace) |
-| `/v1/firewall/inspect` | `POST` | Core hot-path inspection endpoint called by the SDK. | Bearer (Agent) |
-| `/v1/tasks/by-trace/{trace_id}` | `GET` | Retrieve task trees and event timelines matching a trace. | Bearer (Workspace/Agent) |
-| `/v1/review/{review_token}/decide` | `POST` | Approve or reject a task suspended in the Review Queue. | Bearer (Workspace) |
-| `/v1/policies` | `POST` | Create a custom allow/block regex policy rule. | Bearer (Workspace) |
-| `/v1/stats/overview` | `GET` | Get general workspace stats, violation percentages, etc. | Bearer (Workspace) |
+## 📄 License
+Apache-2.0 License.

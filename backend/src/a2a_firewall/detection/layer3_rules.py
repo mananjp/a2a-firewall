@@ -7,6 +7,7 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.anti_pentest import check_anti_pentest
 from a2a_firewall.db.models import PolicyRule
 
 INJECTION_PATTERNS: list[str] = [
@@ -18,6 +19,18 @@ INJECTION_PATTERNS: list[str] = [
     r"new task:",
     r"system:",
     r"\[system\]",
+]
+
+# Comprehensive SQL Injection detection patterns
+SQL_INJECTION_PATTERNS: list[tuple[str, str, float]] = [
+    (r"(?i)\bUNION(\s+ALL)?\s+SELECT\b", "union_select_sql_injection", 0.95),
+    (r"(?i)\bOR\s+['\"\d\w]+\s*=\s*['\"\d\w]+", "tautology_sql_injection", 0.90),
+    (r"(?i)\b(OR|AND)\s+1\s*=\s*1\b|\b(OR|AND)\s+'1'\s*=\s*'1'", "tautology_sql_injection", 0.90),
+    (r"(?i);\s*(DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|EXEC|EXECUTE)\s+[a-zA-Z_]", "stacked_query_sql_injection", 0.95),
+    (r"(?i)(/\*.*?\*/|--\s*[\w\d']|;\s*--)", "comment_obfuscation_sql_injection", 0.85),
+    (r"(?i)\b(WAITFOR\s+DELAY|SLEEP\s*\(|PG_SLEEP\s*\(|BENCHMARK\s*\()", "time_based_blind_sql_injection", 0.90),
+    (r"(?i)\b(INFORMATION_SCHEMA|LOAD_FILE|INTO\s+OUTFILE|EXTRACTVALUE)\b", "data_exfiltration_sql_injection", 0.95),
+    (r"(?i)\b(XP_CMDSHELL|SP_EXECUTESQL)\b", "stored_procedure_sql_injection", 0.95),
 ]
 
 # Agent capabilities mapped to allowed task_type values
@@ -133,6 +146,31 @@ async def run_rules(
                 }
             )
             risk_delta = min(1.0, risk_delta + 0.8)
+
+    # ── SQL Injection scan ──
+    for pattern, vtype, prisk in SQL_INJECTION_PATTERNS:
+        if re.search(pattern, payload_str):
+            violations.append(
+                {
+                    "layer": "rule",
+                    "violation_type": "sql_injection",
+                    "severity": "critical",
+                    "details": {
+                        "pattern": pattern,
+                        "sql_injection_subtype": vtype,
+                        "guard": "sql_injection_firewall_rule",
+                    },
+                }
+            )
+            risk_delta = min(1.0, risk_delta + prisk)
+            break
+
+    # ── Anti-Agentic Pentest check ──
+    sender_id_str = str(getattr(sender, "id", "unknown"))
+    pentest_result = check_anti_pentest(request_data, sender_id_str, payload_str)
+    if pentest_result.get("violations"):
+        violations.extend(pentest_result["violations"])
+        risk_delta = min(1.0, risk_delta + pentest_result.get("risk_delta", 0.0))
 
     # ── Resource sensitivity ──
     resource_type = request_data.get("resource_type")

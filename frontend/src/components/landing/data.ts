@@ -53,7 +53,7 @@ export const SCENARIOS: SimulationScenario[] = [
       xAgentId: "portfolio-manager-01",
       xSignature: "ed25519:7f8a9e2b1c4d0e91a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5",
       xNonce: "0x9f18a24c00ef12ab",
-      xTimestamp: "2026-08-16T11:40:00.000Z (Fresh, Age: 120ms)",
+      xTimestamp: "2026-08-18T12:57:00.000Z (Fresh, Age: 120ms)",
       xMacaroonCaveats: "issuer:admin; scope:market_analytics.read; depth:1; ttl:300s",
     },
     payloadJson: {
@@ -87,7 +87,7 @@ export const SCENARIOS: SimulationScenario[] = [
       xAgentId: "untrusted-agent-ext",
       xSignature: "ed25519:3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b",
       xNonce: "0x3a4b5c6d7e8f9012",
-      xTimestamp: "2026-08-16T11:40:02.100Z (Fresh)",
+      xTimestamp: "2026-08-18T12:57:02.100Z (Fresh)",
       xMacaroonCaveats: "issuer:external; scope:data_query.read; depth:3; ttl:60s",
     },
     payloadJson: {
@@ -119,7 +119,7 @@ export const SCENARIOS: SimulationScenario[] = [
       xAgentId: "researcher-agent-03",
       xSignature: "ed25519:11223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
       xNonce: "0x55aa66bb77cc88dd",
-      xTimestamp: "2026-08-16T11:40:05.400Z (Fresh)",
+      xTimestamp: "2026-08-18T12:57:05.400Z (Fresh)",
       xMacaroonCaveats: "issuer:root; caveat(narrow:read_only); caveat(deny:transfers)",
     },
     payloadJson: {
@@ -152,8 +152,8 @@ export const SCENARIOS: SimulationScenario[] = [
     headers: {
       xAgentId: "rogue-agent-09",
       xSignature: "ed25519:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-      xNonce: "0x8f2a1b9c (REPLAYED - Already cached at t=11:32:00)",
-      xTimestamp: "2026-08-16T11:32:00.000Z (STALE, Age: 480s > 300s limit)",
+      xNonce: "0x8f2a1b9c (REPLAYED - Already cached at t=12:49:00)",
+      xTimestamp: "2026-08-18T12:49:00.000Z (STALE, Age: 480s > 300s limit)",
       xMacaroonCaveats: "issuer:vault_admin; scope:vault.unlock; ttl:expired",
     },
     payloadJson: {

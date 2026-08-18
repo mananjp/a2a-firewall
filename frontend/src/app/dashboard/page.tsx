@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { violations, telemetry, stats, workspaces, tasks } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
@@ -37,33 +37,35 @@ import {
   AlertTriangle,
   Layers,
   ChevronDown,
+  Pause,
+  Play,
+  Filter,
+  RefreshCw,
+  X,
+  FileCode,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function DashboardPage() {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [isFeedPaused, setIsFeedPaused] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<string>("all");
+  const [selectedTaskForDrawer, setSelectedTaskForDrawer] = useState<RecentTask | null>(null);
 
-  const { data: statsData, loading: statsLoading } = usePolling<StatsOverview>(
+  const { data: statsData, loading: statsLoading, refresh: refreshStats } = usePolling<StatsOverview>(
     useCallback((_signal) => stats.overview(), []),
-    4000
+    isFeedPaused ? 0 : 4000
   );
 
-  const { data: telemetryData, loading: telemetryLoading } = usePolling<TelemetrySummary>(
+  const { data: telemetryData, loading: telemetryLoading, refresh: refreshTelemetry } = usePolling<TelemetrySummary>(
     useCallback((_signal) => telemetry.summary(), []),
-    6000
+    isFeedPaused ? 0 : 6000
   );
 
-  const { data: recentTasks, loading: tasksLoading } = usePolling<RecentTask[]>(
-    useCallback((_signal) => tasks.recent(10), []),
-    3000
+  const { data: recentTasks, loading: tasksLoading, refresh: refreshTasks } = usePolling<RecentTask[]>(
+    useCallback((_signal) => tasks.recent(20), []),
+    isFeedPaused ? 0 : 3000
   );
-
-  const { data: violationsData, loading: violationsLoading } = usePolling<Violation[]>(
-    useCallback((_signal) => violations.list(undefined) as Promise<Violation[]>, []),
-    6000
-  );
-
-  const isInitialLoading = (statsLoading && !statsData) || (tasksLoading && !recentTasks);
 
   const totalDecisions = statsData?.total_tasks || 0;
   const blockCount = statsData?.blocked || 0;
@@ -73,6 +75,18 @@ export default function DashboardPage() {
   const allowPct = totalDecisions > 0 ? ((allowCount / totalDecisions) * 100).toFixed(1) : "100.0";
   const blockPct = totalDecisions > 0 ? ((blockCount / totalDecisions) * 100).toFixed(1) : "0.0";
   const reviewPct = totalDecisions > 0 ? ((reviewCount / totalDecisions) * 100).toFixed(1) : "0.0";
+
+  const filteredTasks = useMemo(() => {
+    if (!recentTasks) return [];
+    if (feedFilter === "all") return recentTasks;
+    return recentTasks.filter((t) => t.decision === feedFilter);
+  }, [recentTasks, feedFilter]);
+
+  function handleManualRefresh() {
+    refreshStats();
+    refreshTelemetry();
+    refreshTasks();
+  }
 
   return (
     <div className="space-y-6">
@@ -98,7 +112,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Hero Verdict Ratio & KPI Centerpiece */}
+      {/* Hero Verdict Ratio & KPI Centerpiece with Click Events */}
       <div className="material-panel rounded-2xl p-6 relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-5 border-b border-hairline">
           <div>
@@ -111,9 +125,16 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Verdict Hero Metric Cards */}
+          {/* Verdict Hero Metric Cards with Click-to-Filter */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="px-4 py-3 rounded-xl border border-allow/30 bg-allow/5 flex flex-col min-w-[120px]">
+            <button
+              onClick={() => setFeedFilter(feedFilter === "allow" ? "all" : "allow")}
+              className={`px-4 py-3 rounded-xl border flex flex-col min-w-[120px] text-left transition-all cursor-pointer ${
+                feedFilter === "allow"
+                  ? "border-allow bg-allow/15 ring-2 ring-allow/30 shadow-card"
+                  : "border-allow/30 bg-allow/5 hover:bg-allow/10"
+              }`}
+            >
               <div className="flex items-center justify-between text-[11px] font-mono text-allow font-semibold uppercase">
                 <span>Allow</span>
                 <span>{allowPct}%</span>
@@ -121,9 +142,16 @@ export default function DashboardPage() {
               <div className="text-[24px] font-bold font-mono text-allow mt-0.5">
                 {allowCount}
               </div>
-            </div>
+            </button>
 
-            <div className="px-4 py-3 rounded-xl border border-block/30 bg-block/5 flex flex-col min-w-[120px]">
+            <button
+              onClick={() => setFeedFilter(feedFilter === "block" ? "all" : "block")}
+              className={`px-4 py-3 rounded-xl border flex flex-col min-w-[120px] text-left transition-all cursor-pointer ${
+                feedFilter === "block"
+                  ? "border-block bg-block/15 ring-2 ring-block/30 shadow-card"
+                  : "border-block/30 bg-block/5 hover:bg-block/10"
+              }`}
+            >
               <div className="flex items-center justify-between text-[11px] font-mono text-block font-semibold uppercase">
                 <span>Block</span>
                 <span>{blockPct}%</span>
@@ -131,9 +159,16 @@ export default function DashboardPage() {
               <div className="text-[24px] font-bold font-mono text-block mt-0.5">
                 {blockCount}
               </div>
-            </div>
+            </button>
 
-            <div className="px-4 py-3 rounded-xl border border-review/30 bg-review/5 flex flex-col min-w-[120px]">
+            <button
+              onClick={() => setFeedFilter(feedFilter === "review" ? "all" : "review")}
+              className={`px-4 py-3 rounded-xl border flex flex-col min-w-[120px] text-left transition-all cursor-pointer ${
+                feedFilter === "review"
+                  ? "border-review bg-review/15 ring-2 ring-review/30 shadow-card"
+                  : "border-review/30 bg-review/5 hover:bg-review/10"
+              }`}
+            >
               <div className="flex items-center justify-between text-[11px] font-mono text-review font-semibold uppercase">
                 <span>Review</span>
                 <span>{reviewPct}%</span>
@@ -141,7 +176,7 @@ export default function DashboardPage() {
               <div className="text-[24px] font-bold font-mono text-review mt-0.5">
                 {reviewCount}
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -178,7 +213,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Signature Centerpiece: Six-Layer Inspection Visualizer */}
+      {/* Signature Inspection Visualizer */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="eyebrow">Signature Inspection Engine</div>
@@ -239,21 +274,64 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Live Decision Feed with Inline Inspection */}
+      {/* Enhanced Live Decision Feed with Controls & Click Diagnostics */}
       <div className="material-panel rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-hairline">
           <div>
-            <div className="eyebrow mb-1">Live Feed</div>
-            <h3 className="text-[15px] font-semibold text-ink-primary">
+            <div className="flex items-center gap-2">
+              <span className="eyebrow">Live Interception Feed</span>
+              {!isFeedPaused && (
+                <span className="flex items-center gap-1 text-[10px] font-mono text-allow px-1.5 py-0.5 rounded bg-allow/10 border border-allow/30">
+                  <span className="h-1.5 w-1.5 rounded-full bg-allow animate-pulse" />
+                  STREAMING
+                </span>
+              )}
+            </div>
+            <h3 className="text-[15px] font-semibold text-ink-primary mt-0.5">
               Recent Interceptions & Decisions
             </h3>
           </div>
-          <Link
-            href="/dashboard/telemetry"
-            className="text-[12px] font-mono text-accent hover:underline inline-flex items-center gap-1"
-          >
-            Full Telemetry <ArrowRight size={12} />
-          </Link>
+
+          <div className="flex items-center gap-2">
+            {/* Filter Pills */}
+            <div className="flex rounded-lg border border-hairline bg-surface p-0.5">
+              {["all", "block", "review", "allow"].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFeedFilter(f)}
+                  className={`px-2.5 py-1 text-[11px] font-mono font-semibold uppercase rounded-md transition-all ${
+                    feedFilter === f
+                      ? "bg-surface-elevated text-ink-primary shadow-sm"
+                      : "text-ink-muted hover:text-ink-primary"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            {/* Pause/Resume Toggle */}
+            <Button
+              onClick={() => setIsFeedPaused(!isFeedPaused)}
+              variant="secondary"
+              size="sm"
+              className="font-mono text-[11.5px] gap-1 px-2.5"
+            >
+              {isFeedPaused ? <Play size={12} className="text-allow" /> : <Pause size={12} className="text-warning" />}
+              {isFeedPaused ? "Resume" : "Pause"}
+            </Button>
+
+            {/* Manual Refresh */}
+            <Button
+              onClick={handleManualRefresh}
+              variant="secondary"
+              size="sm"
+              className="p-2"
+              aria-label="Refresh"
+            >
+              <RefreshCw size={13} className="text-ink-muted hover:text-ink-primary" />
+            </Button>
+          </div>
         </div>
 
         {tasksLoading && !recentTasks ? (
@@ -276,33 +354,33 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        ) : recentTasks && recentTasks.length > 0 ? (
+        ) : filteredTasks.length > 0 ? (
           <div className="space-y-2">
-            {recentTasks.map((t) => {
+            {filteredTasks.map((t) => {
               const isExpanded = expandedTaskId === t.id;
               return (
                 <div
                   key={t.id}
-                  className="rounded-lg border border-hairline bg-surface hover:border-hairline-strong transition-all overflow-hidden"
+                  className="rounded-xl border border-hairline bg-surface hover:border-hairline-strong transition-all overflow-hidden"
                 >
                   <div
                     onClick={() => setExpandedTaskId(isExpanded ? null : t.id)}
-                    className="flex items-center justify-between p-3.5 cursor-pointer text-[13px]"
+                    className="flex items-center justify-between p-3.5 cursor-pointer text-[13px] hover:bg-surface-elevated/40"
                   >
                     <div className="flex items-center gap-3">
                       <Badge variant={decisionVariant(t.decision)}>{t.decision}</Badge>
-                      <span className="font-mono text-[12px] text-ink-primary font-semibold">
+                      <span className="font-mono text-[12.5px] text-ink-primary font-semibold">
                         {t.task_type}
                       </span>
-                      <span className="font-mono text-[11px] text-ink-muted">
+                      <span className="font-mono text-[11px] text-ink-muted hidden sm:inline">
                         ID: {t.id.slice(0, 8)}...
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-ink-muted font-mono text-[11px]">
+                    <div className="flex items-center gap-3 text-ink-muted font-mono text-[11px]">
                       <span>Risk: {t.risk_score.toFixed(2)}</span>
                       <span>{t.total_latency_ms ?? 12}ms</span>
-                      <span className="text-ink-muted text-[10px]">
+                      <span className="text-ink-muted text-[10px] hidden sm:inline">
                         {new Date(t.created_at).toLocaleTimeString()}
                       </span>
                       <ChevronDown
@@ -313,7 +391,7 @@ export default function DashboardPage() {
                   </div>
 
                   {isExpanded && (
-                    <div className="p-4 border-t border-hairline bg-surface-elevated/70">
+                    <div className="p-4 border-t border-hairline bg-surface-elevated/70 space-y-3">
                       <MessageJourneyPipeline
                         decision={t.decision}
                         riskScore={t.risk_score}
@@ -322,16 +400,19 @@ export default function DashboardPage() {
                         animated={false}
                         className="bg-surface-sunken p-4"
                       />
-                      {t.trace_id && (
-                        <div className="mt-3 flex items-center justify-end">
+                      <div className="flex items-center justify-between pt-2 border-t border-hairline text-[11.5px] font-mono">
+                        <span className="text-ink-muted">
+                          Created at: {new Date(t.created_at).toLocaleString()}
+                        </span>
+                        {t.trace_id && (
                           <Link
                             href={`/dashboard/traces/${t.trace_id}`}
-                            className="text-[11px] font-mono text-accent hover:underline flex items-center gap-1"
+                            className="text-accent hover:underline flex items-center gap-1"
                           >
-                            Open Distributed OTel Trace ({t.trace_id.slice(0, 12)}...) <ExternalLink size={11} />
+                            Open Distributed Trace ({t.trace_id.slice(0, 8)}...) <ExternalLink size={11} />
                           </Link>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -341,8 +422,8 @@ export default function DashboardPage() {
         ) : (
           <EmptyState
             icon={<Activity size={20} />}
-            title="No intercepted traffic yet"
-            description="Run an attack demo or bank simulation to generate multi-agent traffic."
+            title="No intercepted traffic matches filter"
+            description="Try changing the filter or trigger traffic in the Attack Demo or Simulation."
           />
         )}
       </div>

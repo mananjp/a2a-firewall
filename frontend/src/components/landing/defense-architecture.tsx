@@ -88,7 +88,7 @@ export function DefenseArchitecture() {
                 <div><span className="text-ink-faint">X-Agent-ID:</span> &quot;planner-agent-01&quot;</div>
                 <div><span className="text-ink-faint">X-Signature:</span> &quot;ed25519:7f8a9e2b1c4d...&quot;</div>
                 <div><span className="text-ink-faint">X-Nonce:</span> &quot;0x9f18a24c00ef12ab&quot;</div>
-                <div><span className="text-ink-faint">X-Timestamp:</span> &quot;2026-08-16T11:00:00.000Z&quot;</div>
+                <div><span className="text-ink-faint">X-Timestamp:</span> &quot;2026-08-18T12:57:00.000Z&quot;</div>
                 <div className="pt-2 border-t border-hairline text-allow flex items-center gap-1.5 font-bold">
                   <Check size={13} /> Cryptographically Verified by Sentinel Gateway
                 </div>
