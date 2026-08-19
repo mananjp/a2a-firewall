@@ -474,7 +474,7 @@ export default function LiveDemoPage() {
               <tbody>
                 {history.map((r) => (
                   <tr key={r.timestamp} className="border-t border-hairline/60 transition-colors duration-120 hover:bg-surface-elevated">
-                    <td className="px-4 py-2.5 text-[12px] tabular-nums font-mono text-ink-muted">{new Date(r.timestamp).toLocaleTimeString()}</td>
+                    <td className="px-4 py-2.5 text-[12px] tabular-nums font-mono text-ink-muted">{new Date(r.timestamp).toLocaleTimeString([], { timeZone: 'UTC' })} UTC</td>
                     <td className="px-4 py-2.5 text-[12px] font-medium text-ink-primary">{r.scenario}</td>
                     <td className="px-4 py-2.5">
                       <Badge variant={decisionVariant(r.response.decision)}>{r.response.decision}</Badge>

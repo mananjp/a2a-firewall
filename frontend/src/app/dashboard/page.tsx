@@ -43,6 +43,7 @@ import {
   RefreshCw,
   X,
   FileCode,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -286,6 +287,9 @@ export default function DashboardPage() {
                   STREAMING
                 </span>
               )}
+              {tasksLoading && recentTasks && (
+                <Loader2 size={13} className="text-accent animate-spin" />
+              )}
             </div>
             <h3 className="text-[15px] font-semibold text-ink-primary mt-0.5">
               Recent Interceptions & Decisions
@@ -381,7 +385,7 @@ export default function DashboardPage() {
                       <span>Risk: {t.risk_score.toFixed(2)}</span>
                       <span>{t.total_latency_ms ?? 12}ms</span>
                       <span className="text-ink-muted text-[10px] hidden sm:inline">
-                        {new Date(t.created_at).toLocaleTimeString()}
+                        {new Date(t.created_at).toLocaleTimeString([], { timeZone: 'UTC' })} UTC
                       </span>
                       <ChevronDown
                         size={14}
@@ -402,7 +406,7 @@ export default function DashboardPage() {
                       />
                       <div className="flex items-center justify-between pt-2 border-t border-hairline text-[11.5px] font-mono">
                         <span className="text-ink-muted">
-                          Created at: {new Date(t.created_at).toLocaleString()}
+                          Created at: {new Date(t.created_at).toLocaleString([], { timeZone: 'UTC' })} UTC
                         </span>
                         {t.trace_id && (
                           <Link

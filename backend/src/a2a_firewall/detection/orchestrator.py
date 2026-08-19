@@ -686,7 +686,7 @@ async def _emit_telemetry(
         otel_span_id=request_data.get("parent_span_id"),
     )
     db.add(event)
-    await db.flush()
+    await db.commit()
 
 
 async def _save_and_return(

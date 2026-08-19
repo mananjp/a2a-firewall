@@ -106,7 +106,7 @@ export default function ReviewQueuePage() {
                       <span>Token: {r.review_token.slice(0, 16)}...</span>
                       <span>•</span>
                       <span className="flex items-center gap-1 text-review">
-                        <Clock size={11} /> Expires: {new Date(r.expires_at).toLocaleTimeString()}
+                        <Clock size={11} /> Expires: {new Date(r.expires_at).toLocaleTimeString([], { timeZone: 'UTC' })} UTC
                       </span>
                     </div>
                   </div>

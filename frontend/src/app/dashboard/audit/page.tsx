@@ -164,7 +164,7 @@ export default function AuditPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-[11px] font-mono text-ink-muted">
-                          {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : "-"}
+                          {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString([], { timeZone: 'UTC' }) + ' UTC' : "-"}
                         </td>
                       </tr>
                     );

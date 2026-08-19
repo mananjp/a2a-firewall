@@ -274,7 +274,7 @@ export default function DelegationDemoPage() {
                     className="border-t border-border/50 transition-colors hover:bg-surface-elevated/50"
                   >
                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {new Date(r.timestamp).toLocaleTimeString()}
+                      {new Date(r.timestamp).toLocaleTimeString([], { timeZone: 'UTC' })} UTC
                     </td>
                     <td className="px-4 py-2.5 text-xs">{r.response.demo_label}</td>
                     <td className="px-4 py-2.5">

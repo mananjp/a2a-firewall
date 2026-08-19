@@ -56,6 +56,7 @@ export default function ViolationsPage() {
           eyebrow="Security Operations"
           title="Security Violations"
           description="Auditable security violation events flagged across the 6-layer inspection pipeline."
+          trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
         />
         <div className="flex gap-1 rounded-lg border border-hairline bg-surface p-1 shrink-0">
           {FILTERS.map((s) => {
@@ -134,7 +135,7 @@ export default function ViolationsPage() {
                         {v.task_id.slice(0, 8)}…
                       </td>
                       <td className="px-5 py-3.5 text-[11px] font-mono text-ink-muted">
-                        {new Date(v.created_at).toLocaleTimeString()}
+                        {new Date(v.created_at).toLocaleTimeString([], { timeZone: 'UTC' })} UTC
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         {!v.resolved ? (
@@ -297,7 +298,7 @@ function ViolationModal({
                   />
                   <MetaCard
                     label="Flagged At"
-                    value={violation ? new Date(violation.created_at).toLocaleTimeString() : "—"}
+                    value={violation ? new Date(violation.created_at).toLocaleTimeString([], { timeZone: 'UTC' }) + ' UTC' : "—"}
                     icon={<Clock size={13} className="text-review" />}
                   />
                 </div>

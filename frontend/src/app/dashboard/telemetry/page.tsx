@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -55,6 +56,7 @@ export default function TelemetryPage() {
         eyebrow="Live Traffic Lineage"
         title="Live Telemetry & Inspection Stream"
         description="Full structured telemetry emitted from multi-agent hops — correlated with open telemetry tracing and fraud engines."
+        trailing={loading && events ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
       />
 
       {/* Summary KPI Cards */}
@@ -179,7 +181,7 @@ export default function TelemetryPage() {
                       {evt.latency_ms}ms
                     </td>
                     <td className="px-4 py-3 text-[11px] font-mono text-ink-muted">
-                      {new Date(evt.created_at).toLocaleTimeString()}
+                      {new Date(evt.created_at).toLocaleTimeString([], { timeZone: 'UTC' })} UTC
                     </td>
                     <td className="px-4 py-3 text-right">
                       <ChevronDown
