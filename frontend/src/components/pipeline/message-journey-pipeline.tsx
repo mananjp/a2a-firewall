@@ -29,8 +29,27 @@ export interface LayerNodeState {
   metadata?: Record<string, unknown>;
 }
 
+export interface TaskPipelineLike {
+  id?: string;
+  decision?: string;
+  risk_score?: number;
+  violating_layer?: string | null;
+  decision_reason?: string | null;
+  intent_drift_score?: number | null;
+  groq_called?: boolean;
+  groq_injection_detected?: boolean | null;
+  total_latency_ms?: number | null;
+  violations?: Array<{
+    layer?: string;
+    violation_type?: string;
+    type?: string;
+    severity?: string;
+    details?: Record<string, unknown>;
+  }>;
+}
+
 interface MessageJourneyPipelineProps {
-  task?: Partial<TaskDetail> | null;
+  task?: TaskPipelineLike | null;
   decision?: "allow" | "block" | "review" | string;
   riskScore?: number;
   violatingLayer?: string;
@@ -59,35 +78,130 @@ export function MessageJourneyPipeline({
   const [selectedLayer, setSelectedLayer] = useState<number | null>(null);
 
   const effectiveDecision = task?.decision ?? decision;
-  const effectiveViolatingLayer = (
-    task?.violations?.[0]?.layer ??
-    task?.violating_layer ??
-    violatingLayer ??
-    ""
-  ).toLowerCase();
   const effectiveDrift = task?.intent_drift_score ?? intentDriftScore;
 
-  // Determine each layer's status based on decision & violating_layer
-  const getLayerStatus = (layerIndex: number, layerKey: string): "pass" | "fail" | "review" | "skip" => {
+  // Extract all possible clues for the violating layer
+  const rawViolating = (
+    task?.violating_layer ??
+    violatingLayer ??
+    task?.violations?.[0]?.layer ??
+    task?.violations?.[0]?.violation_type ??
+    task?.violations?.[0]?.type ??
+    task?.decision_reason ??
+    ""
+  ).toLowerCase();
+
+  // Determine failing gate index (1 to 6)
+  const getFailingGateIndex = (): number | null => {
+    if (effectiveDecision !== "block") return null;
+
+    // Gate 1: Rate Limiter
+    if (
+      rawViolating.includes("rate") ||
+      rawViolating.includes("quota") ||
+      rawViolating.includes("throttle") ||
+      rawViolating.includes("layer1") ||
+      rawViolating.includes("layer 1")
+    ) {
+      return 1;
+    }
+
+    // Gate 2: Preflight & Idempotency
+    if (
+      rawViolating.includes("preflight") ||
+      rawViolating.includes("nonce") ||
+      rawViolating.includes("replay") ||
+      rawViolating.includes("pentest") ||
+      rawViolating.includes("canary") ||
+      rawViolating.includes("signature") ||
+      rawViolating.includes("idempotency") ||
+      rawViolating.includes("layer2") ||
+      rawViolating.includes("layer 2") ||
+      rawViolating.includes("layer0") ||
+      rawViolating.includes("layer 0")
+    ) {
+      return 2;
+    }
+
+    // Gate 3: Schema Validation
+    if (
+      rawViolating.includes("schema") ||
+      rawViolating.includes("type_error") ||
+      rawViolating.includes("parameter") ||
+      rawViolating.includes("layer3") ||
+      rawViolating.includes("layer 3")
+    ) {
+      return 3;
+    }
+
+    // Gate 4: Permissions Matrix
+    if (
+      rawViolating.includes("permission") ||
+      rawViolating.includes("delegation") ||
+      rawViolating.includes("amplification") ||
+      rawViolating.includes("unauthorized") ||
+      rawViolating.includes("rbac") ||
+      rawViolating.includes("scope") ||
+      rawViolating.includes("layer4") ||
+      rawViolating.includes("layer 4")
+    ) {
+      return 4;
+    }
+
+    // Gate 5: Rule Engine
+    if (
+      rawViolating.includes("sql") ||
+      rawViolating.includes("policy") ||
+      rawViolating.includes("rule") ||
+      rawViolating.includes("regex") ||
+      rawViolating.includes("layer5") ||
+      rawViolating.includes("layer 5")
+    ) {
+      return 5;
+    }
+
+    // Gate 6: Groq Semantic Guard
+    if (
+      rawViolating.includes("groq") ||
+      rawViolating.includes("semantic") ||
+      rawViolating.includes("injection") ||
+      rawViolating.includes("drift") ||
+      rawViolating.includes("intent") ||
+      rawViolating.includes("hallucin") ||
+      rawViolating.includes("layer6") ||
+      rawViolating.includes("layer 6") ||
+      Boolean(task?.groq_injection_detected)
+    ) {
+      return 6;
+    }
+
+    // Fallbacks based on latency/risk if no keyword matched
+    if (totalLatencyMs !== undefined && totalLatencyMs <= 2) {
+      return 2; // Preflight fast-path rejection
+    }
+    if (riskScore >= 0.8 || groqCalled) {
+      return 6; // Groq Semantic Guard
+    }
+    return 5; // Rule Engine default
+  };
+
+  const failingGateIndex = getFailingGateIndex();
+
+  const getLayerStatus = (layerIndex: number): "pass" | "fail" | "review" | "skip" => {
     if (effectiveDecision === "allow") return "pass";
 
-    // Block logic
     if (effectiveDecision === "block") {
-      if (effectiveViolatingLayer.includes(layerKey) || effectiveViolatingLayer.includes(`layer${layerIndex}`)) {
+      if (failingGateIndex === layerIndex) {
         return "fail";
       }
-      // If it failed at an earlier layer, subsequent layers were skipped
-      const layerOrder = ["rate", "preflight", "schema", "permission", "rule", "groq"];
-      const failIndex = layerOrder.findIndex((k) => effectiveViolatingLayer.includes(k));
-      if (failIndex !== -1 && layerIndex > failIndex + 1) {
+      if (failingGateIndex !== null && layerIndex > failingGateIndex) {
         return "skip";
       }
       return "pass";
     }
 
-    // Review logic
     if (effectiveDecision === "review") {
-      if (layerIndex === 6) return "review"; // Groq or semantic grey zone
+      if (layerIndex === 6) return "review";
       return "pass";
     }
 
@@ -100,9 +214,9 @@ export function MessageJourneyPipeline({
       name: "Layer 1: Rate Limiter",
       shortName: "Rate Limiter",
       icon: Gauge,
-      status: getLayerStatus(1, "rate"),
+      status: getLayerStatus(1),
       latencyMs: 1.2,
-      verdict: getLayerStatus(1, "rate") === "fail" ? "Rate limit quota exceeded" : "Token bucket verified",
+      verdict: getLayerStatus(1) === "fail" ? "Rate limit quota exceeded" : "Token bucket verified",
       details: "Enforces per-agent token-bucket quotas. Prevents cascade saturation and DoS loops.",
     },
     {
@@ -110,22 +224,24 @@ export function MessageJourneyPipeline({
       name: "Layer 2: Preflight & Idempotency",
       shortName: "Preflight",
       icon: ShieldCheck,
-      status: getLayerStatus(2, "preflight"),
+      status: getLayerStatus(2),
       latencyMs: 2.1,
       verdict:
-        getLayerStatus(2, "preflight") === "fail"
-          ? "Replay or invalid signature detected"
+        getLayerStatus(2) === "fail"
+          ? (rawViolating.includes("pentest") || rawViolating.includes("canary")
+              ? "Automated pentesting canary or probe blocked"
+              : "Replay or invalid signature detected")
           : "Ed25519 signature & nonce verified",
-      details: "Validates nonces, message freshness timestamps, and Ed25519 cryptographic signatures on the wire.",
+      details: "Validates nonces, message freshness timestamps, anti-pentest canary traps, and Ed25519 cryptographic signatures on the wire.",
     },
     {
       id: 3,
       name: "Layer 3: Schema Validation",
       shortName: "Schema",
       icon: FileCode,
-      status: getLayerStatus(3, "schema"),
+      status: getLayerStatus(3),
       latencyMs: 3.4,
-      verdict: getLayerStatus(3, "schema") === "fail" ? "Payload schema mismatch" : "Strict JSON Schema valid",
+      verdict: getLayerStatus(3) === "fail" ? "Payload schema mismatch" : "Strict JSON Schema valid",
       details: "Enforces strict type safety and parameter bounds against the registered task schema.",
     },
     {
@@ -133,9 +249,14 @@ export function MessageJourneyPipeline({
       name: "Layer 4: Permissions Matrix",
       shortName: "Permissions",
       icon: Lock,
-      status: getLayerStatus(4, "permission"),
+      status: getLayerStatus(4),
       latencyMs: 1.8,
-      verdict: getLayerStatus(4, "permission") === "fail" ? "Unauthorized agent route" : "RBAC route authorized",
+      verdict:
+        getLayerStatus(4) === "fail"
+          ? (rawViolating.includes("amplification") || rawViolating.includes("delegation")
+              ? "Privilege escalation / non-amplification violation"
+              : "Unauthorized agent route / permission denied")
+          : "RBAC route authorized",
       details: "Evaluates sender-receiver trust relationships, capability bounds, and delegation depth.",
     },
     {
@@ -143,9 +264,14 @@ export function MessageJourneyPipeline({
       name: "Layer 5: Rule Engine",
       shortName: "Rule Engine",
       icon: Binary,
-      status: getLayerStatus(5, "rule"),
+      status: getLayerStatus(5),
       latencyMs: 4.0,
-      verdict: getLayerStatus(5, "rule") === "fail" ? "Policy rule violation triggered" : "No declarative rules violated",
+      verdict:
+        getLayerStatus(5) === "fail"
+          ? (rawViolating.includes("sql")
+              ? "SQL injection pattern detected & blocked"
+              : "Policy rule violation triggered")
+          : "No declarative rules violated",
       details: "Runs regex guards, data boundary checks, macaroon caveat attenuations, and safety predicates.",
     },
     {
@@ -153,12 +279,12 @@ export function MessageJourneyPipeline({
       name: "Layer 6: Groq Semantic Guard",
       shortName: "Groq Guard",
       icon: BrainCircuit,
-      status: getLayerStatus(6, "groq"),
+      status: getLayerStatus(6),
       latencyMs: groqLatencyMs ?? (groqCalled ? 18.5 : undefined),
       verdict:
-        getLayerStatus(6, "groq") === "fail"
+        getLayerStatus(6) === "fail"
           ? "Prompt injection or severe intent drift detected"
-          : getLayerStatus(6, "groq") === "review"
+          : getLayerStatus(6) === "review"
           ? `Intent drift (${effectiveDrift ? effectiveDrift.toFixed(2) : "0.58"}) placed in review`
           : groqCalled
           ? "Clean semantic score (no injection/drift)"
@@ -201,7 +327,17 @@ export function MessageJourneyPipeline({
             </div>
             {!compact && (
               <p className="text-[11px] text-ink-muted hidden sm:block">
-                Sequential gate validation • Click any layer for diagnostic trace
+                {effectiveDecision === "block" && failingGateIndex !== null ? (
+                  <span className="text-block font-semibold">
+                    Intercepted at Layer {failingGateIndex} ({layers[failingGateIndex - 1]?.shortName}) • Malicious packet dropped
+                  </span>
+                ) : effectiveDecision === "review" ? (
+                  <span className="text-review font-semibold">
+                    Held for review at Layer 6 (Groq Guard) • Ambiguous payload requires SOC approval
+                  </span>
+                ) : (
+                  "Sequential gate validation • Click any layer for diagnostic trace"
+                )}
               </p>
             )}
           </div>

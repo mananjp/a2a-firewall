@@ -307,9 +307,10 @@ function ViolationModal({
                 <div>
                   <div className="eyebrow mb-2">Inspection Pipeline · Failure Point</div>
                   <MessageJourneyPipeline
+                    task={task}
                     decision={task.decision}
                     riskScore={task.risk_score}
-                    violatingLayer={task.violations?.[0]?.layer}
+                    violatingLayer={task.violations?.[0]?.layer ?? task.violating_layer}
                     animated={true}
                     compact={false}
                     className="bg-surface-sunken/60 p-4 rounded-xl border border-hairline"

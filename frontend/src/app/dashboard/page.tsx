@@ -221,9 +221,12 @@ export default function DashboardPage() {
           <span className="text-[11px] font-mono text-ink-muted">Live Pipeline Interception</span>
         </div>
         <MessageJourneyPipeline
+          task={recentTasks?.[0]}
           decision={recentTasks?.[0]?.decision ?? "allow"}
-          totalLatencyMs={statsData?.avg_latency_ms ?? 14}
-          groqCalled={true}
+          riskScore={recentTasks?.[0]?.risk_score ?? 0}
+          violatingLayer={recentTasks?.[0]?.violating_layer ?? recentTasks?.[0]?.decision_reason ?? undefined}
+          totalLatencyMs={recentTasks?.[0]?.total_latency_ms ?? statsData?.avg_latency_ms ?? 14}
+          groqCalled={recentTasks?.[0]?.groq_called ?? true}
           intentDriftScore={0.12}
         />
       </div>
@@ -397,8 +400,10 @@ export default function DashboardPage() {
                   {isExpanded && (
                     <div className="p-4 border-t border-hairline bg-surface-elevated/70 space-y-3">
                       <MessageJourneyPipeline
+                        task={t}
                         decision={t.decision}
                         riskScore={t.risk_score}
+                        violatingLayer={t.violating_layer ?? t.decision_reason ?? undefined}
                         totalLatencyMs={t.total_latency_ms ?? undefined}
                         groqCalled={t.groq_called}
                         animated={false}

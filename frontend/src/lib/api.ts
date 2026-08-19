@@ -165,6 +165,14 @@ export interface RecentTask {
   depth: number;
   trace_id: string | null;
   created_at: string;
+  violating_layer?: string | null;
+  violations?: Array<{
+    layer: string;
+    violation_type?: string;
+    type?: string;
+    severity?: string;
+    details?: Record<string, unknown>;
+  }>;
 }
 
 export const tasks = {

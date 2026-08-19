@@ -25,6 +25,51 @@ async def list_recent_tasks(
         select(Task).where(Task.workspace_id == ws.id).order_by(Task.created_at.desc()).limit(limit)
     )
     tasks = result.scalars().all()
+    task_ids = [t.id for t in tasks]
+
+    violations_by_task: dict[uuid.UUID, list[Violation]] = {}
+    if task_ids:
+        v_result = await db.execute(
+            select(Violation).where(Violation.task_id.in_(task_ids))
+        )
+        for v in v_result.scalars().all():
+            violations_by_task.setdefault(v.task_id, []).append(v)
+
+    def _get_violating_layer(t: Task, viols: list[Violation]) -> str | None:
+        if viols:
+            v0 = viols[0]
+            vtype = (v0.violation_type or "").lower()
+            vlayer = (v0.layer or "").lower()
+            if "rate" in vtype or "rate" in vlayer:
+                return "rate"
+            if any(k in vtype for k in ("nonce", "replay", "canary", "pentest", "preflight")) or "preflight" in vlayer:
+                return "preflight"
+            if "schema" in vtype or "schema" in vlayer:
+                return "schema"
+            if any(k in vtype for k in ("permission", "unauthorized", "amplification", "delegation")) or any(k in vlayer for k in ("permission", "delegation")):
+                return "permission"
+            if any(k in vtype for k in ("injection", "drift", "semantic", "groq", "hallucination")) or "semantic" in vlayer:
+                return "groq"
+            return vlayer or "rule"
+        if t.decision == "block":
+            reason = (t.decision_reason or "").lower()
+            if "rate" in reason:
+                return "rate"
+            if any(k in reason for k in ("preflight", "nonce", "replay", "pentest", "canary")):
+                return "preflight"
+            if "schema" in reason:
+                return "schema"
+            if any(k in reason for k in ("permission", "unauthorized", "amplification", "delegation")):
+                return "permission"
+            if any(k in reason for k in ("injection", "prompt", "groq", "drift", "hallucination")):
+                return "groq"
+            if "rule" in reason or "policy" in reason or "sql" in reason:
+                return "rule"
+            if t.total_latency_ms is not None and t.total_latency_ms <= 2:
+                return "preflight"
+            return "rule"
+        return None
+
     return [
         {
             "id": str(t.id),
@@ -38,6 +83,17 @@ async def list_recent_tasks(
             "depth": t.depth,
             "trace_id": t.trace_id,
             "created_at": str(t.created_at),
+            "violating_layer": _get_violating_layer(t, violations_by_task.get(t.id, [])),
+            "violations": [
+                {
+                    "layer": v.layer,
+                    "type": v.violation_type,
+                    "violation_type": v.violation_type,
+                    "severity": v.severity,
+                    "details": v.details,
+                }
+                for v in violations_by_task.get(t.id, [])
+            ],
         }
         for t in tasks
     ]
