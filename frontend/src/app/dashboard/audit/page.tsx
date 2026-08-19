@@ -63,6 +63,7 @@ export default function AuditPage() {
           eyebrow="Non-Amplification"
           title="Delegation Chain Audit Trail"
           description="Cryptographic Ed25519 signatures, scoped macaroon caveats, and non-amplification verification across multi-agent hops."
+          trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
         />
         <div className="flex items-center gap-2">
           <Button

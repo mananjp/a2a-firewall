@@ -29,6 +29,7 @@ import {
   HelpCircle,
   Play,
   RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -237,6 +238,7 @@ export default function PoliciesPage() {
         eyebrow="Layer 5 Rule Engine"
         title="Firewall Policies & Safety Predicates"
         description="Configure declarative rule predicates, anti-pentesting immunity gates, and priority-ranked evaluation rules for agent payloads."
+        trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
       />
 
       {(error || loadErr) && (

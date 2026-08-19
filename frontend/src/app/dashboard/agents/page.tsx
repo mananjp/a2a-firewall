@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { Bot, Copy, Check, Plus, RefreshCw, KeyRound, Lock, ShieldCheck } from "lucide-react";
+import { Bot, Copy, Check, Plus, RefreshCw, KeyRound, Lock, ShieldCheck, Loader2 } from "lucide-react";
 
 export default function AgentsPage() {
   const [name, setName] = useState("");
@@ -83,9 +83,10 @@ export default function AgentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Agent Network"
-        title="Agent Registry & RBAC Scopes"
-        description="Register autonomous agents, issue API bearer tokens, and manage authorization capability scopes."
+        eyebrow="Agent Fleet"
+        title="Registered Agents"
+        description="Agents registered to this workspace with Ed25519 identity keys and capability manifests."
+        trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
       />
 
       {(error || loadErr) && (

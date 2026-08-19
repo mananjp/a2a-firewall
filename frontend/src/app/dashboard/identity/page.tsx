@@ -53,9 +53,12 @@ function WorkspaceIdentityCard() {
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
           <KeyRound size={15} />
         </div>
-        <div>
-          <h3 className="text-[14px] font-semibold text-ink-primary">Workspace Root Identity</h3>
-          <span className="text-[11px] text-ink-muted">Ed25519 Root Trust Anchor</span>
+        <div className="flex items-center justify-between flex-1">
+          <div>
+            <h3 className="text-[14px] font-semibold text-ink-primary">Workspace Root Identity</h3>
+            <span className="text-[11px] text-ink-muted">Ed25519 Root Trust Anchor</span>
+          </div>
+          {loading && data && <Loader2 size={14} className="text-accent animate-spin" />}
         </div>
       </div>
 

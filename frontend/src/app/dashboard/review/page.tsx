@@ -21,6 +21,7 @@ import {
   KeyRound,
   ArrowRight,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -58,6 +59,7 @@ export default function ReviewQueuePage() {
           eyebrow="Human-in-the-Loop"
           title="Manual Review Queue"
           description="Messages landing between the review threshold and block threshold. Requires manual triage and operator authorization."
+          trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
         />
         {data && data.length > 0 && (
           <Badge variant="review" className="font-mono text-[12px] px-3 py-1">

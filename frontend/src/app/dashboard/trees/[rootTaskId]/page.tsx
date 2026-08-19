@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CardSkeleton } from "@/components/ui/skeleton";
-import { GitBranch } from "lucide-react";
+import { GitBranch, Loader2 } from "lucide-react";
 
 // Warm-light palette — solid colors for node backgrounds
 const DECISION_BG: Record<string, string> = {
@@ -138,6 +138,7 @@ export default function TreeViewPage() {
         eyebrow="Lineage"
         title="Execution Tree"
         description={`Root: ${rootTaskId}`}
+        trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
       />
       <Card className="p-0 overflow-hidden" style={{ height: 500 }}>
         <ReactFlow
