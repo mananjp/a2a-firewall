@@ -52,16 +52,23 @@ DEFAULT_AGENTS = [
 ALLOWED_TASK_PERMISSIONS: list[tuple[str, str, str]] = [
     ("Customer Service", "Fraud Investigation", "investigation"),
     ("Customer Service", "Fraud Investigation", "status_update"),
+    ("Customer Service", "Fraud Investigation", "data_export"),
     ("Customer Service", "Payments Agent", "payment_request"),
+    ("Customer Service", "Payments Agent", "wire_transfer"),
+    ("Customer Service", "Payments Agent", "payment_processing"),
     ("Customer Service", "KYC Agent", "identity_check"),
+    ("Customer Service", "KYC Agent", "identity_verification"),
     ("Fraud Investigation", "Payments Agent", "payment_hold"),
     ("Fraud Investigation", "Payments Agent", "payment_approval"),
+    ("Fraud Investigation", "Payments Agent", "wire_transfer"),
+    ("Fraud Investigation", "Payments Agent", "payment_processing"),
     ("Fraud Investigation", "Customer Service", "status_update"),
     ("Fraud Investigation", "KYC Agent", "verification_request"),
     ("Fraud Investigation", "KYC Agent", "identity_verification"),
     ("KYC Agent", "Fraud Investigation", "identity_verification"),
     ("KYC Agent", "Fraud Investigation", "verification_request"),
     ("KYC Agent", "Payments Agent", "compliance_check"),
+    ("KYC Agent", "Payments Agent", "payment_processing"),
     ("KYC Agent", "Customer Service", "kyc_status"),
     ("Payments Agent", "Customer Service", "payment_confirmation"),
     ("Payments Agent", "Fraud Investigation", "transaction_report"),
@@ -268,6 +275,32 @@ async def run_simulation(
             )
 
         task_type = step.task_type or _infer_task_type(step.sender, step.receiver, step.payload)
+        payload_dict = step.payload if isinstance(step.payload, dict) else {}
+        resource_type = step.resource_type or payload_dict.get("resource_type")
+        action = step.action or payload_dict.get("action")
+        resource_id = step.resource_id or payload_dict.get("resource_id") or payload_dict.get("account_id")
+
+        # Ensure permission exists for the simulation step
+        perm_check = await db.execute(
+            select(AgentPermission).where(
+                AgentPermission.workspace_id == workspace.id,
+                AgentPermission.sender_id == sender.id,
+                AgentPermission.receiver_id == receiver.id,
+                (AgentPermission.task_type == task_type) | (AgentPermission.task_type.is_(None)),
+            )
+        )
+        if not perm_check.scalars().first():
+            db.add(
+                AgentPermission(
+                    workspace_id=workspace.id,
+                    sender_id=sender.id,
+                    receiver_id=receiver.id,
+                    task_type=task_type,
+                    allowed=True,
+                )
+            )
+            await db.flush()
+
         task_id = str(uuid.uuid4())
         trace_id = uuid.uuid4().hex
 
@@ -278,9 +311,9 @@ async def run_simulation(
             "receiver_agent_id": str(receiver.id),
             "task_type": task_type,
             "schema_version": "v1",
-            "resource_type": step.resource_type,
-            "resource_id": step.resource_id,
-            "action": step.action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "action": action,
             "payload": step.payload,
             "trace_id": trace_id,
             "parent_span_id": None,

@@ -211,14 +211,15 @@ def _sanitize_and_validate_response(
         else:
             risk_score_delta = min(1.0, max(0.6, raw_delta))
     else:
-        # Benign: delta can be negative (to correct regex false positives) or 0, never high positive
-        if raw_delta > 0.3:
-            # LLM said no injection but returned high positive delta -> hallucination
+        # Benign or grey-zone: delta can be negative (to correct regex false positives)
+        # or moderate positive [0.0, 0.6] for semantic anomaly review, never high positive (>0.6)
+        if raw_delta > 0.6:
+            # LLM said no injection but returned very high positive delta -> hallucination
             risk_score_delta = 0.0
             hallucination_flags.append("high_positive_delta_without_injection")
         else:
-            # Clamp negative delta to safe range [-0.5, 0.0]
-            risk_score_delta = max(-0.5, min(0.0, raw_delta))
+            # Clamp negative delta to safe range [-0.5, 0.6]
+            risk_score_delta = max(-0.5, min(0.6, raw_delta))
 
     # 4. Cross-validation with rules: if rules detected an injection but Groq says clean,
     # don't allow Groq to completely wipe out the rule risk (cap negative delta)

@@ -176,6 +176,7 @@ async def run_rules(
     resource_type = request_data.get("resource_type")
     resource_id = request_data.get("resource_id")
     action = request_data.get("action")
+    resource_action_matched = False
     if resource_type and action:
         action_map = SENSITIVE_RESOURCES.get(resource_type.lower())
         if action_map:
@@ -195,9 +196,10 @@ async def run_rules(
                     }
                 )
                 risk_delta = min(1.0, risk_delta + base)
+                resource_action_matched = True
 
-    # ── High-risk action (regardless of resource) ──
-    if action and action.lower() in HIGH_RISK_ACTIONS:
+    # ── High-risk action (only if not already scored by resource sensitivity) ──
+    if action and action.lower() in HIGH_RISK_ACTIONS and not resource_action_matched:
         violations.append(
             {
                 "layer": "rule",

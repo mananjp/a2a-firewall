@@ -53,6 +53,8 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "label": "Suspicious Request",
         "description": "Ambiguous request that warrants human review.",
         "task_type": "data_export",
+        "resource_type": "customer_data",
+        "action": "export",
         "payload": {
             "query": (
                 "Access internal metrics dashboard and export employee records "
@@ -178,6 +180,27 @@ async def demo_run(
     sender = agents[0]
     receiver = agents[1] if len(agents) > 1 else agents[0]
 
+    # Ensure permission exists for demo scenario execution
+    perm_check = await db.execute(
+        select(AgentPermission).where(
+            AgentPermission.workspace_id == workspace.id,
+            AgentPermission.sender_id == sender.id,
+            AgentPermission.receiver_id == receiver.id,
+            (AgentPermission.task_type == scenario["task_type"]) | (AgentPermission.task_type.is_(None)),
+        )
+    )
+    if not perm_check.scalars().first():
+        db.add(
+            AgentPermission(
+                workspace_id=workspace.id,
+                sender_id=sender.id,
+                receiver_id=receiver.id,
+                task_type=scenario["task_type"],
+                allowed=True,
+            )
+        )
+        await db.flush()
+
     task_id = str(uuid.uuid4())
     trace_id = uuid.uuid4().hex
 
@@ -188,6 +211,9 @@ async def demo_run(
         "receiver_agent_id": str(receiver.id),
         "task_type": scenario["task_type"],
         "schema_version": "v1",
+        "resource_type": scenario.get("resource_type"),
+        "resource_id": scenario.get("resource_id"),
+        "action": scenario.get("action"),
         "payload": scenario["payload"],
         "trace_id": trace_id,
         "parent_span_id": None,

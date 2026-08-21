@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import ReviewItem, Workspace
+from a2a_firewall.db.models import ReviewItem, Task, Workspace
 
 router = APIRouter()
 
@@ -25,15 +25,23 @@ async def pending_queue(
         .order_by(ReviewItem.created_at)
     )
     items = result.scalars().all()
-    return [
-        {
-            "id": str(i.id),
-            "task_id": str(i.task_id),
-            "review_token": i.review_token,
-            "expires_at": str(i.expires_at),
-        }
-        for i in items
-    ]
+    out = []
+    for i in items:
+        task_res = await db.execute(select(Task).where(Task.id == i.task_id))
+        task = task_res.scalar_one_or_none()
+        out.append(
+            {
+                "id": str(i.id),
+                "task_id": str(i.task_id),
+                "review_token": i.review_token,
+                "expires_at": str(i.expires_at),
+                "task_type": task.task_type if task else None,
+                "risk_score": task.risk_score if task else 0.6,
+                "payload": task.payload if task else None,
+                "decision_reason": task.decision_reason if task else None,
+            }
+        )
+    return out
 
 
 class DecideBody(BaseModel):

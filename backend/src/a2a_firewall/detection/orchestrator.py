@@ -545,17 +545,14 @@ async def run_inspection(
             {
                 "layer": "semantic",
                 "violation_type": "prompt_injection",
-                "severity": "critical",
+                "severity": "critical" if groq_result.get("risk_score_delta", 0.8) >= 0.8 else "high",
                 "details": groq_result,
             }
         )
-        # Ensure detected injection triggers elevated risk — but let the
-        # decision layer decide between "review" and "block" based on the
-        # workspace's configured thresholds.
-        risk_score = max(risk_score, 0.6)  # floor at 0.6 for detected injections
-        risk_score = min(1.0, risk_score + groq_result.get("risk_score_delta", 0.8))
+        groq_delta = groq_result.get("risk_score_delta", 0.8)
+        risk_score = min(1.0, max(risk_score, groq_delta))
     else:
-        # Apply delta (which may be negative to downgrade regex false-positives)
+        # Apply delta (which may be negative to downgrade regex false-positives, or positive for grey-zone)
         risk_score = max(0.0, min(1.0, risk_score + groq_result.get("risk_score_delta", 0)))
 
     # Intent-binding: check if the payload drifts from the declared intent
