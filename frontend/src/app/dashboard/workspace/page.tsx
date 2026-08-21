@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, type FormEvent } from "react";
-import { workspaces } from "@/lib/api";
+import { workspaces, compliance } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import type { Workspace } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
@@ -10,7 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Settings2, Save, Loader2 } from "lucide-react";
+import { Settings2, Save, Loader2, Globe, Shield, ScrollText, Building2 } from "lucide-react";
+
+const JURISDICTIONS = [
+  { code: "IN", name: "India (RBI, DPDP)" },
+  { code: "EU", name: "European Union (GDPR, PCI-DSS)" },
+  { code: "US", name: "United States - Federal (HIPAA, PCI-DSS)" },
+  { code: "US-CA", name: "United States - California (CCPA)" },
+  { code: "UK", name: "United Kingdom (GDPR, PCI-DSS)" },
+  { code: "SG", name: "Singapore (PCI-DSS)" },
+  { code: "AE", name: "UAE / DIFC (PCI-DSS)" },
+];
+
+const INDUSTRIES = [
+  { code: "banking", name: "Banking & Financial Services" },
+  { code: "fintech", name: "FinTech & Payments" },
+  { code: "healthcare", name: "Healthcare & Life Sciences" },
+  { code: "insurance", name: "Insurance" },
+  { code: "retail", name: "E-Commerce & Retail" },
+  { code: "general", name: "General / Technology" },
+];
 
 export default function WorkspacePage() {
   const { toast } = useToast();
@@ -22,6 +41,9 @@ export default function WorkspacePage() {
   const [groqThreshold, setGroqThreshold] = useState("0.3");
   const [blockThreshold, setBlockThreshold] = useState("0.8");
   const [defaultDeny, setDefaultDeny] = useState(true);
+  const [ipsMode, setIpsMode] = useState("block");
+  const [jurisdiction, setJurisdiction] = useState<string>("");
+  const [industry, setIndustry] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const initialized = useRef(false);
@@ -33,6 +55,9 @@ export default function WorkspacePage() {
       setGroqThreshold(String(ws.groq_threshold));
       setBlockThreshold(String(ws.block_threshold));
       setDefaultDeny(ws.default_deny);
+      if (ws.ips_mode) setIpsMode(ws.ips_mode);
+      if (ws.jurisdiction) setJurisdiction(ws.jurisdiction);
+      if (ws.industry) setIndustry(ws.industry);
     }
   }, [ws]);
 
@@ -45,8 +70,11 @@ export default function WorkspacePage() {
         groq_threshold: parseFloat(groqThreshold),
         block_threshold: parseFloat(blockThreshold),
         default_deny: defaultDeny,
+        ips_mode: ipsMode,
+        jurisdiction: jurisdiction || undefined,
+        industry: industry || undefined,
       });
-      toast({ title: "Workspace updated", description: "Configuration saved.", variant: "success" });
+      toast({ title: "Workspace updated", description: "Configuration & compliance jurisdiction saved.", variant: "success" });
       setDirty(false);
       refresh();
     } catch (err) {
@@ -58,8 +86,8 @@ export default function WorkspacePage() {
     <div>
       <PageHeader
         eyebrow="Settings"
-        title="Workspace Configuration"
-        description="Configure thresholds, fail mode, and access control."
+        title="Workspace Configuration & Governance"
+        description="Configure detection thresholds, intrusion prevention (IPS) mode, and regulatory jurisdiction."
       />
 
       {loadErr && (
@@ -71,8 +99,8 @@ export default function WorkspacePage() {
       {loading && !ws && <CardSkeleton lines={6} hasHeader={true} className="col-span-2" />}
 
       {ws && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
             <Card>
               <div className="flex items-center gap-2 mb-4">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-soft text-accent">
@@ -81,7 +109,7 @@ export default function WorkspacePage() {
                 <span className="text-[14px] font-medium tracking-tight">Detection Thresholds & Mode</span>
               </div>
               <form onSubmit={handleSave} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="eyebrow mb-1.5 block">Fail Mode</label>
                     <select
@@ -93,7 +121,7 @@ export default function WorkspacePage() {
                       <option value="open">Open (allow by default)</option>
                     </select>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
-                      {failMode === "closed" ? "All unconfigured sender-receiver pairs are blocked." : "All unconfigured pairs are allowed (legacy behavior)."}
+                      {failMode === "closed" ? "All unconfigured sender-receiver pairs are blocked." : "All unconfigured pairs are allowed."}
                     </p>
                   </div>
                   <div>
@@ -112,25 +140,80 @@ export default function WorkspacePage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="Groq Threshold (0-1)" type="number" min="0" max="1" step="0.05" value={groqThreshold}
                     onChange={e => { setGroqThreshold(e.target.value); setDirty(true); }} />
                   <Input label="Block Threshold (0-1)" type="number" min="0" max="1" step="0.05" value={blockThreshold}
                     onChange={e => { setBlockThreshold(e.target.value); setDirty(true); }} />
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* IPS Mode Selection */}
+                <div className="border-t border-hairline pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="text-accent" size={15} />
+                    <label className="eyebrow block">Intrusion Prevention (IPS) Mode</label>
+                  </div>
+                  <select
+                    value={ipsMode}
+                    onChange={e => { setIpsMode(e.target.value); setDirty(true); }}
+                    className="h-9 w-full rounded-md border border-border bg-surface-elevated px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors duration-150"
+                  >
+                    <option value="monitor">Monitor (IDS only - alerts recorded, no traffic blocked)</option>
+                    <option value="block">Block (Drops offending tasks upon threat match)</option>
+                    <option value="block_and_suspend">Block & Auto-Suspend (Full IPS with agent containment)</option>
+                  </select>
+                </div>
+
+                {/* Regulatory Jurisdiction & Industry */}
+                <div className="border-t border-hairline pt-4 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Globe className="text-accent" size={15} />
+                    <span className="text-[13px] font-medium text-ink-primary">Compliance Jurisdiction & Industry</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="eyebrow mb-1.5 block">Regulatory Jurisdiction</label>
+                      <select
+                        value={jurisdiction}
+                        onChange={e => { setJurisdiction(e.target.value); setDirty(true); }}
+                        className="h-9 w-full rounded-md border border-border bg-surface-elevated px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors duration-150"
+                      >
+                        <option value="">-- Select Jurisdiction --</option>
+                        {JURISDICTIONS.map(j => (
+                          <option key={j.code} value={j.code}>{j.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="eyebrow mb-1.5 block">Industry Sector</label>
+                      <select
+                        value={industry}
+                        onChange={e => { setIndustry(e.target.value); setDirty(true); }}
+                        className="h-9 w-full rounded-md border border-border bg-surface-elevated px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors duration-150"
+                      >
+                        <option value="">-- Select Industry --</option>
+                        {INDUSTRIES.map(ind => (
+                          <option key={ind.code} value={ind.code}>{ind.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
                   <Button type="submit" disabled={!dirty || saving} variant="secondary">
                     {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                     {saving ? "Saving…" : "Save Configuration"}
                   </Button>
-                  {!dirty && <span className="text-[12.5px] text-muted-foreground">No changes</span>}
+                  {!dirty && <span className="text-[12.5px] text-muted-foreground">No unsaved changes</span>}
                 </div>
               </form>
             </Card>
           </div>
 
-          <div className="col-span-1 space-y-3">
+          <div className="space-y-4">
             <Card>
               <div className="eyebrow mb-3">Workspace Info</div>
               <div className="space-y-2">
@@ -140,12 +223,12 @@ export default function WorkspacePage() {
                 <div><div className="eyebrow">Created</div><div className="text-[12.5px] mt-1">{new Date(ws.created_at).toLocaleDateString()}</div></div>
               </div>
             </Card>
+
             <Card>
-              <div className="eyebrow mb-3">How thresholds work</div>
+              <div className="eyebrow mb-3">Security & Compliance</div>
               <div className="space-y-2 text-[11.5px] leading-relaxed text-muted-foreground">
-                <p><strong className="text-foreground">Risk &lt; Groq threshold:</strong> Bypasses Groq analysis. Passes through to decision layer.</p>
-                <p><strong className="text-foreground">Groq threshold ≤ Risk &lt; Block threshold:</strong> Triggers Groq semantic analysis. If injection detected, risk increases.</p>
-                <p><strong className="text-foreground">Risk ≥ Block threshold:</strong> Task is blocked regardless of other factors.</p>
+                <p><strong className="text-foreground">IPS Mode:</strong> When set to <span className="font-mono text-accent">Auto-Suspend</span>, agents triggering 3+ critical violations within 10 minutes are automatically contained.</p>
+                <p><strong className="text-foreground">Compliance Packs:</strong> Based on selected jurisdiction and vertical, relevant rule packs (e.g. RBI, HIPAA, DPDP) can be managed under the <strong className="text-foreground">Compliance</strong> tab.</p>
               </div>
             </Card>
           </div>

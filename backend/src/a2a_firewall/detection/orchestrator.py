@@ -479,6 +479,102 @@ async def run_inspection(
     risk_score = min(1.0, risk_score + rule_result["risk_delta"])
     matched_rule_id = rule_result.get("matched_rule_id")
 
+    # ---------- IPS Signature Scan (new) ----------
+    ips_mode = getattr(workspace, "ips_mode", None) or settings.IPS_DEFAULT_MODE
+    try:
+        from a2a_firewall.detection.ips_signatures import get_engine
+
+        ips_engine = get_engine()
+        ips_matches = ips_engine.scan(payload_str, ips_mode=ips_mode)
+        for sig_match in ips_matches:
+            if sig_match["action"] != "alert":
+                violations.append(
+                    {
+                        "layer": "rule",
+                        "violation_type": f"ips_signature_{sig_match['category']}",
+                        "severity": sig_match["severity"],
+                        "details": {
+                            "signature_id": sig_match["signature_id"],
+                            "category": sig_match["category"],
+                            "description": sig_match["description"],
+                            "mitre_technique": sig_match.get("mitre_technique"),
+                            "ips_action": sig_match["action"],
+                        },
+                    }
+                )
+                sig_risk = {"critical": 0.9, "high": 0.7, "medium": 0.4, "low": 0.2}.get(
+                    sig_match["severity"], 0.3
+                )
+                risk_score = min(1.0, risk_score + sig_risk)
+
+        if ips_matches:
+            trace_events.append(
+                {
+                    "name": "firewall.ips_signatures",
+                    "span_id": uuid.uuid4().hex,
+                    "parent_span_id": parent_span_id,
+                    "duration_ms": 0,
+                    "attributes": {
+                        "matches_count": len(ips_matches),
+                        "ips_mode": ips_mode,
+                        "signature_ids": [m["signature_id"] for m in ips_matches],
+                    },
+                }
+            )
+    except Exception:
+        pass  # IPS scan failure must not block the pipeline
+
+    # ---------- PII / Compliance pattern scan (new) ----------
+    try:
+        from a2a_firewall.detection.pii_patterns import scan_all_pii, pii_matches_to_violations
+
+        pii_matches = scan_all_pii(payload_str)
+        if pii_matches:
+            pii_violations = pii_matches_to_violations(pii_matches)
+            violations.extend(pii_violations)
+            pii_risk = min(0.5, len(pii_matches) * 0.15)
+            risk_score = min(1.0, risk_score + pii_risk)
+
+            trace_events.append(
+                {
+                    "name": "firewall.pii_scan",
+                    "span_id": uuid.uuid4().hex,
+                    "parent_span_id": parent_span_id,
+                    "duration_ms": 0,
+                    "attributes": {
+                        "pii_matches_count": len(pii_matches),
+                        "pattern_types": list({m.pattern_type for m in pii_matches}),
+                    },
+                }
+            )
+    except Exception:
+        pass  # PII scan failure must not block the pipeline
+
+    # ---------- Layer 3b: CVE Risk (new) ----------
+    try:
+        from a2a_firewall.detection.layer3b_cve_risk import run_cve_risk
+
+        layer_start = time.monotonic()
+        cve_result = await run_cve_risk(request_data, sender, workspace, db)
+        cve_ms = int((time.monotonic() - layer_start) * 1000)
+        if cve_result["violations"]:
+            violations.extend(cve_result["violations"])
+            risk_score = min(1.0, risk_score + cve_result["risk_delta"])
+            trace_events.append(
+                {
+                    "name": "firewall.cve_risk",
+                    "span_id": uuid.uuid4().hex,
+                    "parent_span_id": parent_span_id,
+                    "duration_ms": cve_ms,
+                    "attributes": {
+                        "cve_matches_count": len(cve_result.get("cve_matches", [])),
+                        "risk_delta": cve_result["risk_delta"],
+                    },
+                }
+            )
+    except Exception:
+        pass  # CVE lookup failure must not block the pipeline
+
     # ---------- Intent resolution for delegation-bound requests ----------
     # Resolve declared_intent: either from the request itself (root task creation)
     # or by looking up the root task's declared_intent for child delegated tasks.
@@ -616,6 +712,95 @@ async def run_inspection(
         trace_events,
         groq_model,
     )
+
+    # ---------- Post-decision: SOC Alert creation (new) ----------
+    if violations and decision in ("block", "review"):
+        try:
+            from a2a_firewall.api.routes.soc import create_soc_alert
+
+            # Get chain_hash if delegation was involved
+            _chain_hash = None
+            if request_data.get("_delegation_token_compact"):
+                _chain_hash = hashlib.sha256(
+                    f"{request_data.get('task_id')}:{request_data.get('_delegation_token_compact')}".encode()
+                ).hexdigest()
+
+            # Create SOC alert for the most severe violation
+            worst = max(
+                violations,
+                key=lambda v: {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(
+                    v.get("severity", "low"), 0
+                ),
+            )
+            await create_soc_alert(
+                workspace_id=workspace.id,
+                violation=worst,
+                task_id=uuid.UUID(request_data["task_id"]),
+                risk_score=risk_score,
+                chain_hash=_chain_hash,
+                db=db,
+            )
+            await db.commit()
+        except Exception:
+            pass  # SOC alert creation failure must not affect the decision
+
+    # ---------- Post-decision: IPS Auto-containment (new) ----------
+    if violations and ips_mode == "block_and_suspend":
+        try:
+            from a2a_firewall.detection.ips_signatures import get_violation_counter
+
+            counter = get_violation_counter()
+            worst_severity = max(
+                (v.get("severity", "low") for v in violations),
+                key=lambda s: {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(s, 0),
+            )
+            check = counter.record_violation(str(sender.id), worst_severity)
+
+            if check["should_suspend"]:
+                # Auto-suspend the agent
+                from a2a_firewall.db.models import Agent as AgentModel
+
+                agent_result = await db.execute(
+                    select(AgentModel).where(AgentModel.id == sender.id)
+                )
+                agent_row = agent_result.scalar_one_or_none()
+                if agent_row and agent_row.status != "suspended":
+                    agent_row.status = "suspended"  # type: ignore[assignment]
+
+                    # Create a P1 SOC alert for the auto-suspension
+                    try:
+                        from a2a_firewall.api.routes.soc import create_soc_alert as _create_alert
+                        from a2a_firewall.db.models import SOCAlert
+
+                        suspension_alert = SOCAlert(
+                            workspace_id=workspace.id,
+                            task_id=uuid.UUID(request_data["task_id"]),
+                            severity="P1",
+                            status="new",
+                            title=f"Agent Auto-Suspended: {sender.name}",
+                            description=(
+                                f"Agent exceeded critical violation threshold "
+                                f"({check['critical_count']}/{counter.critical_threshold} "
+                                f"in {counter.window_seconds/60:.0f}min window). "
+                                f"Use POST /v1/ips/agents/{sender.id}/reinstate to lift suspension."
+                            ),
+                            details={
+                                "agent_id": str(sender.id),
+                                "agent_name": sender.name,
+                                "violation_count": check["violation_count"],
+                                "critical_count": check["critical_count"],
+                                "window_seconds": check["window_seconds"],
+                                "auto_suspended": True,
+                            },
+                        )
+                        db.add(suspension_alert)
+                    except Exception:
+                        pass
+
+                    await db.commit()
+        except Exception:
+            pass  # Auto-containment failure must not affect the decision
+
     await _emit_telemetry(
         result,
         request_data,

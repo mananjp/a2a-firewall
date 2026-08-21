@@ -17,6 +17,11 @@ class Workspace(Base):
     groq_threshold = Column(Float, default=0.3)
     block_threshold = Column(Float, default=0.8)
     default_deny = Column(Boolean, default=True)
+    # Security expansion: compliance & IPS
+    jurisdiction = Column(String, nullable=True)  # e.g. "IN", "EU", "US-CA"
+    industry = Column(String, nullable=True)  # e.g. "banking", "healthcare"
+    compliance_frameworks = Column(JSONB, default=list)  # e.g. ["RBI", "DPDP"]
+    ips_mode = Column(String, default="block")  # monitor | block | block_and_suspend
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -96,6 +101,7 @@ class PolicyRule(Base):
     action = Column(String, nullable=False)
     block_reason = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    framework_tag = Column(String, nullable=True)  # compliance framework, e.g. "RBI", "PCI-DSS"
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -235,6 +241,7 @@ class DelegationChain(Base):
     delegation_token = Column(Text, nullable=False)  # compact serialized DelegationToken
     signature_valid = Column(Boolean, nullable=False, default=True)
     chain_hash = Column(String, nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)  # IPS: token revocation timestamp
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -271,4 +278,116 @@ class TelemetryRow(Base):
     groq_called = Column(Boolean, default=False)
     groq_rationale = Column(Text, nullable=True)
     payload_snapshot = Column(JSONB, nullable=True)  # truncated payload for audit
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Security Expansion: CVE / CVSS
+# ---------------------------------------------------------------------------
+
+
+class CVECache(Base):
+    """Local cache of NVD CVE data to avoid rate-limiting."""
+
+    __tablename__ = "cve_cache"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cve_id = Column(String, nullable=False, unique=True, index=True)
+    cvss_score = Column(Float, default=0.0)
+    severity = Column(String, nullable=False, default="unknown")
+    vector_string = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    published_date = Column(String, nullable=True)
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentSoftwareInventory(Base):
+    """Software/model/library stack each agent declares."""
+
+    __tablename__ = "agent_software_inventory"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    component_name = Column(String, nullable=False)
+    component_version = Column(String, nullable=False)
+    cpe_string = Column(String, nullable=True)  # CPE 2.3 format
+    last_scanned_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Security Expansion: SOC Integration
+# ---------------------------------------------------------------------------
+
+
+class SOCAlert(Base):
+    """SOC-facing triage object, separate from raw violations."""
+
+    __tablename__ = "soc_alerts"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    source_violation_id = Column(
+        UUID(as_uuid=True), ForeignKey("violations.id", ondelete="SET NULL"), nullable=True
+    )
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    severity = Column(String, nullable=False, default="P3")  # P1-P4
+    status = Column(String, nullable=False, default="new")  # new/acknowledged/investigating/resolved/false_positive
+    assigned_analyst = Column(String, nullable=True)
+    mitre_technique = Column(String, nullable=True)  # e.g. "T1059"
+    chain_hash = Column(String, nullable=True)  # delegation chain hash for context
+    title = Column(String, nullable=False, default="Security Alert")
+    description = Column(Text, nullable=True)
+    details = Column(JSONB, default=dict)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RuleToMitreTechnique(Base):
+    """Static mapping: violation/rule types → MITRE ATT&CK technique IDs."""
+
+    __tablename__ = "rule_to_mitre_technique"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rule_type = Column(String, nullable=False, unique=True)  # e.g. "prompt_injection"
+    mitre_technique_id = Column(String, nullable=False)  # e.g. "T1059"
+    mitre_technique_name = Column(String, nullable=True)  # e.g. "Command and Scripting Interpreter"
+    mitre_tactic = Column(String, nullable=True)  # e.g. "Execution"
+
+
+# ---------------------------------------------------------------------------
+# Security Expansion: IDS/IPS
+# ---------------------------------------------------------------------------
+
+
+class AgentViolationCounterRow(Base):
+    """Persistent sliding-window counters for agent violations (IPS auto-containment)."""
+
+    __tablename__ = "agent_violation_counters"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
+    )
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    violation_count = Column(Integer, default=0)
+    critical_count = Column(Integer, default=0)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Security Expansion: Compliance
+# ---------------------------------------------------------------------------
+
+
+class ComplianceRulePack(Base):
+    """Records which compliance frameworks are installed per workspace."""
+
+    __tablename__ = "compliance_rule_packs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    framework = Column(String, nullable=False)  # e.g. "RBI", "PCI-DSS"
+    version = Column(String, default="1.0")
+    rules_count = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

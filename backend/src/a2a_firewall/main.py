@@ -11,14 +11,18 @@ from a2a_firewall.api.routes import (
     agents,
     audit,
     auth,
+    compliance,
+    cve,
     delegation,
     demo,
     firewall,
     identity,
+    ips,
     policies,
     review,
     schemas,
     simulation,
+    soc,
     stats,
     tasks,
     telemetry,
@@ -120,6 +124,11 @@ app.include_router(delegation.router, prefix="/v1/delegation", tags=["delegation
 app.include_router(telemetry.router, prefix="/v1/telemetry", tags=["telemetry"])
 app.include_router(simulation.router, prefix="/v1/simulation", tags=["simulation"])
 app.include_router(audit.router, prefix="/v1/audit", tags=["audit"])
+# Security Expansion routes
+app.include_router(soc.router, prefix="/v1/soc", tags=["soc"])
+app.include_router(cve.router, prefix="/v1/cve", tags=["cve"])
+app.include_router(compliance.router, prefix="/v1/compliance", tags=["compliance"])
+app.include_router(ips.router, prefix="/v1/ips", tags=["ips"])
 
 
 @app.get("/health")
