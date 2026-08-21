@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { violations, telemetry, stats, workspaces, tasks } from "@/lib/api";
+import { violations, telemetry, stats, workspaces, tasks, soc } from "@/lib/api";
 import { usePolling } from "@/hooks/use-polling";
 import type {
   Violation,
   TelemetrySummary,
   StatsOverview,
   Workspace,
+  SOCAlert,
+  SOCAlertSummary,
 } from "@/lib/types";
 import type { RecentTask } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
@@ -44,14 +46,34 @@ import {
   X,
   FileCode,
   Loader2,
+  Siren,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+/* ── SOC Styling Constants ─────────────────────────────────────────── */
+
+const SEV_COLORS: Record<string, string> = {
+  P1: "bg-red-500/15 text-red-400 border-red-500/30",
+  P2: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  P3: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  P4: "bg-green-500/15 text-green-400 border-green-500/30",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  new: "bg-blue-500/15 text-blue-400",
+  acknowledged: "bg-purple-500/15 text-purple-400",
+  investigating: "bg-amber-500/15 text-amber-400",
+  resolved: "bg-emerald-500/15 text-emerald-400",
+  false_positive: "bg-zinc-500/15 text-zinc-400",
+};
 
 export default function DashboardPage() {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [isFeedPaused, setIsFeedPaused] = useState(false);
   const [feedFilter, setFeedFilter] = useState<string>("all");
   const [selectedTaskForDrawer, setSelectedTaskForDrawer] = useState<RecentTask | null>(null);
+
+  /* ── Overview data ─────────────────────────────────────────────── */
 
   const { data: statsData, loading: statsLoading, refresh: refreshStats } = usePolling<StatsOverview>(
     useCallback((_signal) => stats.overview(), []),
@@ -83,19 +105,63 @@ export default function DashboardPage() {
     return recentTasks.filter((t) => t.decision === feedFilter);
   }, [recentTasks, feedFilter]);
 
+  /* ── SOC data ──────────────────────────────────────────────────── */
+
+  const [socAlerts, setSocAlerts] = useState<SOCAlert[]>([]);
+  const [socSummary, setSocSummary] = useState<SOCAlertSummary | null>(null);
+  const [socFilter, setSocFilter] = useState<{ severity?: string; status?: string }>({});
+  const [socLoading, setSocLoading] = useState(true);
+  const [selectedAlert, setSelectedAlert] = useState<SOCAlert | null>(null);
+
+  const loadSocData = useCallback(async () => {
+    try {
+      const [alertRes, summaryRes] = await Promise.all([
+        soc.alerts({ ...socFilter, limit: 50 }),
+        soc.summary(),
+      ]);
+      setSocAlerts(alertRes.alerts);
+      setSocSummary(summaryRes);
+    } catch (e) {
+      console.error("SOC load error", e);
+    } finally {
+      setSocLoading(false);
+    }
+  }, [socFilter]);
+
+  useEffect(() => {
+    loadSocData();
+    const interval = setInterval(loadSocData, 10000);
+    return () => clearInterval(interval);
+  }, [loadSocData]);
+
+  async function handleStatusChange(alertId: string, newStatus: string) {
+    try {
+      await soc.updateAlert(alertId, { status: newStatus });
+      await loadSocData();
+      if (selectedAlert?.id === alertId) {
+        setSelectedAlert((prev) => prev ? { ...prev, status: newStatus as SOCAlert["status"] } : null);
+      }
+    } catch (e) {
+      console.error("Update error", e);
+    }
+  }
+
+  /* ── Refresh all ───────────────────────────────────────────────── */
+
   function handleManualRefresh() {
     refreshStats();
     refreshTelemetry();
     refreshTasks();
+    loadSocData();
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader
-          eyebrow="Operations Mesh"
-          title="Security Command Center"
-          description="Real-time multi-agent message governance, six-layer inspection verdicts, and delegation enforcement."
+          eyebrow="Security Operations Center"
+          title="SOC Dashboard"
+          description="Real-time multi-agent threat triage, MITRE ATT&CK mapping, six-layer inspection verdicts, and message governance."
         />
         <div className="flex items-center gap-2">
           <Link href="/dashboard/simulation">
@@ -210,6 +276,247 @@ export default function DashboardPage() {
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-block" /> Blocked ({blockCount})
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SOC Alert Triage ─────────────────────────────────────────── */}
+      <div className="material-panel rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Siren size={16} className="text-red-400" />
+              <span className="eyebrow">SOC Alert Queue</span>
+              {socSummary && socSummary.p1_open > 0 && (
+                <span className="flex items-center gap-1 text-[10px] font-mono text-red-400 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 animate-pulse">
+                  {socSummary.p1_open} P1 OPEN
+                </span>
+              )}
+            </div>
+            <p className="text-[12px] text-ink-muted mt-0.5">
+              Security Operations — alert triage, MITRE ATT&CK mapping, real-time monitoring
+            </p>
+          </div>
+          <Button onClick={loadSocData} variant="secondary" size="sm" className="gap-1.5 font-mono text-[11px]">
+            <RefreshCw size={12} />
+            Refresh
+          </Button>
+        </div>
+
+        {/* SOC Summary Cards */}
+        {socSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="rounded-xl border border-hairline bg-surface-elevated p-4">
+              <div className="text-2xl font-bold font-mono text-ink-primary">{socSummary.total}</div>
+              <div className="text-[11px] text-ink-muted font-mono">Total Alerts</div>
+            </div>
+            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+              <div className="text-2xl font-bold font-mono text-red-400">{socSummary.p1_open}</div>
+              <div className="text-[11px] text-red-400/70 font-mono">P1 Open</div>
+            </div>
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+              <div className="text-2xl font-bold font-mono text-blue-400">{socSummary.new}</div>
+              <div className="text-[11px] text-blue-400/70 font-mono">New / Unacked</div>
+            </div>
+            {(["P2", "P3"] as const).map((sev) => (
+              <div key={sev} className="rounded-xl border border-hairline bg-surface-elevated p-4">
+                <div className="text-2xl font-bold font-mono text-ink-primary">{socSummary.by_severity[sev] ?? 0}</div>
+                <div className="text-[11px] text-ink-muted font-mono">{sev} Alerts</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* SOC Filters */}
+        <div className="flex gap-2 flex-wrap">
+          {["All", "P1", "P2", "P3", "P4"].map((sev) => (
+            <button
+              key={sev}
+              onClick={() => setSocFilter((f) => ({ ...f, severity: sev === "All" ? undefined : sev }))}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                (sev === "All" && !socFilter.severity) || socFilter.severity === sev
+                  ? "bg-accent/15 text-accent border-accent/30"
+                  : "bg-surface-elevated text-ink-muted border-hairline hover:border-hairline-strong"
+              }`}
+            >
+              {sev}
+            </button>
+          ))}
+          <div className="w-px bg-hairline mx-1" />
+          {["All", "new", "acknowledged", "investigating", "resolved"].map((st) => (
+            <button
+              key={st}
+              onClick={() => setSocFilter((f) => ({ ...f, status: st === "All" ? undefined : st }))}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                (st === "All" && !socFilter.status) || socFilter.status === st
+                  ? "bg-accent/15 text-accent border-accent/30"
+                  : "bg-surface-elevated text-ink-muted border-hairline hover:border-hairline-strong"
+              }`}
+            >
+              {st === "All" ? "All Status" : st.charAt(0).toUpperCase() + st.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* SOC Alert Table + Detail Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Alert List */}
+          <div className="lg:col-span-2 rounded-xl border border-hairline bg-surface overflow-hidden">
+            {socLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
+              </div>
+            ) : socAlerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-ink-muted">
+                <CheckCircle2 size={28} className="mb-2 text-allow" />
+                <div className="text-sm font-medium">No alerts matching filters</div>
+                <div className="text-xs text-ink-muted mt-1">All clear — no security incidents to triage</div>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-hairline bg-surface-elevated/50">
+                    <th className="px-4 py-2.5 text-left font-medium text-ink-muted text-xs">Severity</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-ink-muted text-xs">Title</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-ink-muted text-xs">MITRE</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-ink-muted text-xs">Status</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-ink-muted text-xs">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {socAlerts.map((alert) => (
+                    <tr
+                      key={alert.id}
+                      onClick={() => setSelectedAlert(alert)}
+                      className={`border-b border-hairline/50 cursor-pointer transition-colors hover:bg-surface-elevated/50 ${
+                        selectedAlert?.id === alert.id ? "bg-accent/5" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-2.5">
+                        <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold border ${SEV_COLORS[alert.severity] ?? ""}`}>
+                          {alert.severity}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-ink-primary font-medium truncate max-w-[200px]">
+                        {alert.title}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {alert.mitre_technique ? (
+                          <span className="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 text-xs font-mono">
+                            {alert.mitre_technique}
+                          </span>
+                        ) : (
+                          <span className="text-ink-muted text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-2 py-0.5 rounded text-xs ${STATUS_COLORS[alert.status] ?? ""}`}>
+                          {alert.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-ink-muted text-xs font-mono">
+                        {alert.created_at ? new Date(alert.created_at).toLocaleTimeString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Detail Panel */}
+          <div className="rounded-xl border border-hairline bg-surface p-4">
+            {selectedAlert ? (
+              <div className="space-y-4">
+                <div>
+                  <span className={`px-2 py-1 rounded text-xs font-bold border ${SEV_COLORS[selectedAlert.severity] ?? ""}`}>
+                    {selectedAlert.severity}
+                  </span>
+                  <h3 className="text-lg font-bold text-ink-primary mt-2">{selectedAlert.title}</h3>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-ink-muted">Status</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${STATUS_COLORS[selectedAlert.status] ?? ""}`}>
+                      {selectedAlert.status}
+                    </span>
+                  </div>
+                  {selectedAlert.mitre_technique && (
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">MITRE ATT&CK</span>
+                      <span className="text-violet-400 font-mono text-xs">{selectedAlert.mitre_technique}</span>
+                    </div>
+                  )}
+                  {selectedAlert.assigned_analyst && (
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Analyst</span>
+                      <span className="text-ink-primary">{selectedAlert.assigned_analyst}</span>
+                    </div>
+                  )}
+                  {selectedAlert.chain_hash && (
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Chain Hash</span>
+                      <span className="text-ink-primary font-mono text-xs">{selectedAlert.chain_hash.slice(0, 16)}…</span>
+                    </div>
+                  )}
+                  {selectedAlert.task_id && (
+                    <div className="flex justify-between">
+                      <span className="text-ink-muted">Task</span>
+                      <span className="text-ink-primary font-mono text-xs">{selectedAlert.task_id.slice(0, 8)}…</span>
+                    </div>
+                  )}
+                </div>
+
+                {selectedAlert.description && (
+                  <div className="rounded-lg bg-surface-elevated p-3 text-xs text-ink-muted">
+                    {selectedAlert.description}
+                  </div>
+                )}
+
+                {/* Triage Actions */}
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-hairline">
+                  {selectedAlert.status === "new" && (
+                    <button
+                      onClick={() => handleStatusChange(selectedAlert.id, "acknowledged")}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors"
+                    >
+                      Acknowledge
+                    </button>
+                  )}
+                  {["new", "acknowledged"].includes(selectedAlert.status) && (
+                    <button
+                      onClick={() => handleStatusChange(selectedAlert.id, "investigating")}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+                    >
+                      Investigate
+                    </button>
+                  )}
+                  {selectedAlert.status !== "resolved" && (
+                    <button
+                      onClick={() => handleStatusChange(selectedAlert.id, "resolved")}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                    >
+                      Resolve
+                    </button>
+                  )}
+                  {selectedAlert.status !== "false_positive" && selectedAlert.status !== "resolved" && (
+                    <button
+                      onClick={() => handleStatusChange(selectedAlert.id, "false_positive")}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 hover:bg-zinc-500/20 transition-colors"
+                    >
+                      False Positive
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-ink-muted">
+                <Siren size={24} className="mb-2 text-ink-muted/50" />
+                <div className="text-sm font-medium">Select an alert to triage</div>
+                <div className="text-xs text-ink-muted mt-1">Click any row to view details & take action</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

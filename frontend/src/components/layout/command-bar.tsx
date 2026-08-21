@@ -16,6 +16,9 @@ import {
   GitFork,
   Settings2,
   ExternalLink,
+  Siren,
+  ScrollText,
+  Shield,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -37,7 +40,7 @@ export function CommandBar() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
-      setIsOpen((prev) => !prev);
+      setIsOpen((open) => !open);
     }
     if (e.key === "Escape") {
       setIsOpen(false);
@@ -50,11 +53,13 @@ export function CommandBar() {
   }, [handleKeyDown]);
 
   const items: CommandItem[] = [
-    { id: "dash", title: "Overview Dashboard", category: "Navigation", icon: LayoutDashboard, href: "/dashboard" },
+    { id: "dash", title: "SOC Dashboard", category: "Navigation", icon: Siren, href: "/dashboard" },
     { id: "audit", title: "Delegation Chain Audit", category: "Navigation", icon: GitFork, href: "/dashboard/audit" },
     { id: "telemetry", title: "Live Inspector & Telemetry", category: "Navigation", icon: Activity, href: "/dashboard/telemetry" },
     { id: "review", title: "Human Review Queue", category: "Navigation", icon: MessageSquare, href: "/dashboard/review" },
     { id: "violations", title: "Security Violations", category: "Navigation", icon: ShieldAlert, href: "/dashboard/violations" },
+    { id: "compliance", title: "Compliance Frameworks", category: "Navigation", icon: ScrollText, href: "/dashboard/compliance" },
+    { id: "ips", title: "IPS Signatures & Containment", category: "Navigation", icon: Shield, href: "/dashboard/ips" },
     { id: "identity", title: "Agent Identities & Ed25519 Keys", category: "Navigation", icon: KeyRound, href: "/dashboard/identity" },
     { id: "agents", title: "Agent Registry & Matrix", category: "Navigation", icon: Bot, href: "/dashboard/agents" },
     { id: "policies", title: "Firewall Policies & Rules", category: "Navigation", icon: FileText, href: "/dashboard/policies" },

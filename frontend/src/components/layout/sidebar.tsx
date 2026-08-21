@@ -25,7 +25,7 @@ import {
 import { useApiKey } from "@/hooks/use-api-key";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard", label: "SOC Dashboard", icon: Siren },
   { href: "/dashboard/telemetry", label: "Live Inspector", icon: Activity },
   { href: "/dashboard/audit", label: "Delegation Audit", icon: GitFork },
   { href: "/dashboard/delegation-demo", label: "Delegation Demo", icon: Link2 },
@@ -33,7 +33,6 @@ const NAV_ITEMS = [
   { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
   { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
   { href: "/dashboard/demo", label: "Live Attack Demo", icon: Flame },
-  { href: "/dashboard/soc", label: "SOC Dashboard", icon: Siren },
   { href: "/dashboard/compliance", label: "Compliance", icon: ScrollText },
   { href: "/dashboard/ips", label: "IPS Signatures", icon: Shield },
   { href: "/dashboard/identity", label: "Identity & Keys", icon: KeyRound },
