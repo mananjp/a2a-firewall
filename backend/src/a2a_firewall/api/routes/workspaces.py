@@ -49,6 +49,10 @@ async def get_my_workspace(
         "block_threshold": ws.block_threshold,
         "review_threshold": ws.review_threshold,
         "default_deny": ws.default_deny,
+        "jurisdiction": ws.jurisdiction,
+        "industry": ws.industry,
+        "compliance_frameworks": ws.compliance_frameworks or [],
+        "ips_mode": ws.ips_mode or "block",
         "created_at": str(ws.created_at),
     }
 
@@ -59,6 +63,10 @@ class WorkspaceUpdate(BaseModel):
     block_threshold: float | None = None
     review_threshold: float | None = None
     default_deny: bool | None = None
+    jurisdiction: str | None = None
+    industry: str | None = None
+    compliance_frameworks: list[str] | None = None
+    ips_mode: str | None = None
 
 
 @router.patch("/me")
@@ -86,6 +94,17 @@ async def update_my_workspace(
         ws.review_threshold = body.review_threshold  # type: ignore[assignment]
     if body.default_deny is not None:
         ws.default_deny = body.default_deny  # type: ignore[assignment]
+    if body.jurisdiction is not None:
+        ws.jurisdiction = body.jurisdiction  # type: ignore[assignment]
+    if body.industry is not None:
+        ws.industry = body.industry  # type: ignore[assignment]
+    if body.compliance_frameworks is not None:
+        ws.compliance_frameworks = body.compliance_frameworks  # type: ignore[assignment]
+    if body.ips_mode is not None:
+        valid_modes = {"monitor", "block", "block_and_suspend"}
+        if body.ips_mode not in valid_modes:
+            raise HTTPException(status_code=400, detail=f"ips_mode must be one of: {', '.join(valid_modes)}")
+        ws.ips_mode = body.ips_mode  # type: ignore[assignment]
     await db.commit()
     await db.refresh(ws)
     return {
@@ -96,4 +115,8 @@ async def update_my_workspace(
         "block_threshold": ws.block_threshold,
         "review_threshold": ws.review_threshold,
         "default_deny": ws.default_deny,
+        "jurisdiction": ws.jurisdiction,
+        "industry": ws.industry,
+        "compliance_frameworks": ws.compliance_frameworks or [],
+        "ips_mode": ws.ips_mode or "block",
     }

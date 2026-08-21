@@ -83,5 +83,14 @@ class Settings(BaseSettings):
     # Intent-binding
     INTENT_DRIFT_THRESHOLD: float = 0.7  # block if intent_drift_score > this
 
+    # Security Expansion: CVE / CVSS
+    NVD_API_KEY: str = ""  # optional NVD API key (increases rate limit)
+    CVE_CVSS_THRESHOLD: float = 7.0  # minimum CVSS score to flag (High)
+
+    # Security Expansion: IDS/IPS
+    IPS_DEFAULT_MODE: str = "block"  # monitor | block | block_and_suspend
+    IPS_AUTO_SUSPEND_THRESHOLD: int = 3  # critical violations before auto-suspend
+    IPS_AUTO_SUSPEND_WINDOW_MINUTES: int = 10  # sliding window in minutes
+
 
 settings = Settings()

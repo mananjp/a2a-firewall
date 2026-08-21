@@ -106,6 +106,10 @@ export const workspaces = {
     groq_threshold?: number;
     block_threshold?: number;
     default_deny?: boolean;
+    ips_mode?: string;
+    jurisdiction?: string;
+    industry?: string;
+    compliance_frameworks?: string[];
   }) =>
     request<Workspace>("/v1/workspaces/me", {
       method: "PATCH",
@@ -495,4 +499,146 @@ export const audit = {
     return `${API_BASE}/v1/audit/delegation-chains?${q.toString()}`;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Security Expansion: SOC Integration
+// ---------------------------------------------------------------------------
+
+import type {
+  SOCAlert,
+  SOCAlertSummary,
+  IPSSignature,
+  MITREMapping,
+  ComplianceFramework,
+  ComplianceRule,
+  ComplianceReport,
+  CVEResult,
+  AgentVulnerability,
+  InventoryComponent,
+} from "./types";
+
+export const soc = {
+  alerts: (params?: { severity?: string; status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<{ total: number; offset: number; limit: number; alerts: SOCAlert[] }>(
+      `/v1/soc/alerts${qs ? `?${qs}` : ""}`
+    );
+  },
+  updateAlert: (alertId: string, body: { status?: string; assigned_analyst?: string }) =>
+    request<{ id: string; severity: string; status: string; assigned_analyst: string | null; updated_at: string }>(
+      `/v1/soc/alerts/${alertId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    ),
+  summary: () => request<SOCAlertSummary>("/v1/soc/alerts/summary"),
+  mitreMapping: () => request<MITREMapping[]>("/v1/soc/mitre-mapping"),
+};
+
+// ---------------------------------------------------------------------------
+// Security Expansion: CVE Lookup
+// ---------------------------------------------------------------------------
+
+export const cve = {
+  lookup: (cveId: string) => request<CVEResult>(`/v1/cve/${cveId}`),
+};
+
+// ---------------------------------------------------------------------------
+// Security Expansion: IDS/IPS
+// ---------------------------------------------------------------------------
+
+export const ips = {
+  signatures: () => request<IPSSignature[]>("/v1/ips/signatures"),
+  getMode: () =>
+    request<{ ips_mode: string; modes_available: string[]; descriptions: Record<string, string> }>(
+      "/v1/ips/mode"
+    ),
+  setMode: (mode: string) =>
+    request<{ ips_mode: string }>("/v1/ips/mode", {
+      method: "PATCH",
+      body: JSON.stringify({ ips_mode: mode }),
+    }),
+  reinstateAgent: (agentId: string) =>
+    request<{ id: string; name: string; status: string; message: string }>(
+      `/v1/ips/agents/${agentId}/reinstate`,
+      { method: "POST" }
+    ),
+  agentViolationCounts: (agentId: string) =>
+    request<{
+      agent_id: string;
+      violation_count: number;
+      critical_count: number;
+      auto_suspend_threshold: number;
+      window_seconds: number;
+    }>(`/v1/ips/agents/${agentId}/violation-counts`),
+};
+
+// ---------------------------------------------------------------------------
+// Security Expansion: Compliance
+// ---------------------------------------------------------------------------
+
+export const compliance = {
+  frameworks: () =>
+    request<{
+      frameworks: Record<string, { rules_count: number; rule_names: string[] }>;
+      jurisdiction_mapping: Record<string, string[]>;
+      industry_mapping: Record<string, string[]>;
+    }>("/v1/compliance/frameworks"),
+  installed: () => request<ComplianceFramework[]>("/v1/compliance/installed"),
+  apply: (framework: string) =>
+    request<{ framework: string; installed: number; skipped: number; total_rules: number }>(
+      "/v1/compliance/apply",
+      { method: "POST", body: JSON.stringify({ framework }) }
+    ),
+  remove: (framework: string) =>
+    request<{ framework: string; removed: number }>("/v1/compliance/remove", {
+      method: "POST",
+      body: JSON.stringify({ framework }),
+    }),
+  suggest: () =>
+    request<{ jurisdiction: string | null; industry: string | null; suggested_frameworks: string[] }>(
+      "/v1/compliance/suggest"
+    ),
+  rules: (framework?: string) => {
+    const q = framework ? `?framework=${framework}` : "";
+    return request<ComplianceRule[]>(`/v1/compliance/rules${q}`);
+  },
+  report: (framework: string, from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    q.set("framework", framework);
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    return request<ComplianceReport>(`/v1/compliance/report?${q.toString()}`);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Security Expansion: Agent Inventory & Vulnerabilities
+// ---------------------------------------------------------------------------
+
+export const agentSecurity = {
+  getInventory: (agentId: string) =>
+    request<{ agent_id: string; components: InventoryComponent[] }>(
+      `/v1/agents/${agentId}/inventory`
+    ),
+  updateInventory: (
+    agentId: string,
+    components: Array<{ component_name: string; component_version: string; cpe_string?: string }>
+  ) =>
+    request<{ agent_id: string; components_registered: number }>(
+      `/v1/agents/${agentId}/inventory`,
+      { method: "POST", body: JSON.stringify({ components }) }
+    ),
+  scanVulnerabilities: (agentId: string) =>
+    request<{
+      agent_id: string;
+      components_scanned: number;
+      vulnerabilities_found: number;
+      vulnerabilities: AgentVulnerability[];
+    }>(`/v1/agents/${agentId}/vulnerabilities`),
+};
+
 

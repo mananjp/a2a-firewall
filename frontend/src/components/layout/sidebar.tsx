@@ -18,6 +18,9 @@ import {
   Link2,
   FlaskConical,
   Flame,
+  Siren,
+  Shield,
+  ScrollText,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
 
@@ -30,6 +33,9 @@ const NAV_ITEMS = [
   { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
   { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
   { href: "/dashboard/demo", label: "Live Attack Demo", icon: Flame },
+  { href: "/dashboard/soc", label: "SOC Dashboard", icon: Siren },
+  { href: "/dashboard/compliance", label: "Compliance", icon: ScrollText },
+  { href: "/dashboard/ips", label: "IPS Signatures", icon: Shield },
   { href: "/dashboard/identity", label: "Identity & Keys", icon: KeyRound },
   { href: "/dashboard/agents", label: "Agent Registry", icon: Bot },
   { href: "/dashboard/policies", label: "Firewall Policies", icon: FileText },

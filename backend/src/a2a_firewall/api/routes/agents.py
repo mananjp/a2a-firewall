@@ -189,3 +189,160 @@ async def list_agents(
         }
         for a in agents
     ]
+
+
+# ---------------------------------------------------------------------------
+# Agent Software Inventory (Security Expansion: CVE / CVSS)
+# ---------------------------------------------------------------------------
+
+
+class InventoryItem(BaseModel):
+    component_name: str
+    component_version: str
+    cpe_string: str | None = None
+
+
+class InventoryUpdate(BaseModel):
+    components: list[InventoryItem]
+
+
+@router.post("/{agent_id}/inventory")
+async def update_inventory(
+    agent_id: str,
+    body: InventoryUpdate,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Register/update an agent's software inventory."""
+    from a2a_firewall.db.models import AgentSoftwareInventory
+
+    result = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Agent not found")
+
+    # Delete existing inventory and replace
+    existing = await db.execute(
+        select(AgentSoftwareInventory).where(AgentSoftwareInventory.agent_id == agent.id)
+    )
+    for row in existing.scalars().all():
+        await db.delete(row)
+
+    # Insert new
+    from datetime import datetime
+
+    for item in body.components:
+        db.add(
+            AgentSoftwareInventory(
+                agent_id=agent.id,
+                component_name=item.component_name,
+                component_version=item.component_version,
+                cpe_string=item.cpe_string,
+                last_scanned_at=datetime.utcnow(),
+            )
+        )
+
+    await db.commit()
+    return {
+        "agent_id": str(agent.id),
+        "components_registered": len(body.components),
+    }
+
+
+@router.get("/{agent_id}/inventory")
+async def get_inventory(
+    agent_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Get an agent's software inventory."""
+    from fastapi import HTTPException
+    from a2a_firewall.db.models import AgentSoftwareInventory
+
+    agent_res = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    if not agent_res.scalar_one_or_none():
+        raise HTTPException(404, "Agent not found")
+
+    result = await db.execute(
+        select(AgentSoftwareInventory).where(
+            AgentSoftwareInventory.agent_id == uuid.UUID(agent_id)
+        )
+    )
+    components = result.scalars().all()
+    return {
+        "agent_id": agent_id,
+        "components": [
+            {
+                "id": str(c.id),
+                "component_name": str(c.component_name),
+                "component_version": str(c.component_version),
+                "cpe_string": c.cpe_string,
+                "last_scanned_at": str(c.last_scanned_at) if c.last_scanned_at else None,
+            }
+            for c in components
+        ],
+    }
+
+
+@router.get("/{agent_id}/vulnerabilities")
+async def scan_agent_vulnerabilities(
+    agent_id: str,
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Scan an agent's software inventory against CVE data."""
+    from fastapi import HTTPException
+    from a2a_firewall.db.models import AgentSoftwareInventory
+    from a2a_firewall.detection.cve_lookup import match_component, cvss_severity
+
+    agent_res = await db.execute(
+        select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
+    )
+    if not agent_res.scalar_one_or_none():
+        raise HTTPException(404, "Agent not found")
+
+    result = await db.execute(
+        select(AgentSoftwareInventory).where(
+            AgentSoftwareInventory.agent_id == uuid.UUID(agent_id)
+        )
+    )
+    components = result.scalars().all()
+
+    vulnerabilities: list[dict[str, Any]] = []
+    for comp in components:
+        try:
+            matches = await match_component(
+                component_name=str(comp.component_name),
+                component_version=str(comp.component_version),
+                cpe_string=str(comp.cpe_string) if comp.cpe_string else None,
+            )
+            for cve in matches:
+                if cve.found:
+                    vulnerabilities.append(
+                        {
+                            "component": str(comp.component_name),
+                            "version": str(comp.component_version),
+                            "cve_id": cve.cve_id,
+                            "cvss_score": cve.cvss_score,
+                            "severity": cve.severity,
+                            "vector_string": cve.vector_string,
+                            "description": cve.description[:200],
+                            "published_date": cve.published_date,
+                        }
+                    )
+        except Exception:
+            continue
+
+    return {
+        "agent_id": agent_id,
+        "components_scanned": len(components),
+        "vulnerabilities_found": len(vulnerabilities),
+        "vulnerabilities": vulnerabilities,
+    }
+

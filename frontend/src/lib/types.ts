@@ -12,6 +12,10 @@ export interface Workspace {
   groq_threshold: number;
   block_threshold: number;
   default_deny: boolean;
+  jurisdiction?: string | null;
+  industry?: string | null;
+  compliance_frameworks?: string[];
+  ips_mode?: string;
   created_at: string;
 }
 
@@ -226,3 +230,114 @@ export interface SimulationResult {
   latency_ms: number;
   trace_id: string;
 }
+
+// ---------------------------------------------------------------------------
+// Security Expansion types
+// ---------------------------------------------------------------------------
+
+export interface SOCAlert {
+  id: string;
+  workspace_id: string;
+  source_violation_id: string | null;
+  task_id: string | null;
+  severity: "P1" | "P2" | "P3" | "P4";
+  status: "new" | "acknowledged" | "investigating" | "resolved" | "false_positive";
+  assigned_analyst: string | null;
+  mitre_technique: string | null;
+  chain_hash: string | null;
+  title: string;
+  description: string | null;
+  details: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SOCAlertSummary {
+  total: number;
+  new: number;
+  p1_open: number;
+  by_severity: Record<string, number>;
+  by_status: Record<string, number>;
+}
+
+export interface IPSSignature {
+  id: string;
+  category: string;
+  description: string;
+  severity: string;
+  action: string;
+  enabled: boolean;
+  hit_count: number;
+  pattern: string;
+  mitre_technique: string;
+}
+
+export interface MITREMapping {
+  rule_type: string;
+  mitre_technique_id: string;
+  mitre_technique_name: string | null;
+  mitre_tactic: string | null;
+}
+
+export interface ComplianceFramework {
+  framework: string;
+  version: string;
+  rules_count: number;
+  is_active: boolean;
+  installed_at: string | null;
+}
+
+export interface ComplianceRule {
+  id: string;
+  name: string;
+  description: string | null;
+  priority: number;
+  action: string;
+  block_reason: string | null;
+  framework_tag: string | null;
+  is_active: boolean;
+}
+
+export interface ComplianceReport {
+  framework: string;
+  workspace_id: string;
+  period: { from: string | null; to: string | null };
+  summary: {
+    total_framework_violations: number;
+    total_all_violations: number;
+    total_soc_alerts: number;
+  };
+  violations_by_type: Record<string, number>;
+  violations_by_severity: Record<string, number>;
+  compliance_status: string;
+}
+
+export interface CVEResult {
+  cve_id: string;
+  cvss_score: number;
+  severity: string;
+  vector_string: string;
+  published_date: string;
+  description: string;
+  found: boolean;
+}
+
+export interface AgentVulnerability {
+  component: string;
+  version: string;
+  cve_id: string;
+  cvss_score: number;
+  severity: string;
+  vector_string: string;
+  description: string;
+  published_date: string;
+}
+
+export interface InventoryComponent {
+  id: string;
+  component_name: string;
+  component_version: string;
+  cpe_string: string | null;
+  last_scanned_at: string | null;
+}
+
