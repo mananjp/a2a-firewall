@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -327,7 +330,7 @@ async def soc_alerts_stream(
                             )
                             yield f"data: {data}\n\n"
             except Exception:
-                pass
+                logger.debug("SOC SSE stream error during poll", exc_info=True)
 
             # Heartbeat
             yield f"data: {json.dumps({'heartbeat': True})}\n\n"
