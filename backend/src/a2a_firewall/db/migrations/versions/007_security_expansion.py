@@ -1,7 +1,7 @@
 """security expansion: CVE, SOC, IPS, compliance tables and columns
 
-Revision ID: 006
-Revises: 005
+Revision ID: 007
+Revises: 006
 Create Date: 2026-08-21
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision = "006"
-down_revision = "005"
+revision = "007"
+down_revision = "006"
 branch_labels = None
 depends_on = None
 
