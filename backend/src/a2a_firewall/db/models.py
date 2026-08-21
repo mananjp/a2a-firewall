@@ -16,6 +16,7 @@ class Workspace(Base):
     fail_mode = Column(String, default="closed")
     groq_threshold = Column(Float, default=0.3)
     block_threshold = Column(Float, default=0.8)
+    review_threshold = Column(Float, default=0.5)
     default_deny = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 

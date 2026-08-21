@@ -47,6 +47,7 @@ async def get_my_workspace(
         "fail_mode": ws.fail_mode,
         "groq_threshold": ws.groq_threshold,
         "block_threshold": ws.block_threshold,
+        "review_threshold": ws.review_threshold,
         "default_deny": ws.default_deny,
         "created_at": str(ws.created_at),
     }
@@ -56,6 +57,7 @@ class WorkspaceUpdate(BaseModel):
     fail_mode: str | None = None
     groq_threshold: float | None = None
     block_threshold: float | None = None
+    review_threshold: float | None = None
     default_deny: bool | None = None
 
 
@@ -78,6 +80,10 @@ async def update_my_workspace(
         if not 0 <= body.block_threshold <= 1:
             raise HTTPException(status_code=400, detail="block_threshold must be between 0 and 1")
         ws.block_threshold = body.block_threshold  # type: ignore[assignment]
+    if body.review_threshold is not None:
+        if not 0 <= body.review_threshold <= 1:
+            raise HTTPException(status_code=400, detail="review_threshold must be between 0 and 1")
+        ws.review_threshold = body.review_threshold  # type: ignore[assignment]
     if body.default_deny is not None:
         ws.default_deny = body.default_deny  # type: ignore[assignment]
     await db.commit()
@@ -88,5 +94,6 @@ async def update_my_workspace(
         "fail_mode": ws.fail_mode,
         "groq_threshold": ws.groq_threshold,
         "block_threshold": ws.block_threshold,
+        "review_threshold": ws.review_threshold,
         "default_deny": ws.default_deny,
     }

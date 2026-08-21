@@ -549,8 +549,11 @@ async def run_inspection(
                 "details": groq_result,
             }
         )
-        # Ensure detected injection triggers high risk
-        risk_score = min(1.0, max(risk_score, 0.8) + groq_result.get("risk_score_delta", 0.8))
+        # Ensure detected injection triggers elevated risk — but let the
+        # decision layer decide between "review" and "block" based on the
+        # workspace's configured thresholds.
+        risk_score = max(risk_score, 0.6)  # floor at 0.6 for detected injections
+        risk_score = min(1.0, risk_score + groq_result.get("risk_score_delta", 0.8))
     else:
         # Apply delta (which may be negative to downgrade regex false-positives)
         risk_score = max(0.0, min(1.0, risk_score + groq_result.get("risk_score_delta", 0)))

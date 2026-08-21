@@ -145,7 +145,7 @@ async def run_rules(
                     "details": {"pattern": pattern},
                 }
             )
-            risk_delta = min(1.0, risk_delta + 0.8)
+            risk_delta = min(1.0, risk_delta + 0.5)
 
     # ── SQL Injection scan ──
     for pattern, vtype, prisk in SQL_INJECTION_PATTERNS:
