@@ -18,22 +18,39 @@ A2A Firewall is a production-grade **Zero-Trust Inter-Agent Governance Mesh** de
 Whenever **Agent A** attempts to send a message to **Agent B**, the request is intercepted by the **A2A Sentinel Ingress Gateway**. The firewall processes the message through a **Six-Layer Threat Inspection Pipeline** and synthesizes an immediate security verdict: **Allow**, **Block**, or route for manual **Review**.
 
 ```mermaid
-graph TD
-    A["🤖 Agent A"] -->|1. Signed Payload (Ed25519)| FW["🛡️ A2A Sentinel Gateway"]
-    FW -->|Layer -1| L_M1["⏳ Rate Limiter (Token Bucket)"]
-    L_M1 -->|Layer 0| L0["⚡ Preflight, Nonces & Anti-Pentest Canaries"]
-    L0 -->|Layer 1| L1["📋 JSON Schema Validation"]
-    L1 -->|Layer 2| L2["🔑 Permissions Matrix & Macaroon Attenuation"]
-    L2 -->|Layer 3| L3["📜 Rule Engine, SQL Guard & Obfuscation Decoders"]
-    L3 -->|Layer 4| L4["🧠 Groq LLM Semantic Guard (Intent Drift)"]
-    L4 -->|Layer 5| L5["🎛️ Declarative Policy Synthesis Gate"]
-    
-    L5 -->|Allow| B["🤖 Agent B (Authorized)"]
-    L5 -->|Block| Err["❌ Dropped / Dynamic Quarantine"]
-    L5 -->|Review| RQ["👥 SOC Review Queue"]
-    
-    RQ -->|Admin Approved| B
-    RQ -->|Admin Rejected| Err
+flowchart TD
+    A["🤖 Agent A"]
+
+    FW["🛡️ A2A Sentinel Gateway"]
+
+    Lm1["Layer -1<br/>⏳ Rate Limiter<br/>(Token Bucket)"]
+    L0["Layer 0<br/>⚡ Preflight, Nonces<br/>& Anti-Pentest Canaries"]
+    L1["Layer 1<br/>📋 JSON Schema<br/>Validation"]
+    L2["Layer 2<br/>🔑 Permissions Matrix<br/>& Macaroon Attenuation"]
+    L3["Layer 3<br/>📜 Rule Engine<br/>SQL Guard & Obfuscation Decoders"]
+    L4["Layer 4<br/>🧠 LLM Semantic Guard<br/>(Intent Drift)"]
+    L5["Layer 5<br/>🎛️ Declarative Policy<br/>Synthesis Gate"]
+
+    B["🤖 Agent B<br/>(Authorized)"]
+    ERR["❌ Dropped<br/>Dynamic Quarantine"]
+    RQ["👥 SOC Review Queue"]
+
+    A -->|"1. Signed Payload (Ed25519)"| FW
+
+    FW --> Lm1
+    Lm1 --> L0
+    L0 --> L1
+    L1 --> L2
+    L2 --> L3
+    L3 --> L4
+    L4 --> L5
+
+    L5 -->|"ALLOW"| B
+    L5 -->|"BLOCK"| ERR
+    L5 -->|"REVIEW"| RQ
+
+    RQ -->|"Admin Approved"| B
+    RQ -->|"Admin Rejected"| ERR
 ```
 
 ---
