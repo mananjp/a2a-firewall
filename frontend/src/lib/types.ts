@@ -341,3 +341,170 @@ export interface InventoryComponent {
   last_scanned_at: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Spend Limits & Cost Governance
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceSpendOverview {
+  workspace_id: string;
+  monthly_budget_usd: number;
+  current_spend_usd: number;
+  spend_percentage: number;
+  token_budget: number;
+  current_tokens: number;
+  token_percentage: number;
+  hard_limit_action: "block" | "warn";
+  alert_threshold_pct: number;
+  alert_triggered: boolean;
+  pricing_rates_per_million: Record<string, number>;
+  top_spending_agents: Array<{
+    agent_id: string;
+    agent_name: string;
+    current_spend_usd: number;
+    monthly_budget_usd: number;
+    current_tokens: number;
+    token_budget: number;
+    is_active: boolean;
+    spend_pct: number;
+  }>;
+  last_reset_at: string | null;
+}
+
+export interface AgentSpendLimitItem {
+  agent_id: string;
+  agent_name: string;
+  status: string;
+  monthly_budget_usd: number;
+  token_budget: number;
+  current_spend_usd: number;
+  current_tokens: number;
+  is_active: boolean;
+  has_custom_limit: boolean;
+}
+
+export interface SpendLedgerItem {
+  id: string;
+  task_id: string | null;
+  agent_id: string | null;
+  agent_name: string;
+  tokens_used: number;
+  cost_usd: number;
+  model_name: string;
+  operation: string;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// RBAC & Organization Members
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceMemberItem {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  permissions: string[];
+  effective_permissions: string[];
+  is_active: boolean;
+  scim_external_id: string | null;
+  created_at: string | null;
+}
+
+export interface CustomRoleItem {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Enterprise Audit Trail
+// ---------------------------------------------------------------------------
+
+export interface EnterpriseAuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_email: string;
+  actor_type: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  description: string | null;
+  diff: Record<string, unknown>;
+  ip_address: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Data Retention & Privacy Controls
+// ---------------------------------------------------------------------------
+
+export interface DataRetentionPolicyItem {
+  task_payload_days: number;
+  telemetry_days: number;
+  violations_days: number;
+  soc_alerts_days: number;
+  audit_log_days: number;
+  auto_purge_enabled: boolean;
+  scrub_pii_after_days: number;
+  last_purged_at: string | null;
+}
+
+export interface RetentionCandidates {
+  cutoffs: Record<string, string>;
+  candidates: {
+    expired_tasks: number;
+    expired_telemetry: number;
+    expired_violations: number;
+    expired_soc_alerts: number;
+    expired_audit_logs: number;
+    pii_scrub_eligible_tasks: number;
+  };
+  total_records_eligible: number;
+}
+
+// ---------------------------------------------------------------------------
+// Network Access & IP Allowlisting
+// ---------------------------------------------------------------------------
+
+export interface IpAllowlistEntryItem {
+  id: string;
+  cidr_or_ip: string;
+  label: string;
+  scope: string;
+  is_enabled: boolean;
+  is_expired: boolean;
+  expires_at: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export interface NetworkAccessRuleItem {
+  id: string;
+  priority: number;
+  name: string;
+  description: string | null;
+  source_cidr: string;
+  destination_agent_id: string | null;
+  destination_agent_name?: string;
+  action: "allow" | "deny";
+  protocol: string;
+  port_range: string | null;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// SCIM Provisioning
+// ---------------------------------------------------------------------------
+
+export interface SCIMTokenItem {
+  id: string;
+  name: string;
+  last_used_at: string | null;
+  created_at: string | null;
+}
+
+

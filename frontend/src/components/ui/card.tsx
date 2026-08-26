@@ -46,3 +46,16 @@ export function Card({
     </div>
   );
 }
+
+export function CardHeader({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx("mb-3", className)}>{children}</div>;
+}
+
+export function CardTitle({ children, className }: { children: ReactNode; className?: string }) {
+  return <h3 className={clsx("text-base font-bold text-ink-primary", className)}>{children}</h3>;
+}
+
+export function CardContent({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx(className)}>{children}</div>;
+}
+

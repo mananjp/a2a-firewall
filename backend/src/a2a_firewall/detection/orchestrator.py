@@ -92,6 +92,55 @@ async def run_inspection(
     parent_span_id = cast(str, request_data.get("parent_span_id") or uuid.uuid4().hex)
     rate_event["parent_span_id"] = parent_span_id
 
+    # ---------- Spend limit check ----------
+    from a2a_firewall.core.spend_manager import check_spend_limits, estimate_tokens, record_spend_transaction
+    estimated_tokens = estimate_tokens(request_data.get("payload", {}))
+    spend_check = await check_spend_limits(workspace.id, sender.id, estimated_tokens, db)
+    if not spend_check.get("allowed", True):
+        spend_reason = spend_check.get("reason", "spend_limit_exceeded")
+        violations.append({
+            "layer": "spend",
+            "violation_type": spend_reason,
+            "severity": "critical",
+            "details": spend_check.get("details", {}),
+        })
+        task_uuid = uuid.UUID(request_data["task_id"])
+        blocked_task = Task(
+            id=task_uuid,
+            workspace_id=workspace.id,
+            root_task_id=uuid.UUID(request_data.get("root_task_id") or request_data["task_id"]),
+            parent_task_id=uuid.UUID(request_data["parent_task_id"]) if request_data.get("parent_task_id") else None,
+            depth=request_data.get("depth", 0),
+            sender_id=sender.id,
+            receiver_id=uuid.UUID(request_data["receiver_agent_id"]),
+            task_type=request_data["task_type"],
+            schema_version=request_data.get("schema_version", "v1"),
+            resource_type=request_data.get("resource_type"),
+            resource_id=request_data.get("resource_id"),
+            action=request_data.get("action"),
+            payload=request_data["payload"],
+            payload_hash=payload_hash,
+            payload_size_bytes=payload_size,
+            risk_score=1.0,
+            decision="block",
+            decision_reason=f"Blocked: {spend_reason}",
+            matched_rule_id=None,
+            groq_called=False,
+            total_latency_ms=int((time.monotonic() - start) * 1000),
+            trace_id=trace_id,
+            span_id=uuid.uuid4().hex,
+            created_at=datetime.now(UTC),
+        )
+        db.add(blocked_task)
+        await db.commit()
+        return {
+            "decision": "block",
+            "reason": f"Blocked: {spend_reason}",
+            "risk_score": 1.0,
+            "violations": violations,
+            "task_id": request_data["task_id"],
+        }
+
     # ---------- Identity & Delegation checks ----------
     signature_valid = True
     delegation_chain: list[str] = []
@@ -800,6 +849,20 @@ async def run_inspection(
                     await db.commit()
         except Exception:
             pass  # Auto-containment failure must not affect the decision
+
+    # ---------- Post-decision: Spend Ledger Recording ----------
+    try:
+        await record_spend_transaction(
+            workspace_id=workspace.id,
+            agent_id=sender.id,
+            task_id=uuid.UUID(request_data["task_id"]),
+            tokens=estimated_tokens,
+            model_name=groq_result.get("model") if groq_result else None,
+            operation="inspect",
+            db=db,
+        )
+    except Exception:
+        pass
 
     await _emit_telemetry(
         result,

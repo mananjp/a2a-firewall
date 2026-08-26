@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { audit, demo } from "@/lib/api";
-import { usePolling } from "@/hooks/use-polling";
+import { audit, demo, enterpriseAudit } from "@/lib/api";
 import type { AuditChainExport, TaskAuditChain } from "@/lib/api";
+import { usePolling } from "@/hooks/use-polling";
+import type { EnterpriseAuditLogItem } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,21 +25,58 @@ import {
   Loader2,
   Lock,
   ExternalLink,
+  Shield,
+  Search,
+  SlidersHorizontal,
+  Eye,
+  FileText,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AuditPage() {
+  const [activeTab, setActiveTab] = useState<"system" | "delegation">("system");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedLogDiff, setSelectedLogDiff] = useState<EnterpriseAuditLogItem | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
 
-  const { data, loading, error, refresh } = usePolling<AuditChainExport>(
+  // System audit filters
+  const [searchTerm, setSearchTerm] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+
+  const {
+    data: systemAuditData,
+    loading: systemAuditLoading,
+    refresh: refreshSystemAudit,
+  } = usePolling<{ workspace_id: string; total: number; count: number; logs: EnterpriseAuditLogItem[] }>(
+    useCallback(
+      (_signal) =>
+        enterpriseAudit.logs({
+          search: searchTerm || undefined,
+          action: actionFilter || undefined,
+          limit: 100,
+        }),
+      [searchTerm, actionFilter]
+    ),
+    5000
+  );
+
+  const {
+    data: chainData,
+    loading: chainLoading,
+    refresh: refreshChain,
+  } = usePolling<AuditChainExport>(
     useCallback((_signal) => audit.listChains(100), []),
     5000
   );
 
-  function handleDownloadCsv() {
+  function handleDownloadDelegationCsv() {
     const url = audit.exportCsvUrl(100);
+    window.open(url, "_blank");
+  }
+
+  function handleDownloadSystemAuditCsv() {
+    const url = enterpriseAudit.exportCsvUrl(500);
     window.open(url, "_blank");
   }
 
@@ -48,7 +86,7 @@ export default function AuditPage() {
     setSeedError(null);
     try {
       await demo.runDelegation("delegation_clean");
-      await refresh();
+      await refreshChain();
     } catch (err) {
       setSeedError(err instanceof Error ? err.message : "Failed to generate demo chain");
     } finally {
@@ -60,256 +98,328 @@ export default function AuditPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
-          eyebrow="Non-Amplification"
-          title="Delegation Chain Audit Trail"
-          description="Cryptographic Ed25519 signatures, scoped macaroon caveats, and non-amplification verification across multi-agent hops."
-          trailing={loading && data ? <Loader2 size={16} className="text-accent animate-spin" /> : undefined}
+          eyebrow="Compliance & Governance"
+          title="Enterprise Audit Logs &amp; Lineage"
+          description="Complete immutable audit trail of administrative actions, policy edits, security thresholds, and cryptographic agent delegation hops."
         />
         <div className="flex items-center gap-2">
-          <Button
-            onClick={handleSeedDemo}
-            disabled={seeding}
-            variant="primary"
-            size="sm"
-            className="gap-2 font-mono text-[12px]"
-          >
-            {seeding ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-            {seeding ? "Simulating..." : "Generate Delegation Chain"}
-          </Button>
-          <Button
-            onClick={handleDownloadCsv}
-            variant="secondary"
-            size="sm"
-            className="gap-2 font-mono text-[12px]"
-          >
-            <Download size={13} />
-            Export CSV
-          </Button>
+          {activeTab === "system" ? (
+            <Button
+              onClick={handleDownloadSystemAuditCsv}
+              variant="outline"
+              size="sm"
+              className="gap-2 font-mono text-[12px]"
+            >
+              <Download size={13} />
+              Export System Audit CSV
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={handleSeedDemo}
+                disabled={seeding}
+                variant="primary"
+                size="sm"
+                className="gap-2 font-mono text-[12px]"
+              >
+                {seeding ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                {seeding ? "Simulating..." : "Generate Demo Chain"}
+              </Button>
+              <Button
+                onClick={handleDownloadDelegationCsv}
+                variant="outline"
+                size="sm"
+                className="gap-2 font-mono text-[12px]"
+              >
+                <Download size={13} />
+                Export Lineage CSV
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {(error || seedError) && (
-        <div className="rounded-lg border border-block/30 bg-block/10 px-4 py-3 text-[13px] text-block font-mono">
-          {error?.message || seedError}
-        </div>
-      )}
+      {/* Tabs */}
+      <div className="flex border-b border-hairline gap-2">
+        <button
+          onClick={() => setActiveTab("system")}
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === "system"
+              ? "border-accent text-accent"
+              : "border-transparent text-ink-muted hover:text-ink-primary"
+          }`}
+        >
+          <FileText size={14} />
+          <span>Enterprise System Audit Trail ({systemAuditData?.total || 0})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("delegation")}
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === "delegation"
+              ? "border-accent text-accent"
+              : "border-transparent text-ink-muted hover:text-ink-primary"
+          }`}
+        >
+          <GitFork size={14} />
+          <span>Agent Delegation Chain Trail ({chainData?.count || 0})</span>
+        </button>
+      </div>
 
-      <div className="grid grid-cols-12 gap-5">
-        {/* Left: Delegation Chain Events Table */}
-        <div className="col-span-12 lg:col-span-7">
-          {loading && !data && <TableSkeleton rows={5} cols={4} />}
+      {/* TAB 1: Enterprise System Audit Log */}
+      {activeTab === "system" && (
+        <div className="space-y-4">
+          {/* Search and Filters Bar */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted"
+              />
+              <input
+                type="text"
+                placeholder="Search audit events, actor emails, descriptions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-surface-elevated border border-hairline rounded-lg pl-9 pr-3 py-2 text-xs text-ink-primary font-sans focus:outline-none focus:border-accent"
+              />
+            </div>
+            <select
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              className="bg-surface-elevated border border-hairline rounded-lg px-3 py-2 text-xs text-ink-primary font-sans focus:outline-none focus:border-accent"
+            >
+              <option value="">All Actions</option>
+              <option value="spend.workspace_limit_updated">Spend Limits Updated</option>
+              <option value="rbac.member_added">Member Added</option>
+              <option value="network.ip_allowlist_added">IP Allowlist Modified</option>
+              <option value="retention.policy_updated">Retention Policy Updated</option>
+              <option value="scim.user_provisioned">SCIM User Provisioned</option>
+            </select>
+          </div>
 
-          {!loading && data && data.events.length === 0 && (
-            <EmptyState
-              icon={<GitFork size={24} />}
-              title="No delegation chain events recorded yet"
-              description="Run a multi-agent delegation test to record cryptographic hops and macaroon caveats."
-              action={
-                <Button onClick={handleSeedDemo} disabled={seeding} size="sm" className="gap-2">
-                  {seeding ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                  Generate Demo Delegation Chain
-                </Button>
-              }
-            />
-          )}
-
-          {data && data.events.length > 0 && (
-            <div className="material-panel rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-hairline flex items-center justify-between">
-                <span className="eyebrow">Logged Delegation Events</span>
-                <span className="text-[11px] font-mono text-ink-muted">{data.events.length} records</span>
-              </div>
-              <table className="w-full text-left text-[13px]">
+          <Card className="material-base overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-hairline text-[10.5px] uppercase tracking-wide text-ink-muted bg-surface-elevated/40">
-                    <th className="px-4 py-2.5 font-medium">Task ID</th>
-                    <th className="px-4 py-2.5 font-medium">Delegation Hop</th>
-                    <th className="px-4 py-2.5 font-medium">Depth</th>
-                    <th className="px-4 py-2.5 font-medium">Ed25519 Sig</th>
-                    <th className="px-4 py-2.5 font-medium">Timestamp</th>
+                  <tr className="border-b border-hairline bg-surface-elevated/40 text-ink-muted font-medium">
+                    <th className="py-3 px-4">Timestamp</th>
+                    <th className="py-3 px-4">Actor</th>
+                    <th className="py-3 px-4">Action</th>
+                    <th className="py-3 px-4">Target Entity</th>
+                    <th className="py-3 px-4">Description</th>
+                    <th className="py-3 px-4">IP Address</th>
+                    <th className="py-3 px-4 text-right">Details</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {data.events.map((ev, i) => {
-                    const isSelected = selectedTaskId === ev.task_id;
-                    return (
-                      <tr
-                        key={`${ev.task_id}-${i}`}
-                        onClick={() => setSelectedTaskId(ev.task_id)}
-                        className={`border-t border-hairline/60 cursor-pointer transition-all duration-120 hover:bg-surface-elevated ${
-                          isSelected ? "bg-surface-elevated border-l-2 border-l-accent" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3 font-mono text-[12px] text-accent font-medium">
-                          {ev.task_id.slice(0, 8)}...
+                <tbody className="divide-y divide-hairline">
+                  {systemAuditLoading ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-ink-muted">
+                        <TableSkeleton rows={5} />
+                      </td>
+                    </tr>
+                  ) : systemAuditData && systemAuditData.logs.length > 0 ? (
+                    systemAuditData.logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-surface-elevated/30 transition-colors">
+                        <td className="py-3 px-4 font-mono text-[11px] text-ink-muted whitespace-nowrap">
+                          {log.created_at ? new Date(log.created_at).toLocaleString() : "-"}
                         </td>
-                        <td className="px-4 py-3 text-[12px]">
-                          <div className="flex items-center gap-1.5 font-medium text-ink-primary">
-                            <span>{ev.sender_name}</span>
-                            <ArrowRight size={11} className="text-ink-muted" />
-                            <span>{ev.receiver_name}</span>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-ink-primary font-sans">{log.actor_email}</span>
+                            <Badge variant="outline" className="text-[9px] uppercase font-mono">
+                              {log.actor_type}
+                            </Badge>
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-mono text-[11px]">
-                          <Badge variant="outline">hop {ev.delegation_depth}</Badge>
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-accent text-[11px] font-medium">
+                            {log.action}
+                          </span>
                         </td>
-                        <td className="px-4 py-3">
-                          {ev.signature_valid ? (
-                            <Badge variant="allow" className="gap-1 text-[10px]">
-                              <CheckCircle2 size={10} /> Valid
-                            </Badge>
-                          ) : (
-                            <Badge variant="block" className="gap-1 text-[10px]">
-                              <XCircle size={10} /> Invalid
-                            </Badge>
-                          )}
+                        <td className="py-3 px-4 font-mono text-ink-muted text-[11px]">
+                          {log.entity_type} {log.entity_id ? `(#${log.entity_id.slice(0, 8)})` : ""}
                         </td>
-                        <td className="px-4 py-3 text-[11px] font-mono text-ink-muted">
-                          {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString([], { timeZone: 'UTC' }) + ' UTC' : "-"}
+                        <td className="py-3 px-4 text-ink-primary max-w-xs truncate">
+                          {log.description || "-"}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-ink-muted text-[11px]">
+                          {log.ip_address || "internal"}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => setSelectedLogDiff(log)}
+                            className="text-xs text-accent hover:text-accent font-medium gap-1"
+                          >
+                            <Eye size={12} /> Diff
+                          </Button>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-ink-muted">
+                        <div className="flex flex-col items-center gap-2">
+                          <ShieldCheck size={28} className="text-emerald-400 opacity-60" />
+                          <span className="font-medium text-ink-primary">No Audit Events Logged</span>
+                          <p className="text-xs text-ink-muted">
+                            Administrative events and governance operations are automatically written to this ledger.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* Diff Drawer Modal */}
+          {selectedLogDiff && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="material-elevated border border-hairline-strong rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-ink-primary">
+                    Audit Event Payload &amp; State Diff
+                  </h3>
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {selectedLogDiff.action}
+                  </Badge>
+                </div>
+                <div className="text-xs text-ink-muted space-y-1 font-mono">
+                  <div>Actor: <span className="text-ink-primary font-semibold">{selectedLogDiff.actor_email}</span></div>
+                  <div>Timestamp: {selectedLogDiff.created_at ? new Date(selectedLogDiff.created_at).toISOString() : ""}</div>
+                </div>
+                <div className="bg-surface rounded-xl p-3 border border-hairline max-h-72 overflow-y-auto">
+                  <pre className="text-[11px] font-mono text-ink-primary whitespace-pre-wrap">
+                    {JSON.stringify(selectedLogDiff.diff, null, 2)}
+                  </pre>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setSelectedLogDiff(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
+      )}
 
-        {/* Right: Chain Visualization / Details */}
-        <div className="col-span-12 lg:col-span-5">
-          <ChainVisualizer taskId={selectedTaskId} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ChainVisualizer({ taskId }: { taskId: string | null }) {
-  const { data: chain, loading } = usePolling<TaskAuditChain | null>(
-    useCallback(
-      (_signal) => (taskId ? audit.taskChain(taskId) : Promise.resolve(null)),
-      [taskId]
-    ),
-    5000,
-    !!taskId
-  );
-
-  if (!taskId) {
-    return (
-      <div className="material-panel rounded-xl text-center py-14 px-6">
-        <GitFork size={32} className="mx-auto mb-3 text-ink-muted/40" />
-        <div className="text-[14px] font-semibold text-ink-primary">Select a Delegation Event</div>
-        <div className="text-[12px] text-ink-muted mt-1 max-w-xs mx-auto leading-relaxed">
-          Click any event on the left to reconstruct its cryptographic lineage, macaroon caveats, and non-amplification proof.
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && !chain) {
-    return <Card className="text-sm text-ink-muted">Reconstructing cryptographic tree...</Card>;
-  }
-
-  if (!chain) {
-    return <Card className="text-sm text-ink-muted">Chain data unavailable.</Card>;
-  }
-
-  return (
-    <div className="material-panel rounded-xl p-5 space-y-4">
-      {/* Root Task & Intent Header */}
-      <div className="border-b border-hairline pb-4">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="eyebrow">Cryptographic Tree</div>
-          <Badge variant="allow" className="font-mono text-[10px]">
-            {chain.hops_count} {chain.hops_count === 1 ? "hop" : "hops"}
-          </Badge>
-        </div>
-        <div className="text-[13px] font-mono text-ink-primary font-bold truncate">
-          Task: {chain.task_id}
-        </div>
-
-        {/* Declared Intent Box */}
-        {chain.declared_intent && (
-          <div className="mt-3 rounded-lg bg-surface-elevated border border-hairline p-3 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="flex items-center gap-1 font-semibold text-accent">
-                <BrainCircuit size={13} /> Root Declared Intent
-              </span>
-              {chain.intent_drift_score !== null && (
-                <span
-                  className={`font-mono text-[11px] font-bold ${
-                    chain.intent_drift_score > 0.7
-                      ? "text-block"
-                      : chain.intent_drift_score > 0.4
-                      ? "text-review"
-                      : "text-allow"
-                  }`}
-                >
-                  drift: {chain.intent_drift_score.toFixed(2)}
-                </span>
-              )}
+      {/* TAB 2: Agent Delegation Chain Audit */}
+      {activeTab === "delegation" && (
+        <div className="space-y-6">
+          {seedError && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[13px] text-destructive flex items-center gap-2">
+              <AlertTriangle size={15} />
+              {seedError}
             </div>
-            <div className="text-[12px] text-ink-primary italic font-serif">
-              &quot;{chain.declared_intent}&quot;
-            </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Visual Vertical Graph Timeline */}
-      <div className="space-y-3 relative before:absolute before:left-3 before:top-3 before:bottom-3 before:w-0.5 before:bg-hairline">
-        {chain.hops.map((hop, index) => (
-          <div key={hop.id} className="relative pl-7 space-y-2">
-            {/* Timeline node icon */}
-            <div
-              className={`absolute left-1 top-0.5 -translate-x-1/2 flex h-5 w-5 items-center justify-center rounded-full border ${
-                hop.signature_valid
-                  ? "border-allow/40 bg-allow/10 text-allow"
-                  : "border-block/40 bg-block/10 text-block"
-              }`}
-            >
-              {hop.signature_valid ? <ShieldCheck size={11} /> : <AlertTriangle size={11} />}
-            </div>
+          {chainLoading && !chainData && <TableSkeleton rows={5} />}
 
-            {/* Hop Header */}
-            <div className="flex items-center justify-between">
-              <div className="text-[12.5px] font-semibold text-ink-primary flex items-center gap-1.5">
-                <span>{hop.sender_name}</span>
-                <ArrowRight size={11} className="text-ink-muted" />
-                <span>{hop.receiver_name}</span>
+          {!chainLoading && (!chainData || chainData.events.length === 0) && (
+            <EmptyState
+              title="No delegation chains recorded yet"
+              description="Simulate a multi-hop agent delegation chain to inspect Ed25519 token signatures and cryptographic caveat non-amplification."
+            />
+          )}
+
+          {chainData && chainData.events.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <Card className="material-base overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-hairline bg-surface-elevated/40 text-ink-muted font-medium font-mono text-[11px]">
+                          <th className="py-3 px-4">Depth</th>
+                          <th className="py-3 px-4">Sender Agent</th>
+                          <th className="py-3 px-4">Receiver Agent</th>
+                          <th className="py-3 px-4">Ed25519 Sig</th>
+                          <th className="py-3 px-4">Chain Hash</th>
+                          <th className="py-3 px-4 text-right">Inspect</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-hairline font-mono text-[11px]">
+                        {chainData.events.map((ev, idx) => {
+                          const isSelected = selectedTaskId === ev.task_id;
+                          return (
+                            <tr
+                              key={`${ev.task_id}-${idx}`}
+                              className={`hover:bg-surface-elevated/30 transition-colors ${
+                                isSelected ? "bg-accent/10 border-l-2 border-accent" : ""
+                              }`}
+                            >
+                              <td className="py-3 px-4 font-bold text-accent">
+                                Hop #{ev.delegation_depth}
+                              </td>
+                              <td className="py-3 px-4 font-sans font-semibold text-ink-primary">
+                                {ev.sender_name}
+                              </td>
+                              <td className="py-3 px-4 font-sans text-ink-muted">
+                                {ev.receiver_name}
+                              </td>
+                              <td className="py-3 px-4">
+                                {ev.signature_valid ? (
+                                  <Badge variant="success" className="gap-1 text-[10px]">
+                                    <CheckCircle2 size={11} /> Valid
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="gap-1 text-[10px]">
+                                    <XCircle size={11} /> Invalid
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-ink-muted text-[10px]">
+                                {ev.chain_hash ? ev.chain_hash.substring(0, 10) + "..." : "-"}
+                              </td>
+                              <td className="py-3 px-4 text-right font-sans">
+                                <Button
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => setSelectedTaskId(ev.task_id)}
+                                >
+                                  Details
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
               </div>
-              <span className="text-[10px] font-mono text-ink-muted">
-                Depth {hop.delegation_depth}
-              </span>
-            </div>
 
-            {/* Scoped Macaroon Caveats */}
-            {hop.caveats && hop.caveats.length > 0 && (
-              <div className="rounded-lg border border-hairline bg-surface-elevated p-2.5 space-y-1.5">
-                <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wider flex items-center gap-1">
-                  <FileCode size={11} /> Macaroon Caveats (Narrowed Permissions)
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {hop.caveats.map((c, ci) => (
-                    <span
-                      key={ci}
-                      className="inline-block font-mono text-[10px] bg-surface text-allow px-2 py-0.5 rounded border border-allow/25"
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
+              {/* Inspector panel */}
+              <div className="space-y-4">
+                <Card className="material-base p-5">
+                  <h3 className="text-sm font-bold text-ink-primary mb-2 flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-emerald-400" />
+                    <span>Cryptographic Lineage Verifier</span>
+                  </h3>
+                  <p className="text-xs text-ink-muted leading-relaxed mb-4">
+                    Every task hop is verified against the sender agent's registered Ed25519 public key and checked for caveat attenuation.
+                  </p>
+                  {selectedTaskId ? (
+                    <div className="p-3 rounded-xl bg-surface-elevated border border-hairline font-mono text-xs space-y-2">
+                      <div className="text-accent font-bold">Task ID Selected:</div>
+                      <div className="text-[11px] text-ink-primary truncate">{selectedTaskId}</div>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-xs text-ink-muted">
+                      Select a task hop from the table to inspect caveats and signature proofs.
+                    </div>
+                  )}
+                </Card>
               </div>
-            )}
-
-            {/* Hash */}
-            <div className="text-[10px] font-mono text-ink-muted truncate">
-              sig hash: {hop.chain_hash.slice(0, 32)}...
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

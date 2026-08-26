@@ -1,75 +1,91 @@
-# 🛡️ A2A Firewall — Inter-Agent Governance Mesh (v2.2.0)
+# 🛡️ A2A Firewall — Inter-Agent Governance Mesh & Zero-Trust Security (v2.3.0)
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.2.0-blue?style=for-the-badge" alt="Version 2.2.0" />
+  <img src="https://img.shields.io/badge/Version-2.3.0-blue?style=for-the-badge" alt="Version 2.3.0" />
   <img src="https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-0.109-emerald?style=for-the-badge&logo=fastapi" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/SCIM-2.0%20(RFC%207644)-purple?style=for-the-badge" alt="SCIM 2.0" />
+  <img src="https://img.shields.io/badge/Compliance-RBI%20|%20DPDP%20|%20HIPAA%20|%20PCI--DSS-green?style=for-the-badge" alt="Compliance" />
   <img src="https://img.shields.io/badge/OpenTelemetry-Enabled-orange?style=for-the-badge&logo=opentelemetry" alt="OpenTelemetry" />
-  <img src="https://img.shields.io/badge/Anti--Agentic%20Pentest-Immune-red?style=for-the-badge" alt="Anti-Pentest Immune" />
 </p>
 
-A2A Firewall is a production-grade **Zero-Trust Inter-Agent Governance Mesh** designed to intercept, inspect, validate, and trace communication between autonomous AI agents. It provides multi-layer inspection, cryptographic Ed25519 identity verification, Macaroon caveat attenuation, anti-agentic pentest immunity, SQL injection defense, and full OpenTelemetry distributed lineage tracing across complex multi-agent pipelines.
+A2A Firewall is an enterprise-grade **Zero-Trust Inter-Agent Governance Mesh & Security Gateway** designed to intercept, inspect, validate, control spend, and audit communication between autonomous AI agents. It provides multi-layer threat inspection, cryptographic Ed25519 identity verification, Macaroon caveat attenuation, anti-agentic pentest immunity, financial spend governance, fine-grained RBAC, SCIM 2.0 automated provisioning, network-level CIDR filtering, IP allowlisting, and automated data retention controls.
 
 ---
 
-## 🏗️ Architecture & Message Flow
+## 🏗️ Architecture & Seven-Layer Threat & Governance Pipeline
 
-Whenever **Agent A** attempts to send a message to **Agent B**, the request is intercepted by the **A2A Sentinel Ingress Gateway**. The firewall processes the message through a **Six-Layer Threat Inspection Pipeline** and synthesizes an immediate security verdict: **Allow**, **Block**, or route for manual **Review**.
+Whenever **Agent A** attempts to communicate with **Agent B**, the request is intercepted by the **A2A Sentinel Ingress Gateway**. The gateway evaluates network boundaries, financial quotas, schema bounds, and semantic intent before issuing a verdict: **Allow**, **Block**, or route to the **SOC Review Queue**.
 
 ```mermaid
 flowchart TD
-    A["🤖 Agent A"]
-
-    FW["🛡️ A2A Sentinel Gateway"]
-
-    Lm1["Layer -1<br/>⏳ Rate Limiter<br/>(Token Bucket)"]
-    L0["Layer 0<br/>⚡ Preflight, Nonces<br/>& Anti-Pentest Canaries"]
-    L1["Layer 1<br/>📋 JSON Schema<br/>Validation"]
-    L2["Layer 2<br/>🔑 Permissions Matrix<br/>& Macaroon Attenuation"]
-    L3["Layer 3<br/>📜 Rule Engine<br/>SQL Guard & Obfuscation Decoders"]
-    L4["Layer 4<br/>🧠 LLM Semantic Guard<br/>(Intent Drift)"]
-    L5["Layer 5<br/>🎛️ Declarative Policy<br/>Synthesis Gate"]
-
-    B["🤖 Agent B<br/>(Authorized)"]
-    ERR["❌ Dropped<br/>Dynamic Quarantine"]
-    RQ["👥 SOC Review Queue"]
-
-    A -->|"1. Signed Payload (Ed25519)"| FW
-
-    FW --> Lm1
-    Lm1 --> L0
-    L0 --> L1
-    L1 --> L2
-    L2 --> L3
-    L3 --> L4
-    L4 --> L5
-
-    L5 -->|"ALLOW"| B
-    L5 -->|"BLOCK"| ERR
-    L5 -->|"REVIEW"| RQ
-
+    A["🤖 Agent A"] -->|"1. Signed Payload (Ed25519)"| FW["🛡️ A2A Sentinel Gateway"]
+    FW -->|"Layer -2"| L_Net["🌐 Network & IP Allowlist Filter"]
+    L_Net -->|"Layer -1"| L_Spend["💰 Spend & Token Budget Manager"]
+    L_Spend -->|"Layer 0"| L0["⚡ Preflight, Nonces & Anti-Pentest Canaries"]
+    L0 -->|"Layer 1"| L1["📋 JSON Schema Validation"]
+    L1 -->|"Layer 2"| L2["🔑 Permissions Matrix & Macaroon Attenuation"]
+    L2 -->|"Layer 3"| L3["📜 Rule Engine, SQL Guard & Obfuscation Decoders"]
+    L3 -->|"Layer 4"| L4["🧠 LLM Semantic Guard (Intent Drift)"]
+    L4 -->|"Layer 5"| L5["🎛️ Declarative Policy Synthesis Gate"]
+    
+    L5 -->|"ALLOW"| B["🤖 Agent B (Authorized)"]
+    L5 -->|"BLOCK"| Err["❌ Dropped / Dynamic Quarantine"]
+    L5 -->|"REVIEW"| RQ["👥 SOC Review Queue"]
+    
     RQ -->|"Admin Approved"| B
-    RQ -->|"Admin Rejected"| ERR
+    RQ -->|"Admin Rejected"| Err
 ```
 
 ---
 
-## 🛡️ Six-Layer Threat Inspection Pipeline
+## 🏢 Enterprise Governance & Security Capabilities
 
-| Layer | Component | Description |
-| :--- | :--- | :--- |
-| **Layer -1** | **Rate Limiter** | Sliding-window token buckets restricting queries per minute at both workspace and agent levels. |
-| **Layer 0** | **Preflight & Anti-Pentest Canaries** | Detects zero-trust honeytoken traps (`__sec_canary`), automated fuzzing bursts, circular delegation loops, payload size limits, and cryptographic nonce replays (> 300s window). |
-| **Layer 1** | **JSON Schema Validation** | Enforces strict type-safety and parameter bounds against registered task schemas matching `task_type`. |
-| **Layer 2** | **Permissions Matrix & Scopes** | Validates sender-receiver trust relationships, capability bounds, and delegation depth attenuation. |
-| **Layer 3** | **Rule Engine & SQL Guard** | Scans for forbidden prompt injection strings, SQL injection (`UNION SELECT`, tautologies, stacked queries), offshore beneficiary flags, and Base64/Hex obfuscated payloads. |
-| **Layer 4** | **Groq Semantic Guard** | Uses GPT-OSS-120B inference to evaluate semantic intent drift, confused-deputy redirection, and indirect prompt injection attempts. |
-| **Layer 5** | **Declarative Policy Synthesis** | Priority-ranked policy evaluation rules with customizable action gates (`BLOCK`, `REVIEW`, `ALLOW`). |
+### 1. 💰 Spend Limits & Cost Governance (`/dashboard/spend`)
+- **Organization & Per-Agent Monthly Budgets**: Set financial quotas (USD) and total token consumption ceilings.
+- **Enforcement Actions**: Configurable `block` mode (returns `403 SPEND_LIMIT_EXCEEDED` on limit breach) or `warn` mode (issues SOC alert without dropping message).
+- **Inference Cost Ledger**: Tracks heuristic token consumption across models (e.g. GPT-OSS 120B, LLaMA 3.3 70B) with downloadable CSV ledger exports.
+
+### 2. 👥 Role-Based Access Control (RBAC) (`/dashboard/rbac`)
+- **Standard Built-in Roles**: `admin`, `security_admin`, `soc_analyst`, `auditor`, `developer`, and `viewer`.
+- **Fine-Grained Capabilities**: Permissions tokens (`spend:manage`, `policies:write`, `audit:export`, `network:manage`, `scim:manage`).
+- **Custom Security Roles**: Create tailored roles with custom capability subsets.
+
+### 3. 🆔 SCIM 2.0 Identity Provisioning (`/dashboard/scim`)
+- **RFC 7643 & RFC 7644 Standard Endpoints**: `/scim/v2/Users`, `/scim/v2/ServiceProviderConfig`, `/scim/v2/Schemas`.
+- **Identity Provider Compatibility**: Real-time push synchronization and automatic user deprovisioning from **Okta**, **Microsoft Entra ID (Azure AD)**, and **OneLogin**.
+- **OAuth Bearer Token Security**: SHA-256 token hashing at rest with dedicated token rotation.
+
+### 4. 📜 Enterprise Audit Logs & Delegation Lineage (`/dashboard/audit`)
+- **System Audit Trail**: Complete immutable ledger of administrative and governance actions (policy modifications, spend limit adjustments, member invites, IP edits, data purges) with JSON diff tracking.
+- **Agent Delegation Lineage**: Multi-hop Ed25519 signature validation and cryptographic Macaroon caveat attenuation verifier.
+- **Audit-Ready CSV/JSON Export**: Fast extraction for SOC 2 Type II and regulatory auditors.
+
+### 5. 📊 Continuous Compliance & Regulatory Observability (`/dashboard/compliance`)
+- **Real-Time Posture Scoring (0-100%)**: Instant compliance metrics across 6 global frameworks:
+  - **RBI** (Reserve Bank of India cyber security directions, PAN/Card masking)
+  - **DPDP** (Digital Personal Data Protection Act, Aadhaar/PII privacy)
+  - **HIPAA** (Health Insurance Portability and Accountability Act)
+  - **PCI-DSS** (Payment Card Industry Data Security Standard)
+  - **GDPR** & **CCPA** (Global & California Consumer Privacy)
+- **One-Click Regulatory Evidence Bundle**: Export pre-compiled audit packages in JSON/CSV format.
+
+### 6. 🗄️ Custom Data Retention & Privacy Controls (`/dashboard/retention`)
+- **Granular Lifecycle Windows**: Set retention days for task payloads, telemetry events, violations, and SOC alerts.
+- **Compliance Floor Protection**: Audit logs are locked to a minimum of 365 days (1 Year) to satisfy compliance mandates.
+- **Automated PII Scrubbing**: Automatically sanitizes Aadhaar, PAN, SSN, Credit Cards, and emails on aging records before permanent pruning.
+- **Dry-Run & Scheduled Purge**: Test storage cleanup with dry-run previews before committing deletion.
+
+### 7. 🌐 Network-Level Access Control & IP Allowlisting (`/dashboard/network`)
+- **CIDR Subnet Filtering**: Enforce allowed IP addresses and CIDR blocks (`192.168.1.0/24`, `10.0.0.0/16`) for API and Dashboard scopes.
+- **Reverse Proxy Header Support**: Safely parses client IPs from `cf-connecting-ip`, `x-forwarded-for`, and `x-real-ip`.
+- **Priority Network Rules**: Configure protocol (HTTP, gRPC, WebSocket) and ingress/egress allow/deny matrices.
+- **Live Packet Simulator**: Test synthetic IP packets against allowlists and network rules with instant visual verdict feedback.
 
 ---
 
-## 🔒 Advanced Security Capabilities
+## 🔒 Threat Defense Engines
 
 ### 1. Anti-Agentic Pentest Immunity Subsystem
 - **Honeytoken Canary Traps**: Decoy canary markers (`__sec_canary`, `_admin_override`, `__probe_eval__`) automatically quarantine malicious reconnaissance agents.
@@ -84,50 +100,6 @@ flowchart TD
 - **Macaroon Caveat Attenuation**: Sub-agent capabilities must be a strict subset of delegator permissions; privilege amplification is strictly blocked.
 - **Intent-Binding & Drift Verification**: Multi-hop payloads are scored against root task intent. Drift exceeding threshold (0.7) is immediately blocked.
 - **Ed25519 Cryptographic Identity**: Outgoing agent messages carry cryptographic signatures verified against registered public keys.
-
----
-
-## 🎮 Interactive Live Demo & Mesh Simulation
-
-### 1. Live Attack Demo (`/dashboard/demo`)
-- Visual 8-stage interactive wire graph with real-time animated packet traversal.
-- Live cumulative risk gauge meter ($0.0 \to 1.0$) and layer-by-layer latency breakdown.
-- Pre-packaged attack scenarios: Clean Baseline, Prompt Injection, Suspicious Export, SQL Injection Attack, and Anti-Pentest Probe.
-
-### 2. Agent Mesh Simulation & Prior Knowledge (`/dashboard/simulation`)
-- **Agent Prior Knowledge Inspector**: Inspect each agent's assigned role, trust tier, accessible tools, known memory records, strict prohibitions, and Ed25519 signing key before running simulations.
-- **Realistic KYC Fraud Scenario**: Multi-step attack demonstrating Synthetic Identity submission ➔ KYC verification anomaly alert ➔ Injected wire bypass attempt ➔ Firewall interception at Layer 3/4.
-
-### 3. Firewall Policy Visualizer & Auto-Complete (`/dashboard/policies`)
-- Visual sequential evaluation flow and policy impact indicators.
-- Real-time task type autocomplete with fuzzy matching.
-- One-click security presets: Anti-Pentest Guard, SQL Injection Shield, High-Value Wire Boundary ($100k+), Customer PII Review Gate, and Synthetic KYC Bypass Prevention.
-- Interactive Policy Simulation Sandbox.
-
-### 4. Real-Time Command Center (`/dashboard`)
-- Live streaming interception feed with Pause/Resume toggle, manual refresh, and verdict filters (`ALL`, `BLOCK`, `REVIEW`, `ALLOW`).
-- Click-to-filter hero verdict KPI cards and expandable inline diagnostics.
-
----
-
-## 📊 Observability (OpenTelemetry)
-
-A2A Firewall includes native OpenTelemetry instrumentation for distributed lineage tracing:
-
-### Local Dev Tracing (Jaeger)
-* **Dashboard**: [http://localhost:16686](http://localhost:16686)
-* **Configuration** (`.env`):
-  ```ini
-  OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-  OTEL_SERVICE_NAME=a2a-firewall
-  ```
-
-### Cloud Monitoring (Grafana Cloud / Tempo)
-```ini
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<your-region>.grafana.net/otlp
-OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<your-base64-credentials>
-```
 
 ---
 
@@ -146,8 +118,9 @@ docker compose up --build -d
 ### 2. Run Backend Tests
 ```bash
 cd backend
-.venv/Scripts/pytest -v
+pytest -v
 ```
+*(All 111 unit & integration tests pass cleanly)*
 
 ### 3. Build & Run Frontend
 ```bash

@@ -392,3 +392,219 @@ class ComplianceRulePack(Base):
     rules_count = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Spend & Budget Governance
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceSpendLimit(Base):
+    """Organization/Workspace level monthly financial and token spend budgets."""
+
+    __tablename__ = "workspace_spend_limits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    monthly_budget_usd = Column(Float, default=1000.0, nullable=False)
+    token_budget = Column(Integer, default=10000000, nullable=False)
+    current_spend_usd = Column(Float, default=0.0, nullable=False)
+    current_tokens = Column(Integer, default=0, nullable=False)
+    hard_limit_action = Column(String, default="block", nullable=False)  # block | warn
+    alert_threshold_pct = Column(Float, default=80.0, nullable=False)
+    reset_day_of_month = Column(Integer, default=1, nullable=False)
+    last_reset_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AgentSpendLimit(Base):
+    """Per-agent or user financial and token spend limit."""
+
+    __tablename__ = "agent_spend_limits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    monthly_budget_usd = Column(Float, default=100.0, nullable=False)
+    token_budget = Column(Integer, default=1000000, nullable=False)
+    current_spend_usd = Column(Float, default=0.0, nullable=False)
+    current_tokens = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SpendLedger(Base):
+    """Immutable ledger recording cost and token consumption per task or inspection."""
+
+    __tablename__ = "spend_ledger"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
+    task_id = Column(UUID(as_uuid=True), nullable=True)
+    tokens_used = Column(Integer, default=0, nullable=False)
+    cost_usd = Column(Float, default=0.0, nullable=False)
+    model_name = Column(String, nullable=True)
+    operation = Column(String, default="inspect", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# RBAC & Organization Member Management
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceMember(Base):
+    """Workspace users and operators with assigned roles and fine-grained permissions."""
+
+    __tablename__ = "workspace_members"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    role = Column(String, default="developer", nullable=False)  # admin | security_admin | soc_analyst | auditor | developer | viewer | custom
+    permissions = Column(JSONB, default=list, nullable=False)  # explicit permission grant overrides
+    is_active = Column(Boolean, default=True, nullable=False)
+    scim_external_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CustomRole(Base):
+    """Custom fine-grained role definition with tailored permission matrix."""
+
+    __tablename__ = "custom_roles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    permissions = Column(JSONB, default=list, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Enterprise Audit Trail
+# ---------------------------------------------------------------------------
+
+
+class AuditLog(Base):
+    """Immutable audit trail for all workspace, security, governance, and policy actions."""
+
+    __tablename__ = "audit_logs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_id = Column(String, nullable=True)
+    actor_email = Column(String, nullable=False, default="system")
+    actor_type = Column(String, default="user", nullable=False)  # user | agent | scim | system
+    action = Column(String, nullable=False)  # e.g. "policy.create", "spend.update", "member.invite"
+    entity_type = Column(String, nullable=False)  # policy | spend_limit | member | agent | ip_allowlist | network_rule | retention | scim
+    entity_id = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    diff = Column(JSONB, default=dict, nullable=False)  # {"before": {...}, "after": {...}}
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    status = Column(String, default="success", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Custom Data Retention & Privacy Controls
+# ---------------------------------------------------------------------------
+
+
+class DataRetentionPolicy(Base):
+    """Data lifecycle retention periods and automatic scrubbing configurations."""
+
+    __tablename__ = "data_retention_policies"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    task_payload_days = Column(Integer, default=30, nullable=False)
+    telemetry_days = Column(Integer, default=90, nullable=False)
+    violations_days = Column(Integer, default=180, nullable=False)
+    soc_alerts_days = Column(Integer, default=180, nullable=False)
+    audit_log_days = Column(Integer, default=365, nullable=False)  # compliance minimum
+    auto_purge_enabled = Column(Boolean, default=False, nullable=False)
+    scrub_pii_after_days = Column(Integer, default=14, nullable=False)
+    last_purged_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Network-Level Access Control & IP Allowlisting
+# ---------------------------------------------------------------------------
+
+
+class NetworkAccessRule(Base):
+    """CIDR and protocol-level network boundaries for agent mesh communication."""
+
+    __tablename__ = "network_access_rules"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    priority = Column(Integer, nullable=False, default=100)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    source_cidr = Column(String, nullable=False, default="0.0.0.0/0")
+    destination_agent_id = Column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True
+    )
+    action = Column(String, nullable=False, default="allow")  # allow | deny
+    protocol = Column(String, default="all", nullable=False)  # all | http | grpc | websocket
+    port_range = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class IpAllowlistEntry(Base):
+    """IP / CIDR allowlisting for dashboard and API access."""
+
+    __tablename__ = "ip_allowlist_entries"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    cidr_or_ip = Column(String, nullable=False)
+    label = Column(String, nullable=False)
+    scope = Column(String, default="all", nullable=False)  # all | dashboard | api
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# SCIM 2.0 Integration
+# ---------------------------------------------------------------------------
+
+
+class SCIMToken(Base):
+    """Authentication tokens for SCIM 2.0 IdP provisioning."""
+
+    __tablename__ = "scim_tokens"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash = Column(String, nullable=False, unique=True)
+    name = Column(String, default="Default SCIM Token", nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+

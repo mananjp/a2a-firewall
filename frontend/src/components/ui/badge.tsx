@@ -9,6 +9,8 @@ export type BadgeVariant =
   | "outline"
   | "success"
   | "danger"
+  | "destructive"
+  | "secondary"
   | "warning";
 
 interface BadgeProps {
@@ -19,6 +21,7 @@ interface BadgeProps {
 
 const variantStyles: Record<BadgeVariant, string> = {
   default: "bg-surface-elevated text-ink-muted border-hairline",
+  secondary: "bg-surface-elevated text-ink-primary border-hairline",
   allow:   "bg-allow/10 text-allow border-allow/30 font-medium",
   block:   "bg-block/10 text-block border-block/30 font-medium",
   review:  "bg-review/10 text-review border-review/30 font-medium",
@@ -26,6 +29,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   outline: "bg-transparent text-ink-muted border-hairline",
   success: "bg-allow/10 text-allow border-allow/30 font-medium",
   danger:  "bg-block/10 text-block border-block/30 font-medium",
+  destructive: "bg-block/10 text-block border-block/30 font-medium",
   warning: "bg-review/10 text-review border-review/30 font-medium",
 };
 

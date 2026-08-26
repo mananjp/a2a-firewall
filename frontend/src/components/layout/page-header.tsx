@@ -29,3 +29,6 @@ export function PageHeader({ title, description, action, eyebrow, trailing }: Pa
     </div>
   );
 }
+
+export const Header = PageHeader;
+

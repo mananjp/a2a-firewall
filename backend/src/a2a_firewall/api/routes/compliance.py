@@ -206,6 +206,140 @@ async def compliance_report(
     }
 
 
+@router.get("/posture")
+async def get_compliance_posture(
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Calculate real-time continuous compliance posture scores (0-100%) across all frameworks."""
+    # Installed frameworks
+    installed = await get_installed_frameworks(ws.id, db)
+    installed_names = [f["framework"] for f in installed]
+
+    # Fetch recent violations
+    v_res = await db.execute(select(Violation).where(Violation.workspace_id == ws.id))
+    all_violations = v_res.scalars().all()
+
+    frameworks_posture = {}
+    for fw, rules in COMPLIANCE_PACKS.items():
+        is_inst = fw in installed_names
+        fw_vtypes = _framework_rule_types(fw)
+        matching_v = [v for v in all_violations if str(v.violation_type) in fw_vtypes]
+        unresolved_v = [v for v in matching_v if not v.resolved]
+
+        # Calculate score: baseline 100%, deduct 5% per unresolved violation, min 10%
+        score = max(10, 100 - (len(unresolved_v) * 5)) if is_inst else 0
+
+        controls_passing = max(0, len(rules) - len(unresolved_v))
+        controls_total = max(len(rules), 1)
+
+        frameworks_posture[fw] = {
+            "installed": is_inst,
+            "score": score,
+            "controls_passing": controls_passing,
+            "controls_total": controls_total,
+            "pass_rate_pct": round((controls_passing / controls_total) * 100.0, 1),
+            "unresolved_violations_count": len(unresolved_v),
+            "total_violations_count": len(matching_v),
+            "status": "PASSING" if score >= 90 else ("WARNING" if score >= 70 else "FAILING"),
+        }
+
+    # Overall enterprise compliance index
+    active_scores = [fp["score"] for fp in frameworks_posture.values() if fp["installed"]]
+    overall_index = round(sum(active_scores) / len(active_scores), 1) if active_scores else 100.0
+
+    return {
+        "workspace_id": str(ws.id),
+        "overall_compliance_score": overall_index,
+        "installed_frameworks_count": len(installed_names),
+        "frameworks": frameworks_posture,
+    }
+
+
+@router.get("/timeline")
+async def get_compliance_timeline(
+    days: int = Query(30, ge=7, le=90),
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return historical 30-day compliance violations and posture trendline."""
+    from datetime import datetime, timedelta
+
+    now = datetime.utcnow()
+    res = await db.execute(
+        select(Violation)
+        .where(
+            Violation.workspace_id == ws.id,
+            Violation.created_at >= (now - timedelta(days=days)),
+        )
+    )
+    violations = res.scalars().all()
+
+    # Bucket by date
+    timeline_map: dict[str, dict[str, int]] = {}
+    for i in range(days):
+        d_str = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        timeline_map[d_str] = {"blocked": 0, "review": 0, "critical": 0}
+
+    for v in violations:
+        if v.created_at:
+            d_str = v.created_at.strftime("%Y-%m-%d")
+            if d_str in timeline_map:
+                if v.severity == "critical":
+                    timeline_map[d_str]["critical"] += 1
+                else:
+                    timeline_map[d_str]["blocked"] += 1
+
+    return [
+        {"date": date, "blocked": counts["blocked"], "critical": counts["critical"]}
+        for date, counts in sorted(timeline_map.items())
+    ]
+
+
+@router.get("/export-bundle")
+async def export_compliance_bundle(
+    framework: str = Query("RBI"),
+    ws: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Generate a formal regulatory compliance evidence bundle."""
+    from a2a_firewall.db.models import AuditLog, DelegationChain
+
+    # 1. Rules
+    rules_res = await db.execute(select(PolicyRule).where(PolicyRule.workspace_id == ws.id))
+    rules = rules_res.scalars().all()
+
+    # 2. Violations
+    v_res = await db.execute(select(Violation).where(Violation.workspace_id == ws.id).limit(100))
+    violations = v_res.scalars().all()
+
+    # 3. Audit Logs
+    a_res = await db.execute(select(AuditLog).where(AuditLog.workspace_id == ws.id).limit(100))
+    audit_logs = a_res.scalars().all()
+
+    return {
+        "bundle_id": f"EVIDENCE-{ws.id}-{datetime.utcnow().strftime('%Y%m%d%H%M')}",
+        "framework": framework,
+        "workspace_id": str(ws.id),
+        "workspace_name": ws.name,
+        "jurisdiction": ws.jurisdiction,
+        "industry": ws.industry,
+        "generated_at": datetime.utcnow().isoformat(),
+        "rules_installed": [
+            {"id": str(r.id), "name": r.name, "framework_tag": r.framework_tag, "action": r.action}
+            for r in rules
+        ],
+        "violations_logged_sample": [
+            {"id": str(v.id), "type": v.violation_type, "severity": v.severity, "timestamp": v.created_at.isoformat() if v.created_at else None}
+            for v in violations
+        ],
+        "audit_trail_sample": [
+            {"id": str(a.id), "action": a.action, "actor": a.actor_email, "timestamp": a.created_at.isoformat() if a.created_at else None}
+            for a in audit_logs
+        ],
+    }
+
+
 def _framework_rule_types(framework: str) -> set[str]:
     """Return violation types relevant to a compliance framework."""
     mapping: dict[str, set[str]] = {
@@ -217,3 +351,4 @@ def _framework_rule_types(framework: str) -> set[str]:
         "CCPA": {"pii_exposure_ssn", "pii_exposure_email", "pii_exposure_phone"},
     }
     return mapping.get(framework, set())
+

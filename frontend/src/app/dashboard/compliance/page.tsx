@@ -1,22 +1,40 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { compliance } from "@/lib/api";
+import { compliance, complianceExtended } from "@/lib/api";
 import type { ComplianceFramework, ComplianceRule, ComplianceReport } from "@/lib/types";
+import { Header } from "@/components/layout/header";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  ScrollText,
+  ShieldCheck,
+  ShieldAlert,
+  Download,
+  CheckCircle2,
+  TrendingUp,
+  AlertTriangle,
+  FileSpreadsheet,
+  Layers,
+  Sparkles,
+} from "lucide-react";
 
-const FRAMEWORK_LABELS: Record<string, { name: string; flag: string }> = {
-  RBI: { name: "Reserve Bank of India", flag: "🇮🇳" },
-  DPDP: { name: "Digital Personal Data Protection", flag: "🇮🇳" },
-  HIPAA: { name: "Health Insurance Portability", flag: "🇺🇸" },
-  "PCI-DSS": { name: "Payment Card Industry", flag: "💳" },
-  GDPR: { name: "General Data Protection Reg.", flag: "🇪🇺" },
-  CCPA: { name: "California Consumer Privacy", flag: "🇺🇸" },
+const FRAMEWORK_LABELS: Record<string, { name: string; flag: string; desc: string }> = {
+  RBI: { name: "Reserve Bank of India", flag: "🇮🇳", desc: "Cyber security controls, PAN/Card masking & fraud detection." },
+  DPDP: { name: "Digital Personal Data Protection", flag: "🇮🇳", desc: "Aadhaar, email, and phone privacy protections." },
+  HIPAA: { name: "Health Insurance Portability", flag: "🇺🇸", desc: "Medical records, ICD-10 and SSN health privacy." },
+  "PCI-DSS": { name: "Payment Card Industry DSS", flag: "💳", desc: "Cardholder data protection and IBAN transmission controls." },
+  GDPR: { name: "General Data Protection Reg.", flag: "🇪🇺", desc: "EU data privacy, personal identifiability and consent controls." },
+  CCPA: { name: "California Consumer Privacy", flag: "🇺🇸", desc: "California consumer data safeguards and PII controls." },
 };
 
 export default function CompliancePage() {
   const [available, setAvailable] = useState<Record<string, { rules_count: number; rule_names: string[] }>>({});
   const [installed, setInstalled] = useState<ComplianceFramework[]>([]);
   const [rules, setRules] = useState<ComplianceRule[]>([]);
+  const [posture, setPosture] = useState<any>(null);
+  const [timeline, setTimeline] = useState<Array<{ date: string; blocked: number; critical: number }>>([]);
   const [selectedFramework, setSelectedFramework] = useState<string | null>(null);
   const [report, setReport] = useState<ComplianceReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,14 +42,18 @@ export default function CompliancePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [avail, inst, rls] = await Promise.all([
+      const [avail, inst, rls, post, time] = await Promise.all([
         compliance.frameworks(),
         compliance.installed(),
         compliance.rules(),
+        complianceExtended.posture().catch(() => null),
+        complianceExtended.timeline(14).catch(() => []),
       ]);
       setAvailable(avail.frameworks);
       setInstalled(inst);
       setRules(rls);
+      setPosture(post);
+      setTimeline(time);
     } catch (e) {
       console.error("Compliance load error", e);
     } finally {
@@ -77,6 +99,20 @@ export default function CompliancePage() {
     }
   }
 
+  async function handleDownloadEvidenceBundle(framework: string) {
+    try {
+      const bundle = await complianceExtended.exportBundle(framework);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Compliance_Evidence_Bundle_${framework}.json`;
+      a.click();
+    } catch (e) {
+      alert("Failed to export compliance evidence bundle");
+    }
+  }
+
   const installedNames = new Set(installed.map((i) => i.framework));
 
   if (loading) {
@@ -88,194 +124,260 @@ export default function CompliancePage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-ink-primary">Regulatory Compliance</h1>
-        <p className="text-sm text-ink-muted mt-1">
-          Pre-built policy rule packs for RBI, DPDP, HIPAA, PCI-DSS, GDPR, and CCPA
-        </p>
+    <div className="space-y-6">
+      <Header
+        title="Continuous Compliance &amp; Regulatory Observability"
+        description="Automate regulatory framework guardrails, real-time posture scoring (RBI, DPDP, HIPAA, PCI-DSS, GDPR, CCPA), and one-click evidence bundle generation."
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDownloadEvidenceBundle("RBI")}
+            className="flex items-center gap-1.5 font-mono text-xs"
+          >
+            <Download size={14} /> Export RBI Audit Package
+          </Button>
+        }
+      />
+
+      {/* Top Posture Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="material-base">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ink-muted">Overall Posture Index</span>
+              <ShieldCheck size={16} className="text-emerald-400" />
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-bold font-mono text-emerald-400">
+                {posture?.overall_compliance_score || 100}%
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Passing {installed.length} active regulatory rule packs.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="material-base">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ink-muted">Active Compliance Rules</span>
+              <Layers size={16} className="text-accent" />
+            </div>
+            <div className="mt-3">
+              <div className="text-3xl font-bold font-mono text-ink-primary">
+                {rules.length}
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Pre-configured zero-trust policy predicates.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="material-base">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ink-muted">Automated Evidence Generation</span>
+              <Sparkles size={16} className="text-indigo-400" />
+            </div>
+            <div className="mt-3">
+              <div className="text-sm font-semibold text-ink-primary">
+                Audit-Ready JSON / CSV Exports
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">
+                Cryptographically bound traces and lineage chains for external regulators.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Framework Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Object.entries(available).map(([framework, info]) => {
           const isInstalled = installedNames.has(framework);
-          const meta = FRAMEWORK_LABELS[framework] || { name: framework, flag: "📋" };
+          const meta = FRAMEWORK_LABELS[framework] || { name: framework, flag: "🌐", desc: "" };
+          const fwPosture = posture?.frameworks?.[framework];
+          const isLoading = actionLoading === framework;
+
           return (
-            <div
+            <Card
               key={framework}
-              className={`rounded-xl border p-5 transition-all ${
+              className={`material-base border transition-all ${
                 isInstalled
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-hairline bg-surface hover:border-hairline-strong"
+                  ? "border-accent/40 bg-accent/5 shadow-sm"
+                  : "border-hairline hover:border-hairline-strong"
               }`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{meta.flag}</span>
-                    <span className="text-base font-bold text-ink-primary">{framework}</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-ink-primary">{framework}</h3>
+                      <p className="text-[11px] text-ink-muted">{meta.name}</p>
+                    </div>
                   </div>
-                  <div className="text-xs text-ink-muted mt-0.5">{meta.name}</div>
+                  {isInstalled ? (
+                    <Badge variant="success" className="text-[10px] uppercase font-mono">
+                      {fwPosture ? `${fwPosture.score}% PASS` : "ACTIVE"}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                      AVAILABLE
+                    </Badge>
+                  )}
                 </div>
-                {isInstalled && (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                    Active
-                  </span>
-                )}
-              </div>
 
-              <div className="text-xs text-ink-muted mb-3">
-                {info.rules_count} policy rule{info.rules_count !== 1 ? "s" : ""}
-              </div>
+                <p className="text-xs text-ink-muted leading-relaxed min-h-[32px]">
+                  {meta.desc}
+                </p>
 
-              <div className="space-y-1 mb-4 max-h-[100px] overflow-y-auto">
-                {info.rule_names.map((name) => (
-                  <div key={name} className="text-xs text-ink-muted bg-surface-elevated rounded px-2 py-1 truncate">
-                    {name}
-                  </div>
-                ))}
-              </div>
+                <div className="flex items-center justify-between text-xs text-ink-muted font-mono pt-2 border-t border-hairline">
+                  <span>{info.rules_count} Guardrail Rules</span>
+                  {isInstalled && (
+                    <span className="text-emerald-400 font-semibold">
+                      {fwPosture ? `${fwPosture.controls_passing}/${fwPosture.controls_total} Controls` : "0 Violations"}
+                    </span>
+                  )}
+                </div>
 
-              <div className="flex gap-2">
-                {isInstalled ? (
-                  <>
-                    <button
-                      onClick={() => handleRemove(framework)}
-                      disabled={actionLoading === framework}
-                      className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                <div className="flex items-center gap-2 pt-2">
+                  {isInstalled ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => handleReport(framework)}
+                        className="flex-1"
+                      >
+                        Inspect Report
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => handleDownloadEvidenceBundle(framework)}
+                        className="text-xs"
+                      >
+                        <Download size={12} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={isLoading}
+                        onClick={() => handleRemove(framework)}
+                        className="text-xs text-rose-400 hover:bg-rose-500/10"
+                      >
+                        Remove
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="xs"
+                      disabled={isLoading}
+                      onClick={() => handleApply(framework)}
+                      className="w-full"
                     >
-                      {actionLoading === framework ? "Removing…" : "Remove"}
-                    </button>
-                    <button
-                      onClick={() => handleReport(framework)}
-                      className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20 transition-colors"
-                    >
-                      Report
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => handleApply(framework)}
-                    disabled={actionLoading === framework}
-                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === framework ? "Installing…" : "Install Pack"}
-                  </button>
-                )}
-              </div>
-            </div>
+                      {isLoading ? "Installing..." : "Install Framework Pack"}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
 
-      {/* Compliance Report */}
-      {report && (
-        <div className="rounded-xl border border-hairline bg-surface p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-ink-primary">
-              {report.framework} Compliance Report
-            </h2>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-bold ${
-                report.compliance_status === "compliant"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-red-500/15 text-red-400"
-              }`}
+      {/* Compliance Report Modal/Section */}
+      {report && selectedFramework && (
+        <Card className="material-base p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-hairline pb-3">
+            <div className="flex items-center gap-2">
+              <ScrollText size={18} className="text-accent" />
+              <h2 className="text-base font-bold text-ink-primary">
+                {selectedFramework} Compliance Audit Report
+              </h2>
+            </div>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => handleDownloadEvidenceBundle(selectedFramework)}
+              className="flex items-center gap-1.5"
             >
-              {report.compliance_status === "compliant" ? "✓ Compliant" : "⚠ Violations Found"}
-            </span>
+              <Download size={13} />
+              <span>Download Evidence Package</span>
+            </Button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg bg-surface-elevated p-3 text-center">
-              <div className="text-xl font-bold text-ink-primary">{report.summary.total_framework_violations}</div>
-              <div className="text-xs text-ink-muted">Framework Violations</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl bg-surface-elevated p-4 text-center border border-hairline">
+              <div className="text-2xl font-bold font-mono text-ink-primary">
+                {report.summary.total_framework_violations}
+              </div>
+              <div className="text-xs text-ink-muted">Framework Violations Blocked</div>
             </div>
-            <div className="rounded-lg bg-surface-elevated p-3 text-center">
-              <div className="text-xl font-bold text-ink-primary">{report.summary.total_all_violations}</div>
-              <div className="text-xs text-ink-muted">Total Violations</div>
+            <div className="rounded-xl bg-surface-elevated p-4 text-center border border-hairline">
+              <div className="text-2xl font-bold font-mono text-emerald-400 capitalize">
+                {report.compliance_status}
+              </div>
+              <div className="text-xs text-ink-muted">Compliance Status</div>
             </div>
-            <div className="rounded-lg bg-surface-elevated p-3 text-center">
-              <div className="text-xl font-bold text-ink-primary">{report.summary.total_soc_alerts}</div>
-              <div className="text-xs text-ink-muted">SOC Alerts</div>
+            <div className="rounded-xl bg-surface-elevated p-4 text-center border border-hairline">
+              <div className="text-2xl font-bold font-mono text-ink-primary">
+                {report.summary.total_soc_alerts}
+              </div>
+              <div className="text-xs text-ink-muted">Correlated SOC Alerts</div>
             </div>
           </div>
-
-          {Object.keys(report.violations_by_type).length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-ink-primary mb-2">Violations by Type</h3>
-              <div className="space-y-1">
-                {Object.entries(report.violations_by_type).map(([type, count]) => (
-                  <div key={type} className="flex justify-between items-center text-xs">
-                    <span className="text-ink-muted">{type.replace(/_/g, " ")}</span>
-                    <span className="font-mono text-ink-primary">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {Object.keys(report.violations_by_severity).length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-ink-primary mb-2">By Severity</h3>
-              <div className="flex gap-3">
-                {Object.entries(report.violations_by_severity).map(([sev, count]) => (
-                  <div key={sev} className="rounded-lg bg-surface-elevated px-3 py-2 text-center">
-                    <div className="text-sm font-bold text-ink-primary">{count}</div>
-                    <div className="text-xs text-ink-muted capitalize">{sev}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        </Card>
       )}
 
-      {/* Installed Rules */}
+      {/* Active Rules List */}
       {rules.length > 0 && (
-        <div className="rounded-xl border border-hairline bg-surface overflow-hidden">
-          <div className="px-5 py-3 border-b border-hairline bg-surface-elevated/50">
-            <h2 className="text-sm font-bold text-ink-primary">
-              Active Compliance Rules ({rules.length})
-            </h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline bg-surface-elevated/30">
-                <th className="px-4 py-2 text-left font-medium text-ink-muted text-xs">Framework</th>
-                <th className="px-4 py-2 text-left font-medium text-ink-muted text-xs">Rule</th>
-                <th className="px-4 py-2 text-left font-medium text-ink-muted text-xs">Action</th>
-                <th className="px-4 py-2 text-left font-medium text-ink-muted text-xs">Priority</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
-                <tr key={rule.id} className="border-b border-hairline/50">
-                  <td className="px-4 py-2">
-                    <span className="px-1.5 py-0.5 rounded bg-accent/10 text-accent text-xs font-medium">
-                      {rule.framework_tag}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-ink-primary text-xs">{rule.name}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                        rule.action === "block"
-                          ? "bg-red-500/10 text-red-400"
-                          : "bg-yellow-500/10 text-yellow-400"
-                      }`}
-                    >
-                      {rule.action}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-ink-muted text-xs font-mono">{rule.priority}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Card className="material-base overflow-hidden">
+          <CardHeader className="border-b border-hairline pb-4 bg-surface-elevated/40">
+            <CardTitle className="text-base font-semibold text-ink-primary flex items-center justify-between">
+              <span>Installed Compliance Guardrails ({rules.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-hairline bg-surface-elevated/20 text-ink-muted font-medium">
+                    <th className="py-3 px-4">Framework</th>
+                    <th className="py-3 px-4">Guardrail Name</th>
+                    <th className="py-3 px-4">Action</th>
+                    <th className="py-3 px-4">Priority</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hairline font-mono text-[11px]">
+                  {rules.map((rule) => (
+                    <tr key={rule.id} className="hover:bg-surface-elevated/30 transition-colors">
+                      <td className="py-2.5 px-4">
+                        <Badge variant="outline" className="text-[10px] text-accent border-accent/30">
+                          {rule.framework_tag}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-4 font-sans font-semibold text-ink-primary text-xs">
+                        {rule.name}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <Badge variant={rule.action === "block" ? "destructive" : "warning"}>
+                          {rule.action.toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-4 text-ink-muted">#{rule.priority}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

@@ -18,11 +18,16 @@ from a2a_firewall.api.routes import (
     firewall,
     identity,
     ips,
+    network,
     policies,
+    rbac,
+    retention,
     review,
     schemas,
+    scim,
     simulation,
     soc,
+    spend,
     stats,
     tasks,
     telemetry,
@@ -30,6 +35,7 @@ from a2a_firewall.api.routes import (
     workspaces,
 )
 from a2a_firewall.core.config import settings
+from a2a_firewall.core.network_security import check_ip_allowlist, extract_client_ip
 from a2a_firewall.core.rate_limit import check_workspace
 from a2a_firewall.core.rate_limit import configure as configure_rate_limit
 from a2a_firewall.core.security import hash_api_key
@@ -37,7 +43,7 @@ from a2a_firewall.core.telemetry import setup_telemetry
 from a2a_firewall.db.database import AsyncSessionLocal
 from a2a_firewall.db.models import Agent, Workspace
 
-app = FastAPI(title="A2A Firewall", version="0.1.0")
+app = FastAPI(title="A2A Firewall", version="0.2.0")
 
 # Initialize rate limiters from settings BEFORE middleware setup.
 if settings.RATE_LIMIT_ENABLED:
@@ -48,22 +54,19 @@ if settings.RATE_LIMIT_ENABLED:
 
 
 @app.middleware("http")
-async def workspace_rate_limit_middleware(request: Request, call_next: Any) -> Any:
-    """Per-workspace API rate limit. Skipped on /health and /docs.
-
-    Resolves the Bearer token's workspace_id once per request. If the route
-    doesn't carry a Bearer token (e.g. unauthenticated /v1/workspaces/register),
-    the limit is keyed on the source IP.
-    """
-    if not settings.RATE_LIMIT_ENABLED:
-        return await call_next(request)
-    if not request.url.path.startswith("/v1/"):
+async def security_and_rate_limit_middleware(request: Request, call_next: Any) -> Any:
+    """Per-workspace API rate limit & IP allowlist enforcement. Skipped on /health and /docs."""
+    path = request.url.path
+    if not (path.startswith("/v1/") or path.startswith("/scim/v2/")):
         return await call_next(request)
 
+    # Exclude open registration & dev auth from IP allowlist blocking
+    is_public_endpoint = path in ("/v1/workspaces/register", "/v1/auth/login", "/v1/network/my-ip")
+
+    client_ip = extract_client_ip(request)
     auth_header = request.headers.get("authorization", "")
-    key: str | None = None
-    if request.client is not None:
-        key = f"ip:{request.client.host}"
+    key: str | None = f"ip:{client_ip}"
+    ws_id = None
 
     if auth_header.startswith("Bearer "):
         raw_key = auth_header.removeprefix("Bearer ").strip()
@@ -74,27 +77,47 @@ async def workspace_rate_limit_middleware(request: Request, call_next: Any) -> A
             ws_row = ws.scalar_one_or_none()
             if ws_row is not None:
                 key = f"ws:{ws_row.id}"
+                ws_id = ws_row.id
             else:
                 ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
                 ag_row = ag.scalar_one_or_none()
                 if ag_row is not None:
                     key = f"ws:{ag_row.workspace_id}"
+                    ws_id = ag_row.workspace_id
 
-    allowed, count = check_workspace(key if key is not None else "anon")
-    if not allowed:
-        return JSONResponse(
-            status_code=429,
-            content={
-                "error": {
-                    "code": "RATE_LIMIT_EXCEEDED",
-                    "message": "Workspace rate limit exceeded",
-                    "details": {
-                        "current_count": count,
-                        "limit_per_min": settings.WORKSPACE_RATE_LIMIT_PER_MIN,
-                    },
-                }
-            },
-        )
+            # Enforce IP Allowlist if workspace resolved and not public endpoint
+            if ws_id and not is_public_endpoint:
+                scope = "dashboard" if "dashboard" in path else "api"
+                ip_check = await check_ip_allowlist(client_ip, ws_id, scope, session)
+                if ip_check.get("enforced") and not ip_check.get("allowed"):
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "error": {
+                                "code": "IP_FORBIDDEN",
+                                "message": f"Access denied: client IP {client_ip} is not in the workspace allowlist",
+                                "client_ip": client_ip,
+                            }
+                        },
+                    )
+
+    if settings.RATE_LIMIT_ENABLED:
+        allowed, count = check_workspace(key if key is not None else "anon")
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "RATE_LIMIT_EXCEEDED",
+                        "message": "Workspace rate limit exceeded",
+                        "details": {
+                            "current_count": count,
+                            "limit_per_min": settings.WORKSPACE_RATE_LIMIT_PER_MIN,
+                        },
+                    }
+                },
+            )
+
     return await call_next(request)
 
 
@@ -124,13 +147,19 @@ app.include_router(delegation.router, prefix="/v1/delegation", tags=["delegation
 app.include_router(telemetry.router, prefix="/v1/telemetry", tags=["telemetry"])
 app.include_router(simulation.router, prefix="/v1/simulation", tags=["simulation"])
 app.include_router(audit.router, prefix="/v1/audit", tags=["audit"])
-# Security Expansion routes
+# Security & Governance Expansion routes
 app.include_router(soc.router, prefix="/v1/soc", tags=["soc"])
 app.include_router(cve.router, prefix="/v1/cve", tags=["cve"])
 app.include_router(compliance.router, prefix="/v1/compliance", tags=["compliance"])
 app.include_router(ips.router, prefix="/v1/ips", tags=["ips"])
+app.include_router(spend.router, prefix="/v1/spend", tags=["spend"])
+app.include_router(rbac.router, prefix="/v1/rbac", tags=["rbac"])
+app.include_router(scim.router, prefix="/scim/v2", tags=["scim"])
+app.include_router(retention.router, prefix="/v1/retention", tags=["retention"])
+app.include_router(network.router, prefix="/v1/network", tags=["network"])
 
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.2.0"}
+

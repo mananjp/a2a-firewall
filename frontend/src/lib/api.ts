@@ -641,4 +641,275 @@ export const agentSecurity = {
     }>(`/v1/agents/${agentId}/vulnerabilities`),
 };
 
+// ---------------------------------------------------------------------------
+// Spend Limits & Cost Governance
+// ---------------------------------------------------------------------------
+
+import type {
+  WorkspaceSpendOverview,
+  AgentSpendLimitItem,
+  SpendLedgerItem,
+  WorkspaceMemberItem,
+  CustomRoleItem,
+  EnterpriseAuditLogItem,
+  DataRetentionPolicyItem,
+  RetentionCandidates,
+  IpAllowlistEntryItem,
+  NetworkAccessRuleItem,
+  SCIMTokenItem,
+} from "./types";
+
+export const spend = {
+  overview: () => request<WorkspaceSpendOverview>("/v1/spend/overview"),
+  updateWorkspace: (body: {
+    monthly_budget_usd?: number;
+    token_budget?: number;
+    hard_limit_action?: string;
+    alert_threshold_pct?: number;
+    reset_day_of_month?: number;
+  }) =>
+    request<WorkspaceSpendOverview>("/v1/spend/workspace", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  agents: () => request<AgentSpendLimitItem[]>("/v1/spend/agents"),
+  updateAgent: (
+    agentId: string,
+    body: { monthly_budget_usd: number; token_budget: number; is_active?: boolean }
+  ) =>
+    request<AgentSpendLimitItem>(`/v1/spend/agents/${agentId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  ledger: (params?: { agent_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set("agent_id", params.agent_id);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<{ workspace_id: string; count: number; transactions: SpendLedgerItem[] }>(
+      `/v1/spend/ledger${qs ? `?${qs}` : ""}`
+    );
+  },
+  exportCsvUrl: (limit = 500) => `${API_BASE}/v1/spend/ledger?format=csv&limit=${limit}`,
+};
+
+// ---------------------------------------------------------------------------
+// RBAC & Workspace Members
+// ---------------------------------------------------------------------------
+
+export const rbac = {
+  members: () => request<WorkspaceMemberItem[]>("/v1/rbac/members"),
+  inviteMember: (body: { email: string; name: string; role: string; permissions?: string[] }) =>
+    request<WorkspaceMemberItem>("/v1/rbac/members", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateMember: (
+    memberId: string,
+    body: { name?: string; role?: string; permissions?: string[]; is_active?: boolean }
+  ) =>
+    request<WorkspaceMemberItem>(`/v1/rbac/members/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  removeMember: (memberId: string) =>
+    request<{ status: string; removed_email: string }>(`/v1/rbac/members/${memberId}`, {
+      method: "DELETE",
+    }),
+  roles: () =>
+    request<{
+      standard_roles: Record<string, { name: string; description: string; permissions: string[] }>;
+      custom_roles: CustomRoleItem[];
+    }>("/v1/rbac/roles"),
+  createRole: (body: { name: string; description?: string; permissions: string[] }) =>
+    request<CustomRoleItem>("/v1/rbac/roles", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  permissions: () =>
+    request<{
+      permissions: Record<string, string>;
+      standard_roles: Record<string, { name: string; description: string; permissions: string[] }>;
+    }>("/v1/rbac/permissions"),
+};
+
+// ---------------------------------------------------------------------------
+// SCIM 2.0 Identity Provisioning
+// ---------------------------------------------------------------------------
+
+export const scim = {
+  tokens: () => request<SCIMTokenItem[]>("/scim/v2/tokens"),
+  generateToken: (name = "IdP SCIM Integration") =>
+    request<{ id: string; name: string; token: string; scim_base_url: string; warning: string }>(
+      "/scim/v2/tokens",
+      { method: "POST", body: JSON.stringify({ name }) }
+    ),
+};
+
+// ---------------------------------------------------------------------------
+// Custom Data Retention Controls
+// ---------------------------------------------------------------------------
+
+export const retention = {
+  getPolicy: () =>
+    request<{
+      workspace_id: string;
+      policy: DataRetentionPolicyItem;
+      minimum_compliance_floors: Record<string, number>;
+      retention_candidates: RetentionCandidates;
+    }>("/v1/retention/policy"),
+  updatePolicy: (body: Partial<DataRetentionPolicyItem>) =>
+    request<DataRetentionPolicyItem>("/v1/retention/policy", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  purge: (dryRun = true) =>
+    request<{
+      dry_run: boolean;
+      workspace_id: string;
+      purged_records: number;
+      summary?: RetentionCandidates;
+      breakdown?: Record<string, number>;
+    }>("/v1/retention/purge", {
+      method: "POST",
+      body: JSON.stringify({ dry_run: dryRun }),
+    }),
+  stats: () =>
+    request<{
+      workspace_id: string;
+      total_records: number;
+      table_counts: Record<string, number>;
+    }>("/v1/retention/stats"),
+};
+
+// ---------------------------------------------------------------------------
+// Network Security & IP Allowlisting
+// ---------------------------------------------------------------------------
+
+export const network = {
+  myIp: () => request<{ client_ip: string }>("/v1/network/my-ip"),
+  ipAllowlist: () => request<IpAllowlistEntryItem[]>("/v1/network/ip-allowlist"),
+  addIpAllowlist: (body: {
+    cidr_or_ip: string;
+    label: string;
+    scope?: string;
+    expires_at?: string | null;
+  }) =>
+    request<IpAllowlistEntryItem>("/v1/network/ip-allowlist", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateIpAllowlist: (
+    id: string,
+    body: { label?: string; scope?: string; is_enabled?: boolean; expires_at?: string | null }
+  ) =>
+    request<IpAllowlistEntryItem>(`/v1/network/ip-allowlist/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteIpAllowlist: (id: string) =>
+    request<{ status: string; deleted_id: string }>(`/v1/network/ip-allowlist/${id}`, {
+      method: "DELETE",
+    }),
+  rules: () => request<NetworkAccessRuleItem[]>("/v1/network/rules"),
+  createRule: (body: {
+    priority: number;
+    name: string;
+    description?: string;
+    source_cidr: string;
+    destination_agent_id?: string | null;
+    action: "allow" | "deny";
+    protocol?: string;
+    port_range?: string | null;
+  }) =>
+    request<NetworkAccessRuleItem>("/v1/network/rules", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteRule: (id: string) =>
+    request<{ status: string; deleted_id: string }>(`/v1/network/rules/${id}`, {
+      method: "DELETE",
+    }),
+  testPacket: (body: {
+    client_ip: string;
+    destination_agent_id?: string | null;
+    protocol?: string;
+    scope?: string;
+  }) =>
+    request<{
+      client_ip: string;
+      overall_allowed: boolean;
+      ip_allowlist_evaluation: Record<string, unknown>;
+      network_rules_evaluation: Record<string, unknown>;
+    }>("/v1/network/test", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Extended Enterprise Audit
+// ---------------------------------------------------------------------------
+
+export const enterpriseAudit = {
+  logs: (params?: {
+    actor_email?: string;
+    action?: string;
+    entity_type?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.actor_email) q.set("actor_email", params.actor_email);
+    if (params?.action) q.set("action", params.action);
+    if (params?.entity_type) q.set("entity_type", params.entity_type);
+    if (params?.from) q.set("from", params.from);
+    if (params?.to) q.set("to", params.to);
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<{ workspace_id: string; total: number; count: number; logs: EnterpriseAuditLogItem[] }>(
+      `/v1/audit/logs${qs ? `?${qs}` : ""}`
+    );
+  },
+  exportCsvUrl: (limit = 500) => `${API_BASE}/v1/audit/logs/export?format=csv&limit=${limit}`,
+};
+
+// ---------------------------------------------------------------------------
+// Extended Continuous Compliance
+// ---------------------------------------------------------------------------
+
+export const complianceExtended = {
+  posture: () =>
+    request<{
+      workspace_id: string;
+      overall_compliance_score: number;
+      installed_frameworks_count: number;
+      frameworks: Record<
+        string,
+        {
+          installed: boolean;
+          score: number;
+          controls_passing: number;
+          controls_total: number;
+          pass_rate_pct: number;
+          unresolved_violations_count: number;
+          total_violations_count: number;
+          status: string;
+        }
+      >;
+    }>("/v1/compliance/posture"),
+  timeline: (days = 30) =>
+    request<Array<{ date: string; blocked: number; critical: number }>>(
+      `/v1/compliance/timeline?days=${days}`
+    ),
+  exportBundle: (framework = "RBI") =>
+    request<Record<string, unknown>>(`/v1/compliance/export-bundle?framework=${framework}`),
+};
+
+
 
