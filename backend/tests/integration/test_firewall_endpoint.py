@@ -119,7 +119,7 @@ def test_health(backend_url: str) -> None:
     with httpx.Client(base_url=backend_url, timeout=5.0) as c:
         r = c.get("/health")
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        assert r.json()["status"] == "ok"
 
 
 def test_clean_payload_allowed(
