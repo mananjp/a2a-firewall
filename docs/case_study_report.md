@@ -1,8 +1,8 @@
 # A2A Firewall — Live Case Study & Validation Report
 
 **Environment**: `https://a2a-firewall1.onrender.com`  
-**Date**: `2026-08-28T21:39:29Z`  
-**Workspace**: `36349e22-c6a4-43ab-a010-f6063adfb122`  
+**Date**: `2026-08-28T21:57:34Z`  
+**Workspace**: `e0dd3e53-55d8-4bf4-aafb-1a880cd932ef`  
 **SDK Package**: `a2a-firewall-sdk` (PyPI / npm v0.2.0)
 
 > **⚠️ Methodology note (read first).** This report intentionally separates two
@@ -10,7 +10,10 @@
 >
 > - **Full HTTP round-trip** = the wall-clock time of a real request travelling
 >   `client → network → Render (free-tier) → response`. These appear in
->   *Section 3* and include cold-instance wake-up latency plus network transit.
+>   *Section 3* and were measured **post-warm-up**: the runner wakes the host
+>   (polls /health) and primes the enforcement path with a throwaway inspect
+>   before any timed request, so these figures do **not** include cold-start
+>   wake-up cost. They do include network transit and free-tier host latency.
 > - **Pipeline-only processing time** = in-process timing of the deterministic
 >   inspection layers (Layer 0 + Layer 3 rule engine + PII scanner) measured with
 >   a mocked database and **no network or LLM/Groq component**. These appear in
@@ -51,20 +54,21 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
 ## 3. Test Scenarios & Real Execution Proof
 
 > **Latency label for all figures in this section:** *full HTTP round-trip*
-> against the live deployment, a Render **free-tier** instance that was likely
-> **cold-started** (dyno waking from sleep). These figures include network
-> transit and host startup; they are **not** the in-process inspection time shown
-> in Section 4.
+> against the live deployment, a Render **free-tier** instance, measured
+> **post-warm-up** (see methodology note): the host was woken and the inspect
+> path primed before any timed request. These figures include network transit
+> and host processing; they are **not** the in-process inspection time shown in
+> Section 4.
 
 ### Scenario 1: Legitimate Delegation Chain (Clean Pipeline)
 
 - **Workflow**: Planner Agent &rarr; Researcher Agent &rarr; Summarizer Agent
 - **Payload**: Energy transition research request followed by executive brief synthesis.
 - **Outcome**: **ALLOWED (100% Legitimate Traffic Passed)**
-- **Round-trip telemetry** *(full HTTP, cold instance)*:
-  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Round-trip Latency: `4329.83ms`)
-  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Round-trip Latency: `3576.75ms`)
-- **Cryptographic Lineage Hash**: `f5685e08fb3acc99d1abc67a9db06695d5b1659c9969dbbaf384aa22d19b07ed`
+- **Round-trip telemetry** *(full HTTP, warm instance)*:
+  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Round-trip Latency: `3181.09ms`)
+  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Round-trip Latency: `3625.4ms`)
+- **Cryptographic Lineage Hash**: `9b8a835febde5a2b992747e737b6cb26c9caeb89534bc07b9283304dfe7f3eee`
 
 ---
 
@@ -85,7 +89,7 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
   > `ACC-9921' UNION SELECT api_key_hash, password_hash, signing_key FROM workspaces--`
 - **Outcome**: **BLOCKED (Deterministic Gate)**
 - **Risk Score**: `0.95`
-- **Round-trip Detection Latency**: `3906.75ms` *(full HTTP round-trip, cold instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
+- **Round-trip Detection Latency**: `2587.54ms` *(full HTTP round-trip, warm instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
 
 ---
 
@@ -127,10 +131,10 @@ baseline):
 The live execution confirms:
 
 1. **Low deterministic pipeline overhead on clean traffic**: the in-process
-   deterministic layers add sub-millisecond processing (p50 ~0.63ms). This does
-   **not** include network or host latency — a full HTTP round-trip to a cold
-   Render free-tier instance is several seconds, overwhelmingly network/host
-   time, not inspection time.
+   deterministic layers add sub-millisecond processing (p50 ~0.63ms). A full HTTP
+   round-trip to a **warmed** Render free-tier instance measures in the low
+   single digits of seconds — overwhelmingly host/network time, not inspection
+   time.
 2. **Cryptographic Tamper-Evidence**: every hop is signed and hash-chained,
    providing non-repudiable audit logs.
 3. **True Security Isolation (exemplified)**: the live direct-solicitation and

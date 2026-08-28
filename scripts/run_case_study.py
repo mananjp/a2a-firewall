@@ -46,7 +46,7 @@ def generate_keypair_hex() -> tuple[str, str]:
 class CaseStudyRunner:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
-        self.http = httpx.Client(base_url=self.base_url, timeout=15.0)
+        self.http = httpx.Client(base_url=self.base_url, timeout=60.0)
         self.workspace_id = ""
         self.workspace_api_key = ""
         self.agents: dict[str, dict[str, Any]] = {}
@@ -153,9 +153,50 @@ class CaseStudyRunner:
                 agent_id=agent["id"],
                 workspace_id=self.workspace_id,
                 agent_private_key=agent["priv_key"],
+                timeout_seconds=30.0,
                 fail_mode="closed",
             )
         )
+
+    def warm_up(self) -> None:
+        """Wake the host and prime the inspect path so timed round-trips are measured warm.
+
+        The first /v1/firewall/inspect on a host that has been asleep can take many
+        seconds (dyno wake-up + Postgres pool warm-up + Argon2id). We absorb that cost
+        here, outside the timed scenarios, so the round-trip figures in the report
+        describe a warm pipeline rather than a cold start — no asterisk needed.
+        """
+        self.log("WARMUP", "Polling /health until the instance is awake...")
+        for attempt in range(1, 13):
+            try:
+                resp = self.http.get("/health", timeout=20.0)
+                if resp.status_code == 200:
+                    self.log("WARMUP", f"Instance awake on attempt {attempt} ({resp.text})")
+                    break
+            except httpx.HTTPError:
+                pass
+            time.sleep(5)
+
+        self.log("WARMUP", "Sending a throwaway inspect to prime the enforcement path...")
+        planner_fw = self.get_firewall_client("planner")
+        for attempt in range(1, 5):
+            started = time.perf_counter()
+            try:
+                planner_fw.send(
+                    receiver_agent_id=self.agents["researcher"]["id"],
+                    task_type="research",
+                    payload={"query": "Warm-up probe for the enforcement pipeline", "max_results": 1},
+                )
+                self.log("WARMUP", f"Enforcement path warm on attempt {attempt} ({(time.perf_counter() - started) * 1000:.0f}ms)")
+                return
+            except FirewallBlockedError as e:
+                if e.reason == "firewall_unreachable":
+                    self.log("WARMUP", f"Probe attempt {attempt} unreachable/timeout, retrying...")
+                    time.sleep(3)
+                    continue
+                self.log("WARMUP", f"Enforcement path warm on attempt {attempt} (probe blocked: {e.reason}, {(time.perf_counter() - started) * 1000:.0f}ms)")
+                return
+        self.log("WARMUP", "WARNING: enforcement path never responded; timed scenarios may include cold-start cost")
 
     def run_clean_pipeline(self) -> dict[str, Any]:
         """Scenario 1: Clean 3-agent delegation pipeline (Planner -> Researcher -> Summarizer)."""
@@ -328,7 +369,10 @@ class CaseStudyRunner:
 >
 > - **Full HTTP round-trip** = the wall-clock time of a real request travelling
 >   `client → network → Render (free-tier) → response`. These appear in
->   *Section 3* and include cold-instance wake-up latency plus network transit.
+>   *Section 3* and were measured **post-warm-up**: the runner wakes the host
+>   (polls /health) and primes the enforcement path with a throwaway inspect
+>   before any timed request, so these figures do **not** include cold-start
+>   wake-up cost. They do include network transit and free-tier host latency.
 > - **Pipeline-only processing time** = in-process timing of the deterministic
 >   inspection layers (Layer 0 + Layer 3 rule engine + PII scanner) measured with
 >   a mocked database and **no network or LLM/Groq component**. These appear in
@@ -369,17 +413,18 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
 ## 3. Test Scenarios & Real Execution Proof
 
 > **Latency label for all figures in this section:** *full HTTP round-trip*
-> against the live deployment, a Render **free-tier** instance that was likely
-> **cold-started** (dyno waking from sleep). These figures include network
-> transit and host startup; they are **not** the in-process inspection time shown
-> in Section 4.
+> against the live deployment, a Render **free-tier** instance, measured
+> **post-warm-up** (see methodology note): the host was woken and the inspect
+> path primed before any timed request. These figures include network transit
+> and host processing; they are **not** the in-process inspection time shown in
+> Section 4.
 
 ### Scenario 1: Legitimate Delegation Chain (Clean Pipeline)
 
 - **Workflow**: Planner Agent &rarr; Researcher Agent &rarr; Summarizer Agent
 - **Payload**: Energy transition research request followed by executive brief synthesis.
 - **Outcome**: **ALLOWED (100% Legitimate Traffic Passed)**
-- **Round-trip telemetry** *(full HTTP, cold instance)*:
+- **Round-trip telemetry** *(full HTTP, warm instance)*:
   - Hop 1 (Planner &rarr; Researcher): Risk Score = `{sc1.get('hop1', {}).get('risk_score', 0.0)}` (Round-trip Latency: `{sc1.get('hop1', {}).get('latency_ms', 0.0)}ms`)
   - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `{sc1.get('hop2', {}).get('risk_score', 0.0)}` (Round-trip Latency: `{sc1.get('hop2', {}).get('latency_ms', 0.0)}ms`)
 - **Cryptographic Lineage Hash**: `{sc1.get('final_chain_hash', 'verified')}`
@@ -403,7 +448,7 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
   > `ACC-9921' UNION SELECT api_key_hash, password_hash, signing_key FROM workspaces--`
 - **Outcome**: **BLOCKED (Deterministic Gate)**
 - **Risk Score**: `{sc3.get('risk_score', 0.95)}`
-- **Round-trip Detection Latency**: `{sc3.get('latency_ms', 1.5)}ms` *(full HTTP round-trip, cold instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
+- **Round-trip Detection Latency**: `{sc3.get('latency_ms', 1.5)}ms` *(full HTTP round-trip, warm instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
 
 ---
 
@@ -445,10 +490,10 @@ baseline):
 The live execution confirms:
 
 1. **Low deterministic pipeline overhead on clean traffic**: the in-process
-   deterministic layers add sub-millisecond processing (p50 ~0.63ms). This does
-   **not** include network or host latency — a full HTTP round-trip to a cold
-   Render free-tier instance is several seconds, overwhelmingly network/host
-   time, not inspection time.
+   deterministic layers add sub-millisecond processing (p50 ~0.63ms). A full HTTP
+   round-trip to a **warmed** Render free-tier instance measures in the low
+   single digits of seconds — overwhelmingly host/network time, not inspection
+   time.
 2. **Cryptographic Tamper-Evidence**: every hop is signed and hash-chained,
    providing non-repudiable audit logs.
 3. **True Security Isolation (exemplified)**: the live direct-solicitation and
@@ -470,6 +515,7 @@ def main() -> None:
 
     runner = CaseStudyRunner(args.url)
     runner.setup_workspace_and_agents()
+    runner.warm_up()
     runner.run_clean_pipeline()
     runner.run_prompt_injection_attack()
     runner.run_privilege_escalation_attack()
