@@ -4,9 +4,41 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2a-firewall-sdk"
-version = "0.1.0"
-description = "SDK for the A2A Firewall inter-agent governance mesh"
+version = "0.2.0"
+description = "Python SDK for the A2A Firewall — inter-agent governance mesh with Ed25519 identity, Macaroon delegation, and cryptographic lineage"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    { name = "Manan JP", email = "mananjp@users.noreply.github.com" },
+]
+keywords = ["a2a", "firewall", "agent", "multi-agent", "security", "governance", "ed25519", "delegation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = ["httpx>=0.27.0"]
+
 [project.optional-dependencies]
+crypto = ["cryptography>=42.0.0"]
 otel = ["opentelemetry-api>=1.27.0"]
+all = ["cryptography>=42.0.0", "opentelemetry-api>=1.27.0"]
+
+[project.urls]
+Homepage = "https://github.com/mananjp/a2a-firewall"
+Documentation = "https://github.com/mananjp/a2a-firewall#readme"
+Repository = "https://github.com/mananjp/a2a-firewall"
+Issues = "https://github.com/mananjp/a2a-firewall/issues"
+Changelog = "https://github.com/mananjp/a2a-firewall/releases"
+
+[tool.setuptools.packages.find]
+include = ["a2a_firewall*"]

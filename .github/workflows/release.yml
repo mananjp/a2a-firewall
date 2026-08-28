@@ -1,0 +1,129 @@
+name: Release SDK Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (build and test without publishing)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-test-python:
+    name: Build & Test Python SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install build tools & test dependencies
+        run: |
+          python -m pip install --upgrade pip build twine pytest
+
+      - name: Run Python SDK tests
+        working-directory: sdk
+        run: |
+          pip install -e ".[all]"
+          pytest tests/ -v
+
+      - name: Build Python distribution packages
+        working-directory: sdk
+        run: python -m build
+
+      - name: Check package metadata with twine
+        working-directory: sdk
+        run: twine check dist/*
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: sdk/dist/
+
+  build-and-test-typescript:
+    name: Build & Test TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        working-directory: sdk-ts
+        run: npm ci || npm install
+
+      - name: Run TypeScript SDK tests
+        working-directory: sdk-ts
+        run: npm test
+
+      - name: Build TypeScript SDK
+        working-directory: sdk-ts
+        run: npm run build
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-and-test-python
+    runs-on: ubuntu-latest
+    if: github.event.inputs.dry_run != 'true'
+    permissions:
+      id-token: write  # required for PyPI Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: sdk/dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+        continue-on-error: true
+
+  publish-npm:
+    name: Publish to npm
+    needs: build-and-test-typescript
+    runs-on: ubuntu-latest
+    if: github.event.inputs.dry_run != 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js for npm registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies & build
+        working-directory: sdk-ts
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Publish to npm
+        working-directory: sdk-ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            npm publish --access public
+          else
+            echo "NPM_TOKEN secret not configured — skipping npm publish"
+          fi

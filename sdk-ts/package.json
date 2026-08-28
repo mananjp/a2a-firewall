@@ -1,9 +1,32 @@
 {
   "name": "@a2a-firewall/sdk",
   "version": "0.2.0",
-  "description": "TypeScript SDK for A2A Firewall — inter-agent governance mesh with identity, delegation, and signing",
+  "description": "TypeScript SDK for A2A Firewall — inter-agent governance mesh with Ed25519 identity, Macaroon delegation, and message signing",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "type": "module",
+  "keywords": [
+    "a2a",
+    "firewall",
+    "agent",
+    "multi-agent",
+    "security",
+    "governance",
+    "ed25519",
+    "delegation",
+    "macaroon",
+    "signing"
+  ],
+  "author": "Manan JP",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mananjp/a2a-firewall.git",
+    "directory": "sdk-ts"
+  },
+  "homepage": "https://github.com/mananjp/a2a-firewall#readme",
+  "bugs": {
+    "url": "https://github.com/mananjp/a2a-firewall/issues"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -28,6 +51,6 @@
     "@types/node": "^22.0.0",
     "@opentelemetry/api": "^1.9.0"
   },
-  "files": ["dist", "src"],
+  "files": ["dist", "src", "README.md", "LICENSE"],
   "license": "MIT"
 }
