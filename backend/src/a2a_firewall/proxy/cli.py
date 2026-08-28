@@ -286,6 +286,7 @@ def _cmd_install(args: argparse.Namespace) -> None:
     dry_run = _run_installer_dry_run(not args.no_dry_run)
     results: dict[str, object] = {}
 
+    from a2a_firewall.core.config import settings
     from a2a_firewall.proxy.trust import Capability, HostTrust
     from a2a_firewall.service.unit import SystemdUnit
 
@@ -294,12 +295,13 @@ def _cmd_install(args: argparse.Namespace) -> None:
         trust = HostTrust(capability=cap, ca_dir=args.ca_dir, dry_run=dry_run)
         results["ca_trust"] = trust.install_to_system()
 
-    unit = SystemdUnit()
+    # The generated unit honours the effective inspect flag so that installed
+    # traffic is actually routed through the full 5-layer pipeline by default
+    # (it degrades to allow if Postgres/Groq are unavailable).
+    unit = SystemdUnit(inspect_enabled=settings.A2A_INSPECT_ENABLED)
     results["unit"] = unit.render()
 
     if not args.no_redirect:
-        from a2a_firewall.core.config import settings
-
         uid_owner: int | None = settings.A2A_AGENT_UID
         redirect = TransparentRedirect(proxy_port=args.port, dry_run=dry_run, uid_owner=uid_owner)
         results["redirect_rules"] = redirect.apply_rules()

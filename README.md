@@ -155,17 +155,25 @@ python -m a2a_firewall.proxy.cli install --no-dry-run   # systemd + iptables + C
 python -m a2a_firewall.proxy.cli uninstall --no-dry-run # full teardown (rules + CA trust)
 ```
 
-**Traffic scoping (important):** interception is **registry-gated**, never
-blanket by default. Set `A2A_AGENT_UID` so iptables REDIRECT carries
-`--uid-owner <uid>` and only registered agent processes are captured — the
-human's browser/email/banking is never intercepted. The kernel eBPF
-`monitored_pids` map is populated from the process registry, and intercepted
-connections are attributed to the real `agent_id`/`workspace_id` (via
-`SO_PEERCRED`); unattributable traffic is explicitly marked `unassigned`.
+**Traffic scoping (important — not zero-touch):** interception is
+**registry-gated**, never blanket by default. Set `A2A_AGENT_UID` to the uid of
+a dedicated user (see "Prepare the agent user" in `docs/RUNBOOK.md`) so iptables
+REDIRECT carries `--uid-owner <uid>` and only processes running as that user are
+captured — the human's browser/email/banking is never intercepted. That requires
+two real steps: **create the user and run governed agents as that user**. If
+`A2A_AGENT_UID` is unset (or no governed process runs under that uid) the
+`--uid-owner` rules match nothing and **no** traffic is captured — a silent
+no-op, not a failure. The kernel eBPF `monitored_pids` map is populated from the
+process registry, and intercepted connections are attributed to the real
+`agent_id`/`workspace_id` (via `SO_PEERCRED`); unattributable traffic is
+explicitly marked `unassigned`.
 
-eBPF attach is best-effort with automatic fallback to the user-space process
-watcher. Full 5-layer detection is enabled with `A2A_INSPECT_ENABLED=true`.
-`uninstall` fully reverses the install including CA untrust.
+**Inspection is ON by default in the installer:** the generated systemd unit
+exports `A2A_INSPECT_ENABLED=1`, so captured traffic runs the full 5-layer
+pipeline by default (never captured-but-uninspected), degrading to `allow` if
+Postgres/Groq are unavailable. eBPF attach is best-effort with automatic
+fallback to the user-space process watcher. `uninstall` fully reverses the
+install including CA untrust.
 See `docs/ADR-0003-transparent-proxy.md` and `docs/RUNBOOK.md`.
 
 ### 📊 Full-Stack Latency & Overhead Benchmark (N=300 runs)

@@ -30,6 +30,18 @@ def test_unit_exports_fwmark_and_flags():
     assert "A2A_INSPECT_ENABLED=0" in unit
 
 
+def test_unit_inspect_on_by_default():
+    # Installed traffic is routed through the full pipeline by default so it is
+    # never silently captured-but-uninspected.
+    unit = SystemdUnit().render()
+    assert "A2A_INSPECT_ENABLED=1" in unit
+
+
+def test_unit_inspect_can_be_disabled_explicitly():
+    unit = SystemdUnit(inspect_enabled=False).render()
+    assert "A2A_INSPECT_ENABLED=0" in unit
+
+
 def test_unit_filename_is_stable():
     assert SystemdUnit().unit_filename == "a2a-proxy.service"
 

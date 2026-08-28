@@ -58,9 +58,12 @@ proxying**, targeting Linux first:
    Linux+root, otherwise falls back to the user-space `ProcessEgressWatcher`.
    Kernel map population is best-effort: failures degrade to the empty-map
    allow-all rather than crashing the service.
-8. **Flag-gated full pipeline** — when `A2A_INSPECT_ENABLED=1`, the proxy
-   routes normalized requests into `run_inspection()` via
-   `detection/pipeline_bridge.py`; otherwise the fast built-in gate is used.
+8. **Flag-gated full pipeline, ON by default in the installer** — the rendered
+   systemd unit exports `A2A_INSPECT_ENABLED=1` (from `settings.A2A_INSPECT_ENABLED`),
+   so captured traffic is routed through `run_inspection()` via
+   `detection/pipeline_bridge.py` by default rather than captured-but-uninspected;
+   it degrades to `allow` when Postgres/Groq are unavailable. Disable explicitly
+   with `A2A_INSPECT_ENABLED=false` to use only the fast built-in gate.
 9. **Transparent host resolution** — the proxy prefers the HTTP `Host` header
    to resolve the true origin when iptables has redirected a connection, since
    the CONNECT target in transparent mode is the proxy itself.
@@ -81,6 +84,12 @@ proxying**, targeting Linux first:
 - **Popularity of blanket vs scoped.** Without `A2A_AGENT_UID` the uid scoping
   is off and redirection is blanket; operators must set it to avoid capturing a
   human's personal traffic. This is a deliberate, documented safety knob.
+- **Silent-no-op trap (scoping is not zero-touch).** `--uid-owner` only matches
+  processes running as the configured uid, so `A2A_AGENT_UID` must be set to the
+  uid of a user that actually runs governed agents (create the user with
+  `useradd`, then run agents via `sudo -u <user>`). If it is unset or mismatched
+  the rules match nothing and the proxy captures no traffic — a quiet
+  configuration failure, documented loudly in the RUNBOOK and README.
 - **Identity attribution is best-effort.** `SO_PEERCRED` is Linux-only; on
   other platforms and for unregistered PIDs the traffic is marked `unassigned`
   and allowed by the built-in gate, rather than convincingly attributed.

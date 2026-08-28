@@ -25,7 +25,7 @@ class SystemdUnit:
     ca_cert_path: str = "/usr/local/share/ca-certificates/a2a-root.crt"
     fwmark: int = A2A_FWMARK
     redirect_enabled: bool = True
-    inspect_enabled: bool = False
+    inspect_enabled: bool = True
 
     @property
     def environment_lines(self) -> str:

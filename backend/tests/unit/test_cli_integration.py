@@ -89,3 +89,28 @@ def test_process_registry_roundtrip():
     registry.unregister(100)
     assert registry.lookup(100) is None
     assert len(registry) == 0
+
+
+def test_cmd_install_unit_honours_inspect_flag(capsys):
+    """The generated unit must reflect the effective inspect setting so that
+    installed traffic is actually inspected by default (never captured-but-
+    uninspected)."""
+    from types import SimpleNamespace
+
+    from a2a_firewall.core.config import settings
+    from a2a_firewall.proxy.cli import _cmd_install
+
+    args = SimpleNamespace(
+        no_dry_run=False, port=8080, ca_dir=None, no_trust=True, no_redirect=True
+    )
+    original = settings.A2A_INSPECT_ENABLED
+    try:
+        settings.A2A_INSPECT_ENABLED = True
+        _cmd_install(args)
+        assert "A2A_INSPECT_ENABLED=1" in capsys.readouterr().out
+
+        settings.A2A_INSPECT_ENABLED = False
+        _cmd_install(args)
+        assert "A2A_INSPECT_ENABLED=0" in capsys.readouterr().out
+    finally:
+        settings.A2A_INSPECT_ENABLED = original

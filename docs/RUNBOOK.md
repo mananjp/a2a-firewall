@@ -174,6 +174,31 @@ backend/.venv/Scripts/python -m a2a_firewall.proxy.cli daemon --egress-guard \
   --inspect
 ```
 
+#### Prepare the agent user (required before `--uid-owner` scoping works)
+
+`A2A_AGENT_UID` scoping is **not zero-touch**: `--uid-owner` can only match
+traffic whose process runs as that OS uid, so you must (1) create a dedicated
+system user and (2) actually run your governed agent tools **as that user**.
+
+```bash
+# 1. Create a dedicated user for governed agent processes
+sudo useradd --system --create-home --shell /usr/sbin/nologin a2a-agent
+A2A_AGENT_UID=$(id -u a2a-agent)   # capture the uid, put it in .env
+
+# 2. Run agent tools AS that user (not as your interactive user!)
+sudo -u a2a-agent claude
+# or
+su - a2a-agent -c 'claude'
+```
+
+> **⚠️ Loud warning — the silent no-op trap.** If `A2A_AGENT_UID` is unset in
+> `.env`, **or** no governed process actually runs under that uid, the
+> `--uid-owner 80/443` rules match **nothing** and the proxy captures **no**
+> traffic, even though the REDIRECT rules are "installed". Nothing is governed.
+> This is deliberate (it protects the human's browser/email/banking from being
+> captured) but it means scoping requires two real steps — creating the user,
+> then running agents as that user — **not** just setting one config value.
+
 Notes:
 - **Scoping (important)**: with `A2A_AGENT_UID` set, the iptables REDIRECT
   rules carry `--uid-owner <uid>` and only redirect processes running as that
@@ -185,11 +210,15 @@ Notes:
   PIDs are populated into the kernel eBPF `monitored_pids` map.
 - eBPF attach is best-effort: if `clang`/`bpftool` are missing it quietly falls
   back to the user-space process watcher. It never crashes the service.
-- `A2A_INSPECT_ENABLED=true` routes traffic through the full 5-layer detection
-  pipeline (requires Postgres + Groq). When a connection can be attributed to a
-  registered agent (via `SO_PEERCRED` + the process registry) the inspection
-  carries the real `agent_id`/`workspace_id`; otherwise it is marked
-  `unassigned` and allowed by the built-in gate.
+- **Inspection is ON by default in the installer.** The generated systemd unit
+  exports `A2A_INSPECT_ENABLED=1`, so captured traffic is routed through the
+  full 5-layer pipeline by default rather than captured-but-uninspected. The
+  pipeline degrades to `allow` if Postgres/Groq is unavailable (fail-open).
+  Disable with `A2A_INSPECT_ENABLED=false` if you only want the built-in gate.
+  When a connection can be attributed to a registered agent (via
+  `SO_PEERCRED` + the process registry) the inspection carries the real
+  `agent_id`/`workspace_id`; otherwise it is marked `unassigned` and allowed by
+  the built-in gate.
 - `uninstall` fully reverses the install: it removes the iptables REDIRECT
   rules **and** untrusts the A2A root CA (`HostTrust.remove_from_system()`) so
   no trust is left behind.
@@ -222,9 +251,9 @@ All settings live in `backend/src/a2a_firewall/core/config.py` and read from `.e
 | `INTENT_DRIFT_THRESHOLD` | 0.7 | Max allowed semantic drift score (0.0-1.0) |
 | `A2A_FW_MARK` | `0xA2A1` | SO_MARK applied to proxy sockets to avoid REDIRECT loop |
 | `A2A_REDIRECT_ENABLED` | false | Install iptables PREROUTING/OUTPUT REDIRECT rules (Linux+root) |
-| `A2A_INSPECT_ENABLED` | false | Route proxy traffic through full run_inspection pipeline |
+| `A2A_INSPECT_ENABLED` | true (installer default) | Route proxy traffic through full run_inspection pipeline; the generated systemd unit exports this as `1` by default and degrades to allow if Postgres/Groq are down |
 | `A2A_DEFAULT_DRY_RUN` | true | Installer/system commands log instead of mutating the system |
-| `A2A_AGENT_UID` | (unset) | OS uid of agent processes; scopes iptables REDIRECT via `--uid-owner` so unrelated processes are never intercepted |
+| `A2A_AGENT_UID` | (unset) | OS uid of agent processes; scopes iptables REDIRECT via `--uid-owner` so unrelated processes are never intercepted. **Not zero-touch** — see "Prepare the agent user" above |
 
 ## Troubleshooting
 

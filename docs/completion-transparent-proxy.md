@@ -111,6 +111,27 @@ commit (`feat(proxy):` hardening):
   same scoped rules are removed (`-D` mirrors `-A`).
 
 ### Tests
-202 unit tests pass (was 190) + proxy integration tests. New/updated coverage:
+205 unit tests pass (was 190) + proxy integration tests. New/updated coverage:
 process registry, uid-scoped redirect rules, eBPF map-command construction,
-CA-untrust-on-uninstall (CLI + installer), honest identity attribution.
+CA-untrust-on-uninstall (CLI + installer), honest identity attribution,
+inspect-on-by-default systemd rendering + `_cmd_install` wiring.
+
+### 4. Inspection is ON by default in the installer
+Post-review concern: with `A2A_INSPECT_ENABLED=0` default the install captured
+traffic but never pipelined it — capture-but-uninspection. Closed in a third
+commit:
+- `SystemdUnit.inspect_enabled` now defaults to `True`, the `A2A_INSPECT_ENABLED`
+  config default is `True`, and `_cmd_install` builds the unit from
+  `settings.A2A_INSPECT_ENABLED`, so the generated systemd unit exports
+  `A2A_INSPECT_ENABLED=1` by default. Captured traffic runs the full 5-layer
+  pipeline (degrading to allow if Postgres/Groq are down); disable explicitly
+  with `A2A_INSPECT_ENABLED=false`.
+- Tests: `test_unit_inspect_on_by_default` /
+  `test_unit_inspect_can_be_disabled_explicitly` /
+  `test_cmd_install_unit_honours_inspect_flag`.
+
+### 5. Agent-UID setup is documented as not-zero-touch
+- RUNBOOK gains a "Prepare the agent user" subsection (create the uid with
+  `useradd`, run agents via `sudo -u <user>`) plus a loud warning that an unset
+  or mismatched `A2A_AGENT_UID` makes the `--uid-owner` rules match nothing
+  (silent no-op, not zero-touch). Mirrored in README, ADR-0003, `.env.example`.
