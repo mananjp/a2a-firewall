@@ -122,8 +122,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -n "$NODE_AUTH_TOKEN" ]; then
-            npm publish --access public
-          else
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "NPM_TOKEN secret not configured — skipping npm publish"
+          elif npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "Version $PKG_VERSION already published — skipping npm publish"
+          else
+            npm publish --access public
           fi
