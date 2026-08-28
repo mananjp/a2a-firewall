@@ -151,7 +151,7 @@ except FirewallBlockedError as e:
 
 - **GitHub**: [github.com/mananjp/a2a-firewall](https://github.com/mananjp/a2a-firewall)
 - **Live Demo**: [a2a-firewall.onrender.com](https://a2a-firewall.onrender.com)
-- **TypeScript SDK**: [@a2a-firewall/sdk on npm](https://www.npmjs.com/package/@a2a-firewall/sdk)
+- **TypeScript SDK**: [@mananpanchal/a2a-firewall-sdk on npm](https://www.npmjs.com/package/@mananpanchal/a2a-firewall-sdk)
 
 ## License
 

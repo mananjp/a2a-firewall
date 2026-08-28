@@ -2,10 +2,10 @@
  * A2A Firewall TypeScript SDK — Ed25519 identity, macaroon delegation, message signing.
  *
  * Install:
- *   npm install @a2a-firewall/sdk
+ *   npm install @mananpanchal/a2a-firewall-sdk
  *
  * Usage:
- *   import { A2AFirewall, FirewallConfig } from '@a2a-firewall/sdk';
+ *   import { A2AFirewall, FirewallConfig } from '@mananpanchal/a2a-firewall-sdk';
  *
  *   const firewall = new A2AFirewall({
  *     firewallUrl: 'http://localhost:8000',

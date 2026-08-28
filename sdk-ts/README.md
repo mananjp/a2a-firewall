@@ -1,8 +1,8 @@
-# @a2a-firewall/sdk
+# @mananpanchal/a2a-firewall-sdk
 
 **TypeScript SDK for the [A2A Firewall](https://github.com/mananjp/a2a-firewall)** — an inter-agent governance mesh that inspects, signs, and attenuates every message between AI agents.
 
-[![npm version](https://img.shields.io/npm/v/@a2a-firewall/sdk)](https://www.npmjs.com/package/@a2a-firewall/sdk)
+[![npm version](https://img.shields.io/npm/v/@mananpanchal/a2a-firewall-sdk)](https://www.npmjs.com/package/@mananpanchal/a2a-firewall-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## What It Does
@@ -19,13 +19,13 @@ This SDK handles all of that automatically.
 ## Installation
 
 ```bash
-npm install @a2a-firewall/sdk
+npm install @mananpanchal/a2a-firewall-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { A2AFirewall } from '@a2a-firewall/sdk';
+import { A2AFirewall } from '@mananpanchal/a2a-firewall-sdk';
 
 const firewall = new A2AFirewall({
   firewallUrl: 'https://a2a-firewall-backend.onrender.com',
