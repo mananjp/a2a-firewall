@@ -12,7 +12,6 @@ import os
 import ssl
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -24,7 +23,9 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 class CertificateAuthority:
     """Manages the local Root CA and dynamic leaf certificate generation."""
 
-    def __init__(self, ca_dir: str | Path | None = None, common_name: str = "A2A Firewall Local CA"):
+    def __init__(
+        self, ca_dir: str | Path | None = None, common_name: str = "A2A Firewall Local CA"
+    ):
         if ca_dir is None:
             base_dir = Path(os.environ.get("A2A_CA_DIR", Path.home() / ".a2a" / "ca"))
         else:
@@ -53,7 +54,9 @@ class CertificateAuthority:
                 self._root_key = serialization.load_pem_private_key(
                     key_bytes, password=None, backend=default_backend()
                 )  # type: ignore[assignment]
-                self._root_cert = x509.load_pem_x509_certificate(cert_bytes, backend=default_backend())
+                self._root_cert = x509.load_pem_x509_certificate(
+                    cert_bytes, backend=default_backend()
+                )
                 return
             except Exception:
                 # If corrupted, re-generate
@@ -73,7 +76,7 @@ class CertificateAuthority:
             ]
         )
 
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         self._root_cert = (
             x509.CertificateBuilder()
             .subject_name(subject)
@@ -166,7 +169,7 @@ class CertificateAuthority:
             if not hostname.startswith("*.") and "." in hostname:
                 pass
 
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         leaf_cert = (
             x509.CertificateBuilder()
             .subject_name(subject)

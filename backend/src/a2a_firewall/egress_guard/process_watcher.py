@@ -7,14 +7,15 @@ connections that attempt to evade the A2A governance proxy.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
 
-import psutil
+import psutil  # type: ignore[import-untyped]
 
 logger = logging.getLogger("a2a_firewall.egress_guard")
 
@@ -48,20 +49,18 @@ class ProcessEgressWatcher:
         self.proxy_port = proxy_port
         self.allowed_ips = set(allowed_ips or ["127.0.0.1", "::1", "localhost"])
         self.allowed_internal_ports = set(allowed_internal_ports or [53, 5353, 5432, 6379, 8000])
-        
+
         # Build allowed CIDR networks (e.g. loopback 127.0.0.0/8)
         self.allowed_networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
         raw_cidrs = allowed_cidrs or ["127.0.0.0/8", "::1/128"]
         for cidr in raw_cidrs:
-            try:
+            with contextlib.suppress(ValueError):
                 self.allowed_networks.append(ipaddress.ip_network(cidr, strict=False))
-            except ValueError:
-                pass
 
         self.on_bypass = on_bypass
         self.kill_on_bypass = kill_on_bypass
         self.consecutive_violations_threshold = max(1, consecutive_violations_threshold)
-        
+
         self.monitored_pids: set[int] = set()
         self._violation_counts: dict[int, int] = defaultdict(int)
         self.violations: list[BypassViolation] = []
@@ -79,7 +78,9 @@ class ProcessEgressWatcher:
     def is_destination_allowed(self, remote_ip: str, remote_port: int) -> bool:
         """Check if an outbound connection is permitted."""
         # 1. Exact match on local proxy port
-        if (remote_ip in self.allowed_ips or self._is_in_allowed_cidr(remote_ip)) and remote_port == self.proxy_port:
+        if (
+            remote_ip in self.allowed_ips or self._is_in_allowed_cidr(remote_ip)
+        ) and remote_port == self.proxy_port:
             return True
 
         # 2. Whitelisted internal infrastructure ports on loopback/VPC (e.g. Postgres, Redis, DNS)
@@ -87,10 +88,7 @@ class ProcessEgressWatcher:
             return True
 
         # 3. Explicit IP string matches
-        if remote_ip in self.allowed_ips and remote_port in self.allowed_internal_ports:
-            return True
-
-        return False
+        return remote_ip in self.allowed_ips and remote_port in self.allowed_internal_ports
 
     def _is_in_allowed_cidr(self, ip_str: str) -> bool:
         """Check if an IP address belongs to allowed loopback/internal CIDR blocks."""

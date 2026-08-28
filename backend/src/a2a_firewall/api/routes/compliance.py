@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import uuid
+import contextlib
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
@@ -15,8 +16,8 @@ from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import PolicyRule, SOCAlert, Violation, Workspace
 from a2a_firewall.detection.compliance_packs import (
     COMPLIANCE_PACKS,
-    JURISDICTION_FRAMEWORKS,
     INDUSTRY_FRAMEWORKS,
+    JURISDICTION_FRAMEWORKS,
     apply_compliance_pack,
     get_installed_frameworks,
     remove_compliance_pack,
@@ -62,7 +63,10 @@ async def apply_framework(
 ) -> dict[str, Any]:
     """Install a compliance rule pack for the workspace."""
     if body.framework not in COMPLIANCE_PACKS:
-        raise HTTPException(400, f"Unknown framework: {body.framework}. Available: {', '.join(COMPLIANCE_PACKS.keys())}")
+        raise HTTPException(
+            400,
+            f"Unknown framework: {body.framework}. Available: {', '.join(COMPLIANCE_PACKS.keys())}",
+        )
     return await apply_compliance_pack(ws.id, body.framework, db)
 
 
@@ -85,8 +89,8 @@ async def suggest_compliance_frameworks(
     ws: Workspace = Depends(get_current_workspace),
 ) -> dict[str, Any]:
     """Suggest compliance frameworks based on workspace jurisdiction and industry."""
-    jurisdiction = ws.jurisdiction if hasattr(ws, 'jurisdiction') else None
-    industry = ws.industry if hasattr(ws, 'industry') else None
+    jurisdiction = ws.jurisdiction if hasattr(ws, "jurisdiction") else None
+    industry = ws.industry if hasattr(ws, "industry") else None
     suggestions = suggest_frameworks(jurisdiction, industry)
     return {
         "jurisdiction": jurisdiction,
@@ -144,30 +148,28 @@ async def compliance_report(
     # Count violations with framework-related rule types
     framework_rule_types = _framework_rule_types(framework)
 
-    violation_query = (
-        select(Violation)
-        .where(Violation.workspace_id == ws.id)
-    )
+    violation_query = select(Violation).where(Violation.workspace_id == ws.id)
     if from_date:
         from datetime import datetime
-        try:
-            violation_query = violation_query.where(Violation.created_at >= datetime.fromisoformat(from_date))
-        except ValueError:
-            pass
+
+        with contextlib.suppress(ValueError):
+            violation_query = violation_query.where(
+                Violation.created_at >= datetime.fromisoformat(from_date)
+            )
     if to_date:
         from datetime import datetime
-        try:
-            violation_query = violation_query.where(Violation.created_at <= datetime.fromisoformat(to_date))
-        except ValueError:
-            pass
+
+        with contextlib.suppress(ValueError):
+            violation_query = violation_query.where(
+                Violation.created_at <= datetime.fromisoformat(to_date)
+            )
 
     result = await db.execute(violation_query)
     all_violations = result.scalars().all()
 
     # Filter by framework-related violation types
     framework_violations = [
-        v for v in all_violations
-        if str(v.violation_type) in framework_rule_types
+        v for v in all_violations if str(v.violation_type) in framework_rule_types
     ]
 
     # Count by violation type
@@ -184,9 +186,7 @@ async def compliance_report(
 
     # SOC alerts count
     soc_query = select(func.count()).select_from(
-        select(SOCAlert)
-        .where(SOCAlert.workspace_id == ws.id)
-        .subquery()
+        select(SOCAlert).where(SOCAlert.workspace_id == ws.id).subquery()
     )
     soc_result = await db.execute(soc_query)
     total_soc_alerts = soc_result.scalar() or 0
@@ -246,7 +246,11 @@ async def get_compliance_posture(
 
     # Overall enterprise compliance index
     active_scores = [fp["score"] for fp in frameworks_posture.values() if fp["installed"]]
-    overall_index = round(sum(active_scores) / len(active_scores), 1) if active_scores else 100.0
+    overall_index = (
+        round(sum(float(s) for s in active_scores) / len(active_scores), 1)
+        if active_scores
+        else 100.0
+    )
 
     return {
         "workspace_id": str(ws.id),
@@ -267,8 +271,7 @@ async def get_compliance_timeline(
 
     now = datetime.utcnow()
     res = await db.execute(
-        select(Violation)
-        .where(
+        select(Violation).where(
             Violation.workspace_id == ws.id,
             Violation.created_at >= (now - timedelta(days=days)),
         )
@@ -303,7 +306,7 @@ async def export_compliance_bundle(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Generate a formal regulatory compliance evidence bundle."""
-    from a2a_firewall.db.models import AuditLog, DelegationChain
+    from a2a_firewall.db.models import AuditLog
 
     # 1. Rules
     rules_res = await db.execute(select(PolicyRule).where(PolicyRule.workspace_id == ws.id))
@@ -318,23 +321,33 @@ async def export_compliance_bundle(
     audit_logs = a_res.scalars().all()
 
     return {
-        "bundle_id": f"EVIDENCE-{ws.id}-{datetime.utcnow().strftime('%Y%m%d%H%M')}",
+        "bundle_id": f"EVIDENCE-{ws.id}-{datetime.now(UTC).strftime('%Y%m%d%H%M')}",
         "framework": framework,
         "workspace_id": str(ws.id),
         "workspace_name": ws.name,
         "jurisdiction": ws.jurisdiction,
         "industry": ws.industry,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "rules_installed": [
             {"id": str(r.id), "name": r.name, "framework_tag": r.framework_tag, "action": r.action}
             for r in rules
         ],
         "violations_logged_sample": [
-            {"id": str(v.id), "type": v.violation_type, "severity": v.severity, "timestamp": v.created_at.isoformat() if v.created_at else None}
+            {
+                "id": str(v.id),
+                "type": v.violation_type,
+                "severity": v.severity,
+                "timestamp": v.created_at.isoformat() if v.created_at else None,
+            }
             for v in violations
         ],
         "audit_trail_sample": [
-            {"id": str(a.id), "action": a.action, "actor": a.actor_email, "timestamp": a.created_at.isoformat() if a.created_at else None}
+            {
+                "id": str(a.id),
+                "action": a.action,
+                "actor": a.actor_email,
+                "timestamp": a.created_at.isoformat() if a.created_at else None,
+            }
             for a in audit_logs
         ],
     }
@@ -343,12 +356,20 @@ async def export_compliance_bundle(
 def _framework_rule_types(framework: str) -> set[str]:
     """Return violation types relevant to a compliance framework."""
     mapping: dict[str, set[str]] = {
-        "RBI": {"pii_exposure_credit_card", "pii_exposure_indian_pan", "high_value_transaction", "suspicious_beneficiary"},
+        "RBI": {
+            "pii_exposure_credit_card",
+            "pii_exposure_indian_pan",
+            "high_value_transaction",
+            "suspicious_beneficiary",
+        },
         "DPDP": {"pii_exposure_aadhaar", "pii_exposure_email", "pii_exposure_phone"},
-        "HIPAA": {"pii_exposure_ssn", "pii_exposure_medical_record_number", "pii_exposure_icd10_code"},
+        "HIPAA": {
+            "pii_exposure_ssn",
+            "pii_exposure_medical_record_number",
+            "pii_exposure_icd10_code",
+        },
         "PCI-DSS": {"pii_exposure_credit_card", "pii_exposure_iban"},
         "GDPR": {"pii_exposure_email", "pii_exposure_phone", "pii_exposure_iban"},
         "CCPA": {"pii_exposure_ssn", "pii_exposure_email", "pii_exposure_phone"},
     }
     return mapping.get(framework, set())
-

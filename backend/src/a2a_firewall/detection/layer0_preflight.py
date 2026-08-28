@@ -79,6 +79,7 @@ async def preflight(
 
     # Anti-pentest canary & quarantine check
     import json
+
     sender_id_str = str(getattr(sender, "id", "unknown"))
     payload_str = json.dumps(request_data.get("payload", {})).lower()
     pentest_check = check_anti_pentest(request_data, sender_id_str, payload_str)

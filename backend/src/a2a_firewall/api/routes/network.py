@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import uuid
 from datetime import datetime
@@ -26,7 +27,10 @@ router = APIRouter()
 
 
 class IpAllowlistCreate(BaseModel):
-    cidr_or_ip: str = Field(..., description="IPv4 or IPv6 single address or CIDR range (e.g. 192.168.1.100 or 10.0.0.0/16)")
+    cidr_or_ip: str = Field(
+        ...,
+        description="IPv4 or IPv6 single address or CIDR range (e.g. 192.168.1.100 or 10.0.0.0/16)",
+    )
     label: str = Field(..., description="Human-readable description (e.g. Corporate VPN)")
     scope: str = Field("all", description="all, dashboard, or api")
     expires_at: datetime | None = None
@@ -163,7 +167,11 @@ async def update_ip_allowlist_entry(
     except ValueError as e:
         raise HTTPException(400, "Invalid entry_id UUID") from e
 
-    res = await db.execute(select(IpAllowlistEntry).where(IpAllowlistEntry.id == e_uuid, IpAllowlistEntry.workspace_id == ws.id))
+    res = await db.execute(
+        select(IpAllowlistEntry).where(
+            IpAllowlistEntry.id == e_uuid, IpAllowlistEntry.workspace_id == ws.id
+        )
+    )
     entry = res.scalar_one_or_none()
     if not entry:
         raise HTTPException(404, "IP allowlist entry not found")
@@ -212,7 +220,11 @@ async def delete_ip_allowlist_entry(
     except ValueError as e:
         raise HTTPException(400, "Invalid entry_id UUID") from e
 
-    res = await db.execute(select(IpAllowlistEntry).where(IpAllowlistEntry.id == e_uuid, IpAllowlistEntry.workspace_id == ws.id))
+    res = await db.execute(
+        select(IpAllowlistEntry).where(
+            IpAllowlistEntry.id == e_uuid, IpAllowlistEntry.workspace_id == ws.id
+        )
+    )
     entry = res.scalar_one_or_none()
     if not entry:
         raise HTTPException(404, "IP allowlist entry not found")
@@ -261,7 +273,9 @@ async def list_network_rules(
             "name": rule.name,
             "description": rule.description,
             "source_cidr": rule.source_cidr,
-            "destination_agent_id": str(rule.destination_agent_id) if rule.destination_agent_id else None,
+            "destination_agent_id": str(rule.destination_agent_id)
+            if rule.destination_agent_id
+            else None,
             "destination_agent_name": ag.name if ag else "Any Agent",
             "action": rule.action,
             "protocol": rule.protocol,
@@ -337,7 +351,11 @@ async def delete_network_rule(
     except ValueError as e:
         raise HTTPException(400, "Invalid rule_id UUID") from e
 
-    res = await db.execute(select(NetworkAccessRule).where(NetworkAccessRule.id == r_uuid, NetworkAccessRule.workspace_id == ws.id))
+    res = await db.execute(
+        select(NetworkAccessRule).where(
+            NetworkAccessRule.id == r_uuid, NetworkAccessRule.workspace_id == ws.id
+        )
+    )
     rule = res.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Network rule not found")
@@ -368,10 +386,8 @@ async def test_network_evaluation(
     """Simulate and evaluate an incoming IP packet against the workspace IP allowlist and network rules."""
     dest_uuid = None
     if body.destination_agent_id:
-        try:
+        with contextlib.suppress(ValueError):
             dest_uuid = uuid.UUID(body.destination_agent_id)
-        except ValueError:
-            pass
 
     # 1. Evaluate IP Allowlist
     allowlist_check = await check_ip_allowlist(body.client_ip, ws.id, body.scope, db)

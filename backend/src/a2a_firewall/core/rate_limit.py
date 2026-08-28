@@ -16,9 +16,8 @@ import threading
 import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
-from sqlalchemy import Column, DateTime, Integer, String, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -181,7 +180,9 @@ def check_workspace(workspace_id: str) -> tuple[bool, int]:
     return get_workspace_limiter().check(workspace_id)
 
 
-async def check_workspace_async(workspace_id: str, db: AsyncSession | None = None) -> tuple[bool, int]:
+async def check_workspace_async(
+    workspace_id: str, db: AsyncSession | None = None
+) -> tuple[bool, int]:
     """Returns (allowed, current_count) for the workspace scope.
 
     Uses Postgres backend if configured and db session is provided,

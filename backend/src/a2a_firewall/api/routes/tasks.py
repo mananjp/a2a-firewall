@@ -29,9 +29,7 @@ async def list_recent_tasks(
 
     violations_by_task: dict[uuid.UUID, list[Violation]] = {}
     if task_ids:
-        v_result = await db.execute(
-            select(Violation).where(Violation.task_id.in_(task_ids))
-        )
+        v_result = await db.execute(select(Violation).where(Violation.task_id.in_(task_ids)))
         for v in v_result.scalars().all():
             violations_by_task.setdefault(v.task_id, []).append(v)
 
@@ -42,13 +40,21 @@ async def list_recent_tasks(
             vlayer = (v0.layer or "").lower()
             if "rate" in vtype or "rate" in vlayer:
                 return "rate"
-            if any(k in vtype for k in ("nonce", "replay", "canary", "pentest", "preflight")) or "preflight" in vlayer:
+            if (
+                any(k in vtype for k in ("nonce", "replay", "canary", "pentest", "preflight"))
+                or "preflight" in vlayer
+            ):
                 return "preflight"
             if "schema" in vtype or "schema" in vlayer:
                 return "schema"
-            if any(k in vtype for k in ("permission", "unauthorized", "amplification", "delegation")) or any(k in vlayer for k in ("permission", "delegation")):
+            if any(
+                k in vtype for k in ("permission", "unauthorized", "amplification", "delegation")
+            ) or any(k in vlayer for k in ("permission", "delegation")):
                 return "permission"
-            if any(k in vtype for k in ("injection", "drift", "semantic", "groq", "hallucination")) or "semantic" in vlayer:
+            if (
+                any(k in vtype for k in ("injection", "drift", "semantic", "groq", "hallucination"))
+                or "semantic" in vlayer
+            ):
                 return "groq"
             return vlayer or "rule"
         if t.decision == "block":
@@ -59,7 +65,9 @@ async def list_recent_tasks(
                 return "preflight"
             if "schema" in reason:
                 return "schema"
-            if any(k in reason for k in ("permission", "unauthorized", "amplification", "delegation")):
+            if any(
+                k in reason for k in ("permission", "unauthorized", "amplification", "delegation")
+            ):
                 return "permission"
             if any(k in reason for k in ("injection", "prompt", "groq", "drift", "hallucination")):
                 return "groq"

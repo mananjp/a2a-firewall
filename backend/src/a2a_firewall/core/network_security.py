@@ -67,12 +67,9 @@ async def check_ip_allowlist(
 ) -> dict[str, Any]:
     """Verify if client IP is permitted under the workspace IP allowlist policy."""
     now = datetime.utcnow()
-    stmt = (
-        select(IpAllowlistEntry)
-        .where(
-            IpAllowlistEntry.workspace_id == workspace_id,
-            IpAllowlistEntry.is_enabled == True,
-        )
+    stmt = select(IpAllowlistEntry).where(
+        IpAllowlistEntry.workspace_id == workspace_id,
+        IpAllowlistEntry.is_enabled,
     )
     res = await db.execute(stmt)
     entries = res.scalars().all()
@@ -83,7 +80,8 @@ async def check_ip_allowlist(
 
     # Filter applicable entries for the requested scope and non-expired
     valid_entries = [
-        e for e in entries
+        e
+        for e in entries
         if (e.scope in ("all", scope)) and (e.expires_at is None or e.expires_at > now)
     ]
 
@@ -120,7 +118,7 @@ async def check_network_access_rules(
         select(NetworkAccessRule)
         .where(
             NetworkAccessRule.workspace_id == workspace_id,
-            NetworkAccessRule.is_active == True,
+            NetworkAccessRule.is_active,
         )
         .order_by(NetworkAccessRule.priority.asc())
     )
@@ -132,9 +130,12 @@ async def check_network_access_rules(
 
     for rule in rules:
         # Check destination agent match (if rule specifies destination)
-        if rule.destination_agent_id and destination_agent_id:
-            if rule.destination_agent_id != destination_agent_id:
-                continue
+        if (
+            rule.destination_agent_id
+            and destination_agent_id
+            and rule.destination_agent_id != destination_agent_id
+        ):
+            continue
 
         # Check protocol match
         if rule.protocol != "all" and rule.protocol.lower() != protocol.lower():

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import uuid
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,7 +8,6 @@ import pytest
 from a2a_firewall.detection.layer4_groq import (
     _clean_json_str,
     _sanitize_and_validate_response,
-    groq_inspect,
 )
 from a2a_firewall.detection.orchestrator import run_inspection
 

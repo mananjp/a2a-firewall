@@ -87,13 +87,15 @@ def test_process_watcher_detects_proxy_bypass():
         MockConn(pid=1111, raddr=MockAddr(ip="142.250.190.46", port=443), status="ESTABLISHED"),
     ]
 
-    with patch("psutil.net_connections", return_value=mock_connections):
-        with patch("psutil.Process") as mock_proc_cls:
-            mock_proc = MagicMock()
-            mock_proc.name.return_value = "python_agent"
-            mock_proc_cls.return_value = mock_proc
+    with (
+        patch("psutil.net_connections", return_value=mock_connections),
+        patch("psutil.Process") as mock_proc_cls,
+    ):
+        mock_proc = MagicMock()
+        mock_proc.name.return_value = "python_agent"
+        mock_proc_cls.return_value = mock_proc
 
-            violations = watcher.scan_connections()
+        violations = watcher.scan_connections()
 
     assert len(violations) == 1
     v = violations[0]

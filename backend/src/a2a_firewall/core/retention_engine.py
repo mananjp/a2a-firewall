@@ -70,39 +70,68 @@ async def calculate_retention_candidates(
 
     task_cutoff = now - timedelta(days=max(1, policy.task_payload_days))
     telemetry_cutoff = now - timedelta(days=max(1, policy.telemetry_days))
-    violations_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["violations"], policy.violations_days))
-    soc_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["soc_alerts"], policy.soc_alerts_days))
-    audit_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["audit_logs"], policy.audit_log_days))
+    violations_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["violations"], policy.violations_days)
+    )
+    soc_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["soc_alerts"], policy.soc_alerts_days)
+    )
+    audit_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["audit_logs"], policy.audit_log_days)
+    )
     pii_scrub_cutoff = now - timedelta(days=max(1, policy.scrub_pii_after_days))
 
     # Count eligible records
-    tasks_count = (await db.execute(
-        select(func.count(Task.id)).where(Task.workspace_id == workspace_id, Task.created_at < task_cutoff)
-    )).scalar() or 0
-
-    telemetry_count = (await db.execute(
-        select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace_id, TelemetryRow.created_at < telemetry_cutoff)
-    )).scalar() or 0
-
-    violations_count = (await db.execute(
-        select(func.count(Violation.id)).where(Violation.workspace_id == workspace_id, Violation.created_at < violations_cutoff)
-    )).scalar() or 0
-
-    soc_count = (await db.execute(
-        select(func.count(SOCAlert.id)).where(SOCAlert.workspace_id == workspace_id, SOCAlert.created_at < soc_cutoff)
-    )).scalar() or 0
-
-    audit_count = (await db.execute(
-        select(func.count(AuditLog.id)).where(AuditLog.workspace_id == workspace_id, AuditLog.created_at < audit_cutoff)
-    )).scalar() or 0
-
-    pii_scrub_count = (await db.execute(
-        select(func.count(Task.id)).where(
-            Task.workspace_id == workspace_id,
-            Task.created_at < pii_scrub_cutoff,
-            Task.created_at >= task_cutoff,
+    tasks_count = (
+        await db.execute(
+            select(func.count(Task.id)).where(
+                Task.workspace_id == workspace_id, Task.created_at < task_cutoff
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
+
+    telemetry_count = (
+        await db.execute(
+            select(func.count(TelemetryRow.id)).where(
+                TelemetryRow.workspace_id == workspace_id,
+                TelemetryRow.created_at < telemetry_cutoff,
+            )
+        )
+    ).scalar() or 0
+
+    violations_count = (
+        await db.execute(
+            select(func.count(Violation.id)).where(
+                Violation.workspace_id == workspace_id, Violation.created_at < violations_cutoff
+            )
+        )
+    ).scalar() or 0
+
+    soc_count = (
+        await db.execute(
+            select(func.count(SOCAlert.id)).where(
+                SOCAlert.workspace_id == workspace_id, SOCAlert.created_at < soc_cutoff
+            )
+        )
+    ).scalar() or 0
+
+    audit_count = (
+        await db.execute(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.workspace_id == workspace_id, AuditLog.created_at < audit_cutoff
+            )
+        )
+    ).scalar() or 0
+
+    pii_scrub_count = (
+        await db.execute(
+            select(func.count(Task.id)).where(
+                Task.workspace_id == workspace_id,
+                Task.created_at < pii_scrub_cutoff,
+                Task.created_at >= task_cutoff,
+            )
+        )
+    ).scalar() or 0
 
     return {
         "cutoffs": {
@@ -121,7 +150,11 @@ async def calculate_retention_candidates(
             "expired_audit_logs": audit_count,
             "pii_scrub_eligible_tasks": pii_scrub_count,
         },
-        "total_records_eligible": tasks_count + telemetry_count + violations_count + soc_count + audit_count,
+        "total_records_eligible": tasks_count
+        + telemetry_count
+        + violations_count
+        + soc_count
+        + audit_count,
     }
 
 
@@ -146,9 +179,15 @@ async def execute_retention_purge(
     now = datetime.utcnow()
     task_cutoff = now - timedelta(days=max(1, policy.task_payload_days))
     telemetry_cutoff = now - timedelta(days=max(1, policy.telemetry_days))
-    violations_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["violations"], policy.violations_days))
-    soc_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["soc_alerts"], policy.soc_alerts_days))
-    audit_cutoff = now - timedelta(days=max(MINIMUM_COMPLIANCE_DAYS["audit_logs"], policy.audit_log_days))
+    violations_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["violations"], policy.violations_days)
+    )
+    soc_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["soc_alerts"], policy.soc_alerts_days)
+    )
+    audit_cutoff = now - timedelta(
+        days=max(MINIMUM_COMPLIANCE_DAYS["audit_logs"], policy.audit_log_days)
+    )
     pii_scrub_cutoff = now - timedelta(days=max(1, policy.scrub_pii_after_days))
 
     # 1. PII Redaction on aging payloads before hard delete
@@ -164,16 +203,24 @@ async def execute_retention_purge(
 
     # 2. Hard deletion of expired records
     del_telemetry = await db.execute(
-        delete(TelemetryRow).where(TelemetryRow.workspace_id == workspace_id, TelemetryRow.created_at < telemetry_cutoff)
+        delete(TelemetryRow).where(
+            TelemetryRow.workspace_id == workspace_id, TelemetryRow.created_at < telemetry_cutoff
+        )
     )
     del_violations = await db.execute(
-        delete(Violation).where(Violation.workspace_id == workspace_id, Violation.created_at < violations_cutoff)
+        delete(Violation).where(
+            Violation.workspace_id == workspace_id, Violation.created_at < violations_cutoff
+        )
     )
     del_soc = await db.execute(
-        delete(SOCAlert).where(SOCAlert.workspace_id == workspace_id, SOCAlert.created_at < soc_cutoff)
+        delete(SOCAlert).where(
+            SOCAlert.workspace_id == workspace_id, SOCAlert.created_at < soc_cutoff
+        )
     )
     del_audit = await db.execute(
-        delete(AuditLog).where(AuditLog.workspace_id == workspace_id, AuditLog.created_at < audit_cutoff)
+        delete(AuditLog).where(
+            AuditLog.workspace_id == workspace_id, AuditLog.created_at < audit_cutoff
+        )
     )
     del_tasks = await db.execute(
         delete(Task).where(Task.workspace_id == workspace_id, Task.created_at < task_cutoff)

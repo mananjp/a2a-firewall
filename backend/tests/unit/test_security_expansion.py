@@ -1,21 +1,17 @@
 """Unit tests for Security Expansion: CVE/CVSS, IPS Signatures, PII/Compliance, and SOC Alerts."""
 
-import pytest
-from a2a_firewall.detection.cve_lookup import cvss_severity, CVEResult, _parse_cve_item
-from a2a_firewall.detection.ips_signatures import get_engine, get_violation_counter, IPSSignature
+from a2a_firewall.api.routes.soc import get_mitre_technique, map_violation_to_soc_severity
+from a2a_firewall.detection.compliance_packs import suggest_frameworks
+from a2a_firewall.detection.cve_lookup import cvss_severity
+from a2a_firewall.detection.ips_signatures import get_engine, get_violation_counter
 from a2a_firewall.detection.pii_patterns import (
-    detect_credit_cards,
-    detect_aadhaar,
-    detect_ssn,
-    detect_email,
-    detect_medical_records,
-    detect_indian_pan,
-    detect_iban,
-    scan_all_pii,
     _luhn_check,
+    detect_aadhaar,
+    detect_credit_cards,
+    detect_indian_pan,
+    detect_ssn,
+    scan_all_pii,
 )
-from a2a_firewall.detection.compliance_packs import COMPLIANCE_PACKS, suggest_frameworks
-from a2a_firewall.api.routes.soc import map_violation_to_soc_severity, get_mitre_technique
 
 
 def test_cvss_severity_mapping():

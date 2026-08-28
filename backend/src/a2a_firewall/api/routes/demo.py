@@ -192,7 +192,8 @@ async def demo_run(
             AgentPermission.workspace_id == workspace.id,
             AgentPermission.sender_id == sender.id,
             AgentPermission.receiver_id == receiver.id,
-            (AgentPermission.task_type == scenario["task_type"]) | (AgentPermission.task_type.is_(None)),
+            (AgentPermission.task_type == scenario["task_type"])
+            | (AgentPermission.task_type.is_(None)),
         )
     )
     if not perm_check.scalars().first():
@@ -554,9 +555,7 @@ async def demo_run_delegation(
     from a2a_firewall.core.security import generate_api_key
 
     result = await db.execute(
-        select(Agent).where(
-            Agent.workspace_id == workspace.id, Agent.status == "active"
-        )
+        select(Agent).where(Agent.workspace_id == workspace.id, Agent.status == "active")
     )
     existing = {a.name.lower(): a for a in result.scalars().all()}
 
@@ -580,7 +579,7 @@ async def demo_run_delegation(
     if created_any:
         await db.flush()
         # Ensure permissions exist for delegation demo agents
-        names = [d["name"].lower() for d in DELEGATION_DEMO_AGENTS]
+        names = [str(d["name"]).lower() for d in DELEGATION_DEMO_AGENTS]
         for sn in names:
             for rn in names:
                 if sn != rn:
@@ -674,7 +673,9 @@ async def demo_run_delegation(
 
     # ── Step 3: Child delegated task ──
     # Determine receiver: escalation goes to Payments, others go to Research
-    child_receiver = payments if scenario.get("child_task_type") == "payment_processing" else research
+    child_receiver = (
+        payments if scenario.get("child_task_type") == "payment_processing" else research
+    )
 
     child_task_id = str(uuid.uuid4())
     child_trace_id = uuid.uuid4().hex

@@ -51,7 +51,9 @@ class JSONRPCResponse:
         return d
 
     @classmethod
-    def error_response(cls, req_id: Any, code: int, message: str, data: Any = None) -> JSONRPCResponse:
+    def error_response(
+        cls, req_id: Any, code: int, message: str, data: Any = None
+    ) -> JSONRPCResponse:
         err_obj: dict[str, Any] = {"code": code, "message": message}
         if data is not None:
             err_obj["data"] = data

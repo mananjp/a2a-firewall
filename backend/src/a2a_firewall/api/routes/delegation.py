@@ -18,7 +18,7 @@ from a2a_firewall.core.delegation import (
     verify_token,
 )
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import Agent, DelegationChain, Workspace
+from a2a_firewall.db.models import Agent, DelegationChain, Task, Workspace
 
 router = APIRouter()
 

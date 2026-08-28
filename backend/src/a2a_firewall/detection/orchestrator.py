@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import secrets
@@ -93,23 +94,32 @@ async def run_inspection(
     rate_event["parent_span_id"] = parent_span_id
 
     # ---------- Spend limit check ----------
-    from a2a_firewall.core.spend_manager import check_spend_limits, estimate_tokens, record_spend_transaction
+    from a2a_firewall.core.spend_manager import (
+        check_spend_limits,
+        estimate_tokens,
+        record_spend_transaction,
+    )
+
     estimated_tokens = estimate_tokens(request_data.get("payload", {}))
     spend_check = await check_spend_limits(workspace.id, sender.id, estimated_tokens, db)
     if not spend_check.get("allowed", True):
         spend_reason = spend_check.get("reason", "spend_limit_exceeded")
-        violations.append({
-            "layer": "spend",
-            "violation_type": spend_reason,
-            "severity": "critical",
-            "details": spend_check.get("details", {}),
-        })
+        violations.append(
+            {
+                "layer": "spend",
+                "violation_type": spend_reason,
+                "severity": "critical",
+                "details": spend_check.get("details", {}),
+            }
+        )
         task_uuid = uuid.UUID(request_data["task_id"])
         blocked_task = Task(
             id=task_uuid,
             workspace_id=workspace.id,
             root_task_id=uuid.UUID(request_data.get("root_task_id") or request_data["task_id"]),
-            parent_task_id=uuid.UUID(request_data["parent_task_id"]) if request_data.get("parent_task_id") else None,
+            parent_task_id=uuid.UUID(request_data["parent_task_id"])
+            if request_data.get("parent_task_id")
+            else None,
             depth=request_data.get("depth", 0),
             sender_id=sender.id,
             receiver_id=uuid.UUID(request_data["receiver_agent_id"]),
@@ -575,7 +585,7 @@ async def run_inspection(
 
     # ---------- PII / Compliance pattern scan (new) ----------
     try:
-        from a2a_firewall.detection.pii_patterns import scan_all_pii, pii_matches_to_violations
+        from a2a_firewall.detection.pii_patterns import pii_matches_to_violations, scan_all_pii
 
         pii_matches = scan_all_pii(payload_str)
         if pii_matches:
@@ -690,7 +700,9 @@ async def run_inspection(
             {
                 "layer": "semantic",
                 "violation_type": "prompt_injection",
-                "severity": "critical" if groq_result.get("risk_score_delta", 0.8) >= 0.8 else "high",
+                "severity": "critical"
+                if groq_result.get("risk_score_delta", 0.8) >= 0.8
+                else "high",
                 "details": groq_result,
             }
         )
@@ -814,11 +826,10 @@ async def run_inspection(
                 )
                 agent_row = agent_result.scalar_one_or_none()
                 if agent_row and agent_row.status != "suspended":
-                    agent_row.status = "suspended"  # type: ignore[assignment]
+                    agent_row.status = "suspended"
 
                     # Create a P1 SOC alert for the auto-suspension
                     try:
-                        from a2a_firewall.api.routes.soc import create_soc_alert as _create_alert
                         from a2a_firewall.db.models import SOCAlert
 
                         suspension_alert = SOCAlert(
@@ -830,7 +841,7 @@ async def run_inspection(
                             description=(
                                 f"Agent exceeded critical violation threshold "
                                 f"({check['critical_count']}/{counter.critical_threshold} "
-                                f"in {counter.window_seconds/60:.0f}min window). "
+                                f"in {counter.window_seconds / 60:.0f}min window). "
                                 f"Use POST /v1/ips/agents/{sender.id}/reinstate to lift suspension."
                             ),
                             details={
@@ -851,7 +862,7 @@ async def run_inspection(
             pass  # Auto-containment failure must not affect the decision
 
     # ---------- Post-decision: Spend Ledger Recording ----------
-    try:
+    with contextlib.suppress(Exception):
         await record_spend_transaction(
             workspace_id=workspace.id,
             agent_id=sender.id,
@@ -861,8 +872,6 @@ async def run_inspection(
             operation="inspect",
             db=db,
         )
-    except Exception:
-        pass
 
     await _emit_telemetry(
         result,
@@ -1192,7 +1201,7 @@ async def _replay_response(
 
         result = await db.execute(select(ReviewItem).where(ReviewItem.task_id == cached.id))
         ri = result.scalar_one_or_none()
-        review_token = cast(str, ri.review_token) if ri and ri.status == "pending" else None
+        review_token = ri.review_token if ri and ri.status == "pending" else None
 
     return {
         "task_id": str(cached.id),

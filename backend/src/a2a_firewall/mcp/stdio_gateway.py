@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any, AsyncIterator, Callable
+from collections.abc import Callable
 
 from a2a_firewall.mcp.models import JSONRPCRequest, JSONRPCResponse, MCPPolicy, MCPToolCall
 from a2a_firewall.mcp.policy_engine import MCPDecision, MCPPolicyEngine

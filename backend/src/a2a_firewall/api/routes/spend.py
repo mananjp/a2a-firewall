@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import uuid
@@ -20,7 +21,12 @@ from a2a_firewall.core.spend_manager import (
     get_or_create_workspace_spend_limit,
 )
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import Agent, AgentSpendLimit, SpendLedger, Workspace, WorkspaceSpendLimit
+from a2a_firewall.db.models import (
+    Agent,
+    AgentSpendLimit,
+    SpendLedger,
+    Workspace,
+)
 
 router = APIRouter()
 
@@ -67,7 +73,9 @@ async def get_spend_overview(
             "current_tokens": ag_lim.current_tokens,
             "token_budget": ag_lim.token_budget,
             "is_active": ag_lim.is_active,
-            "spend_pct": round((ag_lim.current_spend_usd / max(0.01, ag_lim.monthly_budget_usd)) * 100.0, 1),
+            "spend_pct": round(
+                (ag_lim.current_spend_usd / max(0.01, ag_lim.monthly_budget_usd)) * 100.0, 1
+            ),
         }
         for ag_lim, ag in agent_limits_res.all()
     ]
@@ -149,27 +157,33 @@ async def list_agent_spend_limits(
 ) -> list[dict[str, Any]]:
     """List all agents in workspace with their assigned spend limits and consumption."""
     # Get all agents
-    agents_res = await db.execute(select(Agent).where(Agent.workspace_id == ws.id).order_by(Agent.name))
+    agents_res = await db.execute(
+        select(Agent).where(Agent.workspace_id == ws.id).order_by(Agent.name)
+    )
     agents = agents_res.scalars().all()
 
     # Get limits map
-    limits_res = await db.execute(select(AgentSpendLimit).where(AgentSpendLimit.workspace_id == ws.id))
+    limits_res = await db.execute(
+        select(AgentSpendLimit).where(AgentSpendLimit.workspace_id == ws.id)
+    )
     limits_map = {lim.agent_id: lim for lim in limits_res.scalars().all()}
 
     result = []
     for ag in agents:
         lim = limits_map.get(ag.id)
-        result.append({
-            "agent_id": str(ag.id),
-            "agent_name": ag.name,
-            "status": ag.status,
-            "monthly_budget_usd": lim.monthly_budget_usd if lim else 100.0,
-            "token_budget": lim.token_budget if lim else 1000000,
-            "current_spend_usd": round(lim.current_spend_usd, 4) if lim else 0.0,
-            "current_tokens": lim.current_tokens if lim else 0,
-            "is_active": lim.is_active if lim else True,
-            "has_custom_limit": lim is not None,
-        })
+        result.append(
+            {
+                "agent_id": str(ag.id),
+                "agent_name": ag.name,
+                "status": ag.status,
+                "monthly_budget_usd": lim.monthly_budget_usd if lim else 100.0,
+                "token_budget": lim.token_budget if lim else 1000000,
+                "current_spend_usd": round(lim.current_spend_usd, 4) if lim else 0.0,
+                "current_tokens": lim.current_tokens if lim else 0,
+                "is_active": lim.is_active if lim else True,
+                "has_custom_limit": lim is not None,
+            }
+        )
     return result
 
 
@@ -186,12 +200,16 @@ async def set_agent_spend_limit(
     except ValueError as e:
         raise HTTPException(400, "Invalid agent_id UUID format") from e
 
-    ag_res = await db.execute(select(Agent).where(Agent.id == agent_uuid, Agent.workspace_id == ws.id))
+    ag_res = await db.execute(
+        select(Agent).where(Agent.id == agent_uuid, Agent.workspace_id == ws.id)
+    )
     ag = ag_res.scalar_one_or_none()
     if not ag:
         raise HTTPException(404, "Agent not found in authenticated workspace")
 
-    lim_res = await db.execute(select(AgentSpendLimit).where(AgentSpendLimit.agent_id == agent_uuid))
+    lim_res = await db.execute(
+        select(AgentSpendLimit).where(AgentSpendLimit.agent_id == agent_uuid)
+    )
     lim = lim_res.scalar_one_or_none()
 
     if lim is None:
@@ -251,10 +269,8 @@ async def list_spend_ledger(
         .limit(limit)
     )
     if agent_id:
-        try:
+        with contextlib.suppress(ValueError):
             stmt = stmt.where(SpendLedger.agent_id == uuid.UUID(agent_id))
-        except ValueError:
-            pass
 
     res = await db.execute(stmt)
     rows = res.all()
@@ -278,7 +294,16 @@ async def list_spend_ledger(
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
-            fieldnames=["id", "created_at", "agent_name", "tokens_used", "cost_usd", "model_name", "operation", "task_id"],
+            fieldnames=[
+                "id",
+                "created_at",
+                "agent_name",
+                "tokens_used",
+                "cost_usd",
+                "model_name",
+                "operation",
+                "task_id",
+            ],
         )
         writer.writeheader()
         for it in items:

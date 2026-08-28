@@ -32,6 +32,7 @@ def estimate_tokens(payload: dict[str, Any] | str) -> int:
         char_count = len(payload)
     else:
         import json
+
         char_count = len(json.dumps(payload))
     return max(16, math.ceil(char_count / 4.0) + 12)
 
@@ -84,33 +85,36 @@ async def check_spend_limits(
     is_ws_spend_capped = (ws_limit.current_spend_usd + estimated_cost) > ws_limit.monthly_budget_usd
     is_ws_tokens_capped = (ws_limit.current_tokens + estimated_tokens) > ws_limit.token_budget
 
-    if is_ws_spend_capped or is_ws_tokens_capped:
-        if ws_limit.hard_limit_action == "block":
-            return {
-                "allowed": False,
-                "reason": "workspace_spend_limit_exceeded",
-                "details": {
-                    "monthly_budget_usd": ws_limit.monthly_budget_usd,
-                    "current_spend_usd": ws_limit.current_spend_usd,
-                    "token_budget": ws_limit.token_budget,
-                    "current_tokens": ws_limit.current_tokens,
-                    "estimated_cost_usd": estimated_cost,
-                    "hard_limit_action": ws_limit.hard_limit_action,
-                },
-            }
+    if (is_ws_spend_capped or is_ws_tokens_capped) and ws_limit.hard_limit_action == "block":
+        return {
+            "allowed": False,
+            "reason": "workspace_spend_limit_exceeded",
+            "details": {
+                "monthly_budget_usd": ws_limit.monthly_budget_usd,
+                "current_spend_usd": ws_limit.current_spend_usd,
+                "token_budget": ws_limit.token_budget,
+                "current_tokens": ws_limit.current_tokens,
+                "estimated_cost_usd": estimated_cost,
+                "hard_limit_action": ws_limit.hard_limit_action,
+            },
+        }
 
     # 2. Check per-agent limit if agent_id is provided
     if agent_id:
         agent_stmt = select(AgentSpendLimit).where(
             AgentSpendLimit.agent_id == agent_id,
-            AgentSpendLimit.is_active == True,
+            AgentSpendLimit.is_active,
         )
         agent_res = await db.execute(agent_stmt)
         ag_limit = agent_res.scalar_one_or_none()
 
         if ag_limit:
-            is_ag_spend_capped = (ag_limit.current_spend_usd + estimated_cost) > ag_limit.monthly_budget_usd
-            is_ag_tokens_capped = (ag_limit.current_tokens + estimated_tokens) > ag_limit.token_budget
+            is_ag_spend_capped = (
+                ag_limit.current_spend_usd + estimated_cost
+            ) > ag_limit.monthly_budget_usd
+            is_ag_tokens_capped = (
+                ag_limit.current_tokens + estimated_tokens
+            ) > ag_limit.token_budget
 
             if is_ag_spend_capped or is_ag_tokens_capped:
                 return {

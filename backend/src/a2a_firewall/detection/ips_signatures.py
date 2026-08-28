@@ -18,6 +18,8 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
+
 from a2a_firewall.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -104,7 +106,6 @@ BUILTIN_SIGNATURES: list[IPSSignature] = [
         description="Jailbreak roleplay attempt",
         mitre_technique="T1059",
     ),
-
     # ── Data Exfiltration signatures ──
     IPSSignature(
         id="SIG-2001",
@@ -124,7 +125,6 @@ BUILTIN_SIGNATURES: list[IPSSignature] = [
         description="Encoded data exfiltration attempt",
         mitre_technique="T1132",
     ),
-
     # ── Privilege Escalation signatures ──
     IPSSignature(
         id="SIG-3001",
@@ -144,7 +144,6 @@ BUILTIN_SIGNATURES: list[IPSSignature] = [
         description="Security bypass instruction",
         mitre_technique="T1562",
     ),
-
     # ── Confused Deputy signatures ──
     IPSSignature(
         id="SIG-4001",
@@ -155,7 +154,6 @@ BUILTIN_SIGNATURES: list[IPSSignature] = [
         description="Confused deputy / impersonation attempt",
         mitre_technique="T1134",
     ),
-
     # ── Command Injection signatures ──
     IPSSignature(
         id="SIG-5001",
@@ -175,7 +173,6 @@ BUILTIN_SIGNATURES: list[IPSSignature] = [
         description="Direct code execution function invocation",
         mitre_technique="T1059",
     ),
-
     # ── Social Engineering signatures ──
     IPSSignature(
         id="SIG-6001",
@@ -310,9 +307,7 @@ class ViolationCounter:
         self._criticals: dict[str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
 
-    def record_violation(
-        self, agent_id: str, severity: str = "medium"
-    ) -> dict[str, Any]:
+    def record_violation(self, agent_id: str, severity: str = "medium") -> dict[str, Any]:
         """Record a violation and return whether auto-suspend should trigger.
 
         Returns:
@@ -328,12 +323,8 @@ class ViolationCounter:
 
         with self._lock:
             # Clean expired entries
-            self._violations[agent_id] = [
-                t for t in self._violations[agent_id] if t > cutoff
-            ]
-            self._criticals[agent_id] = [
-                t for t in self._criticals[agent_id] if t > cutoff
-            ]
+            self._violations[agent_id] = [t for t in self._violations[agent_id] if t > cutoff]
+            self._criticals[agent_id] = [t for t in self._criticals[agent_id] if t > cutoff]
 
             # Record
             self._violations[agent_id].append(now)
@@ -354,12 +345,8 @@ class ViolationCounter:
         now = time.monotonic()
         cutoff = now - self.window_seconds
         with self._lock:
-            self._violations[agent_id] = [
-                t for t in self._violations[agent_id] if t > cutoff
-            ]
-            self._criticals[agent_id] = [
-                t for t in self._criticals[agent_id] if t > cutoff
-            ]
+            self._violations[agent_id] = [t for t in self._violations[agent_id] if t > cutoff]
+            self._criticals[agent_id] = [t for t in self._criticals[agent_id] if t > cutoff]
             return {
                 "violation_count": len(self._violations[agent_id]),
                 "critical_count": len(self._criticals[agent_id]),

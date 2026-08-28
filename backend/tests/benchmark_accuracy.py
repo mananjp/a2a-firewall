@@ -126,6 +126,7 @@ async def _run_single(fixture: dict[str, Any]) -> dict[str, Any]:
 
     # Run PII scanner (deterministic layer)
     from a2a_firewall.detection.pii_patterns import pii_matches_to_violations, scan_all_pii
+
     pii_matches = scan_all_pii(payload_str)
     if pii_matches:
         pii_violations = pii_matches_to_violations(pii_matches)
@@ -134,7 +135,15 @@ async def _run_single(fixture: dict[str, Any]) -> dict[str, Any]:
         risk_delta = min(1.0, risk_delta + pii_risk)
 
     elapsed_ms = (time.perf_counter() - start) * 1000
-    actual_decision = "block" if (risk_delta >= workspace.block_threshold or len(violations) > 0 and any(v.get("severity") == "critical" for v in violations)) else "allow"
+    actual_decision = (
+        "block"
+        if (
+            risk_delta >= workspace.block_threshold
+            or len(violations) > 0
+            and any(v.get("severity") == "critical" for v in violations)
+        )
+        else "allow"
+    )
 
     blocked_by = "rules" if actual_decision == "block" else None
     if actual_decision == "block" and pii_matches and not rule_result.get("violations"):
@@ -203,12 +212,12 @@ async def test_benchmark_accuracy() -> None:
     print(f"  False Positive Rate: {fpr:.1f}% ({false_positives}/{len(benign)})")
     print(f"  True Negatives:      {true_negatives}/{len(benign)}")
     print(f"  False Negatives:     {false_negatives}/{len(malicious)}")
-    print(f"\n  Latency (deterministic layers only, no Groq):")
+    print("\n  Latency (deterministic layers only, no Groq):")
     print(f"    p50:  {p50:.2f} ms")
     print(f"    p95:  {p95:.2f} ms")
     print(f"    p99:  {p99:.2f} ms")
     print(f"    mean: {statistics.mean(latencies):.2f} ms")
-    print(f"\n  Per-layer detection breakdown:")
+    print("\n  Per-layer detection breakdown:")
     for layer, count in sorted(layer_counts.items()):
         print(f"    {layer}: {count} blocks")
 
@@ -230,21 +239,26 @@ async def test_benchmark_accuracy() -> None:
 
     # Save results to JSON
     output_path = Path(__file__).parent / "benchmark_results.json"
-    output_path.write_text(json.dumps({
-        "total_fixtures": len(results),
-        "malicious_count": len(malicious),
-        "benign_count": len(benign),
-        "true_positive_rate": round(tpr, 2),
-        "false_positive_rate": round(fpr, 2),
-        "true_positives": true_positives,
-        "false_negatives": false_negatives,
-        "true_negatives": true_negatives,
-        "false_positives": false_positives,
-        "latency_p50_ms": round(p50, 2),
-        "latency_p95_ms": round(p95, 2),
-        "latency_p99_ms": round(p99, 2),
-        "latency_mean_ms": round(statistics.mean(latencies), 2),
-        "layer_breakdown": layer_counts,
-        "results": results,
-    }, indent=2))
+    output_path.write_text(
+        json.dumps(
+            {
+                "total_fixtures": len(results),
+                "malicious_count": len(malicious),
+                "benign_count": len(benign),
+                "true_positive_rate": round(tpr, 2),
+                "false_positive_rate": round(fpr, 2),
+                "true_positives": true_positives,
+                "false_negatives": false_negatives,
+                "true_negatives": true_negatives,
+                "false_positives": false_positives,
+                "latency_p50_ms": round(p50, 2),
+                "latency_p95_ms": round(p95, 2),
+                "latency_p99_ms": round(p99, 2),
+                "latency_mean_ms": round(statistics.mean(latencies), 2),
+                "layer_breakdown": layer_counts,
+                "results": results,
+            },
+            indent=2,
+        )
+    )
     print(f"  Results saved to: {output_path}")

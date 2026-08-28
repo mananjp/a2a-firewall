@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+
 import pytest
 
 from a2a_firewall.core.delegation import (
-    DelegationToken,
     attenuate_token,
     mint_token,
     token_to_compact,
@@ -27,7 +27,6 @@ from a2a_firewall.core.identity import (
     public_key_to_hex,
 )
 from a2a_firewall.core.signing import (
-    compute_chain_hash,
     compute_message_hash,
     sign_message,
     verify_signature,
@@ -219,9 +218,7 @@ class TestDelegationTokenSecurity:
     def test_removed_caveats_rejected(self) -> None:
         """Verify that removing caveats invalidates the token."""
         root_key = self._root_key()
-        token = mint_token(
-            root_key, "ws-1", "agent-1", ["task_type=research", "max_risk=0.5"]
-        )
+        token = mint_token(root_key, "ws-1", "agent-1", ["task_type=research", "max_risk=0.5"])
         token.caveats = ["task_type=research"]  # Remove max_risk caveat
         res = verify_token(token, root_key)
         assert res.valid is False

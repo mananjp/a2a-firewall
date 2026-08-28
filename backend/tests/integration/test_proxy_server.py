@@ -1,11 +1,9 @@
 """Integration tests for A2A Proxy Server with TLS MITM interception."""
 
-import asyncio
-import json
-import ssl
 import tempfile
-import pytest
+
 import httpx
+import pytest
 
 from a2a_firewall.proxy.ca import CertificateAuthority
 from a2a_firewall.proxy.server import A2AProxyServer
@@ -88,7 +86,8 @@ async def test_proxy_connect_tunnel_and_tls_mitm_block():
                 data = resp.json()
                 assert data["error"]["type"] == "a2a_firewall_blocked"
                 assert any(
-                    "ips_signature" in v.get("violation_type", "") or "forbidden_pattern" in v.get("violation_type", "")
+                    "ips_signature" in v.get("violation_type", "")
+                    or "forbidden_pattern" in v.get("violation_type", "")
                     for v in data["error"]["violations"]
                 )
 

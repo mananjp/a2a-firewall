@@ -9,8 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-logger = logging.getLogger("a2a_firewall")
-
 from a2a_firewall.api.routes import (
     agents,
     audit,
@@ -40,12 +38,14 @@ from a2a_firewall.api.routes import (
 )
 from a2a_firewall.core.config import settings
 from a2a_firewall.core.network_security import check_ip_allowlist, extract_client_ip
-from a2a_firewall.core.rate_limit import check_workspace, check_workspace_async
+from a2a_firewall.core.rate_limit import check_workspace
 from a2a_firewall.core.rate_limit import configure as configure_rate_limit
 from a2a_firewall.core.security import hash_api_key
 from a2a_firewall.core.telemetry import setup_telemetry
 from a2a_firewall.db.database import AsyncSessionLocal
 from a2a_firewall.db.models import Agent, Workspace
+
+logger = logging.getLogger("a2a_firewall")
 
 app = FastAPI(title="A2A Firewall", version="0.2.0")
 
@@ -145,7 +145,10 @@ setup_telemetry(app)
 # Startup status logging
 _otel_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() == "true"
 logger.info("OpenTelemetry: %s", "DISABLED" if _otel_disabled else "ACTIVE")
-logger.info("Auth mode: %s", "DEV (email-only login enabled)" if settings.DEBUG else "PRODUCTION (password required)")
+logger.info(
+    "Auth mode: %s",
+    "DEV (email-only login enabled)" if settings.DEBUG else "PRODUCTION (password required)",
+)
 
 app.include_router(workspaces.router, prefix="/v1/workspaces", tags=["workspaces"])
 app.include_router(auth.router, prefix="/v1/auth", tags=["auth"])
@@ -178,4 +181,3 @@ app.include_router(network.router, prefix="/v1/network", tags=["network"])
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"status": "ok", "version": "0.2.0"}
-

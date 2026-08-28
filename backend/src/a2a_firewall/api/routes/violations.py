@@ -61,8 +61,8 @@ async def resolve_violation(
     v = result.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "Violation not found")
-    v.resolved = True  # type: ignore[assignment]
-    v.resolved_by = "admin"  # type: ignore[assignment]
-    v.resolved_at = datetime.now(UTC)  # type: ignore[assignment]
+    v.resolved = True
+    v.resolved_by = "admin"
+    v.resolved_at = datetime.now(UTC)
     await db.commit()
     return {"resolved": True}

@@ -10,11 +10,7 @@ Tests for the production password authentication system:
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 # Test the auth helper functions directly
 from a2a_firewall.api.routes.auth import (
@@ -84,6 +80,7 @@ class TestPasswordValidation:
     def test_short_password_rejected(self) -> None:
         """Passwords below minimum length should be rejected."""
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             _validate_password("short")
         assert exc_info.value.status_code == 422
@@ -91,6 +88,7 @@ class TestPasswordValidation:
     def test_empty_password_rejected(self) -> None:
         """Empty passwords should be rejected."""
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException):
             _validate_password("")
 
@@ -101,6 +99,7 @@ class TestPasswordValidation:
     def test_one_below_min_rejected(self) -> None:
         """Password one character below minimum should be rejected."""
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException):
             _validate_password("a" * (MIN_PASSWORD_LENGTH - 1))
 
@@ -123,7 +122,9 @@ class TestBruteForceResistance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         # Argon2id should take at least 1ms (usually 10-100ms)
-        assert elapsed_ms > 1, f"Argon2id hashing too fast ({elapsed_ms:.2f}ms) — potential misconfiguration"
+        assert elapsed_ms > 1, (
+            f"Argon2id hashing too fast ({elapsed_ms:.2f}ms) — potential misconfiguration"
+        )
 
     def test_verification_constant_time_ish(self) -> None:
         """Verify that password verification timing is roughly consistent.

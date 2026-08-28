@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,10 +26,22 @@ SQL_INJECTION_PATTERNS: list[tuple[str, str, float]] = [
     (r"(?i)\bUNION(\s+ALL)?\s+SELECT\b", "union_select_sql_injection", 0.95),
     (r"(?i)\bOR\s+['\"\d\w]+\s*=\s*['\"\d\w]+", "tautology_sql_injection", 0.90),
     (r"(?i)\b(OR|AND)\s+1\s*=\s*1\b|\b(OR|AND)\s+'1'\s*=\s*'1'", "tautology_sql_injection", 0.90),
-    (r"(?i);\s*(DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|EXEC|EXECUTE)\s+[a-zA-Z_]", "stacked_query_sql_injection", 0.95),
+    (
+        r"(?i);\s*(DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|EXEC|EXECUTE)\s+[a-zA-Z_]",
+        "stacked_query_sql_injection",
+        0.95,
+    ),
     (r"(?i)(/\*.*?\*/|--\s*[\w\d']|;\s*--)", "comment_obfuscation_sql_injection", 0.85),
-    (r"(?i)\b(WAITFOR\s+DELAY|SLEEP\s*\(|PG_SLEEP\s*\(|BENCHMARK\s*\()", "time_based_blind_sql_injection", 0.90),
-    (r"(?i)\b(INFORMATION_SCHEMA|LOAD_FILE|INTO\s+OUTFILE|EXTRACTVALUE)\b", "data_exfiltration_sql_injection", 0.95),
+    (
+        r"(?i)\b(WAITFOR\s+DELAY|SLEEP\s*\(|PG_SLEEP\s*\(|BENCHMARK\s*\()",
+        "time_based_blind_sql_injection",
+        0.90,
+    ),
+    (
+        r"(?i)\b(INFORMATION_SCHEMA|LOAD_FILE|INTO\s+OUTFILE|EXTRACTVALUE)\b",
+        "data_exfiltration_sql_injection",
+        0.95,
+    ),
     (r"(?i)\b(XP_CMDSHELL|SP_EXECUTESQL)\b", "stored_procedure_sql_injection", 0.95),
 ]
 
@@ -329,7 +341,7 @@ async def run_rules(
         if not _rule_matches(rule, request_data, sender):
             continue
         matched_rule_id = str(rule.id)
-        matched_rule_action = cast(str, rule.action) if rule.action else None
+        matched_rule_action = rule.action if rule.action else None
         if rule.action == "block":
             violations.append(
                 {

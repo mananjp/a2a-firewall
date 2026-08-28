@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -62,7 +61,7 @@ class MCPHTTPGateway:
                     json=payload,
                     headers={k: v for k, v in (headers or {}).items() if k.lower() != "host"},
                 )
-                return resp.json()
+                return cast("dict[str, Any]", resp.json())
 
         # Clean standalone pass
         return JSONRPCResponse(

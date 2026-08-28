@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -60,6 +60,7 @@ def _to_mem_cache(result: CVEResult) -> None:
 # CVSS severity band helpers
 # ---------------------------------------------------------------------------
 
+
 def cvss_severity(score: float) -> str:
     """Map a CVSS v3 base score to the standard severity band."""
     if score >= 9.0:
@@ -86,6 +87,7 @@ def severity_color(severity: str) -> str:
 # ---------------------------------------------------------------------------
 # NVD API lookup
 # ---------------------------------------------------------------------------
+
 
 async def lookup_cve(cve_id: str) -> CVEResult:
     """Fetch CVE details from NVD. Returns cached data when available.

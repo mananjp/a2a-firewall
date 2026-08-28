@@ -96,6 +96,6 @@ async def delete_policy(
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Rule not found")
-    rule.is_active = False  # type: ignore[assignment]
+    rule.is_active = False
     await db.commit()
     return {"deleted": rule_id}

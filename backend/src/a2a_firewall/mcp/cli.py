@@ -18,10 +18,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="A2A Firewall MCP Gateway CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    wrap_parser = subparsers.add_parser("wrap", help="Wrap a stdio MCP server subprocess with A2A governance")
-    wrap_parser.add_argument("--read-only", action="store_true", help="Enforce read-only mode for tools")
-    wrap_parser.add_argument("--allowed-path", action="append", help="Allowed sandbox directory (can specify multiple)")
-    wrap_parser.add_argument("cmd", nargs=argparse.REMAINDER, help="Target MCP server command to run")
+    wrap_parser = subparsers.add_parser(
+        "wrap", help="Wrap a stdio MCP server subprocess with A2A governance"
+    )
+    wrap_parser.add_argument(
+        "--read-only", action="store_true", help="Enforce read-only mode for tools"
+    )
+    wrap_parser.add_argument(
+        "--allowed-path", action="append", help="Allowed sandbox directory (can specify multiple)"
+    )
+    wrap_parser.add_argument(
+        "cmd", nargs=argparse.REMAINDER, help="Target MCP server command to run"
+    )
 
     args = parser.parse_args()
 

@@ -88,9 +88,7 @@ def _verify_password(password_hash: str, password: str) -> bool:
 
 
 @router.post("/register")
-async def register(
-    body: RegisterRequest, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Create a new workspace with email + password authentication.
 
     Available in both dev and production mode. In production mode this is
@@ -99,9 +97,7 @@ async def register(
     _validate_password(body.password)
 
     # Check for existing workspace
-    result = await db.execute(
-        select(Workspace).where(Workspace.admin_email == body.email)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=409,
@@ -131,9 +127,7 @@ async def register(
 
 
 @router.post("/login")
-async def login(
-    body: LoginRequest, db: AsyncSession = Depends(get_db)
-) -> dict[str, Any]:
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Authenticate and return a (rotated) API key.
 
     DEV MODE (DEBUG=true): email-only login — no password required.
@@ -143,9 +137,7 @@ async def login(
     """
     # ── DEV MODE: original behavior ──
     if settings.DEBUG and not body.password:
-        result = await db.execute(
-            select(Workspace).where(Workspace.admin_email == body.email)
-        )
+        result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
         ws = result.scalar_one_or_none()
 
         if not ws:
@@ -166,7 +158,7 @@ async def login(
             }
 
         new_raw, new_hash = generate_api_key("ws")
-        ws.api_key_hash = new_hash  # type: ignore[assignment]
+        ws.api_key_hash = new_hash
         await db.commit()
         await db.refresh(ws)
         return {
@@ -183,9 +175,7 @@ async def login(
             detail="Password is required for production login.",
         )
 
-    result = await db.execute(
-        select(Workspace).where(Workspace.admin_email == body.email)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
     ws = result.scalar_one_or_none()
 
     if not ws or not ws.password_hash:
@@ -203,7 +193,7 @@ async def login(
 
     # Rotate API key on successful login
     new_raw, new_hash = generate_api_key("ws")
-    ws.api_key_hash = new_hash  # type: ignore[assignment]
+    ws.api_key_hash = new_hash
     await db.commit()
     await db.refresh(ws)
 
@@ -222,9 +212,7 @@ async def change_password(
     """Change workspace password. Requires the current password."""
     _validate_password(body.new_password)
 
-    result = await db.execute(
-        select(Workspace).where(Workspace.admin_email == body.email)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
     ws = result.scalar_one_or_none()
 
     if not ws or not ws.password_hash:
@@ -239,7 +227,7 @@ async def change_password(
             detail="Invalid email or current password.",
         )
 
-    ws.password_hash = _hash_password(body.new_password)  # type: ignore[assignment]
+    ws.password_hash = _hash_password(body.new_password)
     await db.commit()
 
     return {"message": "Password changed successfully."}

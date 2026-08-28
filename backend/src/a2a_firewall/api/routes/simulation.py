@@ -202,8 +202,19 @@ AGENT_PRIOR_KNOWLEDGE: dict[str, dict[str, Any]] = {
     "Fraud Investigation": {
         "role": "Senior AML & Fraud Anomaly Investigator",
         "trust_tier": "Medium / Elevated Scrutiny (Tier 2)",
-        "capabilities": ["investigation", "fraud_detection", "case_management", "payment_hold", "payment_approval"],
-        "accessible_tools": ["SAR_Filing_Tool", "Anomaly_Graph_Lookup", "Payment_Hold_Action", "Sanctions_Screening"],
+        "capabilities": [
+            "investigation",
+            "fraud_detection",
+            "case_management",
+            "payment_hold",
+            "payment_approval",
+        ],
+        "accessible_tools": [
+            "SAR_Filing_Tool",
+            "Anomaly_Graph_Lookup",
+            "Payment_Hold_Action",
+            "Sanctions_Screening",
+        ],
         "known_context": [
             "30-day cross-account velocity indices and geographic anomaly models",
             "Synthetic identity correlation scores and OFAC watchlists",
@@ -218,8 +229,17 @@ AGENT_PRIOR_KNOWLEDGE: dict[str, dict[str, Any]] = {
     "KYC Agent": {
         "role": "Know Your Customer & Biometric Identity Verifier",
         "trust_tier": "Medium / Identity Specialist (Tier 2)",
-        "capabilities": ["identity_verification", "document_check", "compliance", "verification_request"],
-        "accessible_tools": ["Passport_OCR_Verifier", "Liveness_Detection_API", "National_Identity_DB"],
+        "capabilities": [
+            "identity_verification",
+            "document_check",
+            "compliance",
+            "verification_request",
+        ],
+        "accessible_tools": [
+            "Passport_OCR_Verifier",
+            "Liveness_Detection_API",
+            "National_Identity_DB",
+        ],
         "known_context": [
             "Government ID document tamper verification algorithms",
             "Biometric face-match confidence thresholds (98%+ required for tier 1)",
@@ -234,7 +254,12 @@ AGENT_PRIOR_KNOWLEDGE: dict[str, dict[str, Any]] = {
     "Payments Agent": {
         "role": "High-Value Transaction Settlement & Wire Processor",
         "trust_tier": "High Privilege / Ledger Core (Tier 1)",
-        "capabilities": ["payment_processing", "wire_transfer", "hold_management", "payment_confirmation"],
+        "capabilities": [
+            "payment_processing",
+            "wire_transfer",
+            "hold_management",
+            "payment_confirmation",
+        ],
         "accessible_tools": ["Fedwire_Gateway", "SWIFT_Settlement_API", "Core_Banking_Ledger"],
         "known_context": [
             "Direct interface to banking settlement rail APIs",
@@ -282,7 +307,9 @@ async def run_simulation(
         payload_dict = step.payload if isinstance(step.payload, dict) else {}
         resource_type = step.resource_type or payload_dict.get("resource_type")
         action = step.action or payload_dict.get("action")
-        resource_id = step.resource_id or payload_dict.get("resource_id") or payload_dict.get("account_id")
+        resource_id = (
+            step.resource_id or payload_dict.get("resource_id") or payload_dict.get("account_id")
+        )
 
         # Ensure permission exists for the simulation step
         perm_check = await db.execute(

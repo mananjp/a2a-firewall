@@ -62,9 +62,9 @@ async def decide_review(
         raise HTTPException(404, "Review item not found")
     if item.status != "pending":
         raise HTTPException(409, f"Already {item.status}")
-    item.status = "approved" if body.action == "approve" else "rejected"  # type: ignore[assignment]
-    item.reviewer_notes = body.notes  # type: ignore[assignment]
-    item.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+    item.status = "approved" if body.action == "approve" else "rejected"
+    item.reviewer_notes = body.notes
+    item.decided_at = datetime.now(UTC)
     await db.commit()
     return {"status": item.status, "decided_at": str(item.decided_at)}
 

@@ -36,7 +36,9 @@ class RetentionPolicyUpdate(BaseModel):
     telemetry_days: int | None = Field(None, ge=1, le=3650)
     violations_days: int | None = Field(None, ge=30, le=3650)
     soc_alerts_days: int | None = Field(None, ge=30, le=3650)
-    audit_log_days: int | None = Field(None, ge=365, le=3650, description="Minimum 365 days required for regulatory compliance")
+    audit_log_days: int | None = Field(
+        None, ge=365, le=3650, description="Minimum 365 days required for regulatory compliance"
+    )
     auto_purge_enabled: bool | None = None
     scrub_pii_after_days: int | None = Field(None, ge=1, le=365)
 
@@ -95,15 +97,24 @@ async def update_retention_policy(
         policy.telemetry_days = body.telemetry_days
     if body.violations_days is not None:
         if body.violations_days < MINIMUM_COMPLIANCE_DAYS["violations"]:
-            raise HTTPException(400, f"violations_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['violations']} days")
+            raise HTTPException(
+                400,
+                f"violations_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['violations']} days",
+            )
         policy.violations_days = body.violations_days
     if body.soc_alerts_days is not None:
         if body.soc_alerts_days < MINIMUM_COMPLIANCE_DAYS["soc_alerts"]:
-            raise HTTPException(400, f"soc_alerts_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['soc_alerts']} days")
+            raise HTTPException(
+                400,
+                f"soc_alerts_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['soc_alerts']} days",
+            )
         policy.soc_alerts_days = body.soc_alerts_days
     if body.audit_log_days is not None:
         if body.audit_log_days < MINIMUM_COMPLIANCE_DAYS["audit_logs"]:
-            raise HTTPException(400, f"audit_log_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['audit_logs']} days")
+            raise HTTPException(
+                400,
+                f"audit_log_days cannot be less than compliance minimum of {MINIMUM_COMPLIANCE_DAYS['audit_logs']} days",
+            )
         policy.audit_log_days = body.audit_log_days
     if body.auto_purge_enabled is not None:
         policy.auto_purge_enabled = body.auto_purge_enabled
@@ -165,11 +176,23 @@ async def get_storage_stats(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get active record counts per storage table."""
-    tasks_count = (await db.execute(select(func.count(Task.id)).where(Task.workspace_id == ws.id))).scalar() or 0
-    telemetry_count = (await db.execute(select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == ws.id))).scalar() or 0
-    violations_count = (await db.execute(select(func.count(Violation.id)).where(Violation.workspace_id == ws.id))).scalar() or 0
-    soc_count = (await db.execute(select(func.count(SOCAlert.id)).where(SOCAlert.workspace_id == ws.id))).scalar() or 0
-    audit_count = (await db.execute(select(func.count(AuditLog.id)).where(AuditLog.workspace_id == ws.id))).scalar() or 0
+    tasks_count = (
+        await db.execute(select(func.count(Task.id)).where(Task.workspace_id == ws.id))
+    ).scalar() or 0
+    telemetry_count = (
+        await db.execute(
+            select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == ws.id)
+        )
+    ).scalar() or 0
+    violations_count = (
+        await db.execute(select(func.count(Violation.id)).where(Violation.workspace_id == ws.id))
+    ).scalar() or 0
+    soc_count = (
+        await db.execute(select(func.count(SOCAlert.id)).where(SOCAlert.workspace_id == ws.id))
+    ).scalar() or 0
+    audit_count = (
+        await db.execute(select(func.count(AuditLog.id)).where(AuditLog.workspace_id == ws.id))
+    ).scalar() or 0
 
     return {
         "workspace_id": str(ws.id),

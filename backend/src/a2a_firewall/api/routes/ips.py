@@ -58,7 +58,7 @@ async def set_ips_mode(
     if body.ips_mode not in valid_modes:
         raise HTTPException(400, f"Invalid IPS mode. Must be one of: {', '.join(valid_modes)}")
 
-    ws.ips_mode = body.ips_mode  # type: ignore[assignment]
+    ws.ips_mode = body.ips_mode
     await db.commit()
     await db.refresh(ws)
     return {"ips_mode": ws.ips_mode}
@@ -84,7 +84,7 @@ async def reinstate_agent(
     if agent.status != "suspended":
         raise HTTPException(400, "Agent is not suspended")
 
-    agent.status = "active"  # type: ignore[assignment]
+    agent.status = "active"
 
     # Reset violation counter
     counter = get_violation_counter()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,7 +59,17 @@ class MCPPolicyEngine:
 
         # 3. Read-only mode enforcement
         if self.policy.read_only_mode:
-            mutating_keywords = ["write", "delete", "remove", "create", "update", "exec", "run", "drop", "modify"]
+            mutating_keywords = [
+                "write",
+                "delete",
+                "remove",
+                "create",
+                "update",
+                "exec",
+                "run",
+                "drop",
+                "modify",
+            ]
             if any(kw in tool_name.lower() for kw in mutating_keywords):
                 return MCPDecision(
                     allowed=False,
@@ -150,7 +159,6 @@ class MCPPolicyEngine:
 
     def _check_dangerous_commands(self, args: dict[str, Any]) -> MCPDecision | None:
         """Check for destructive shell commands."""
-        cmd_keys = ["command", "cmd", "script", "bash", "sh", "exec", "query"]
 
         def _scan_str(val: str) -> MCPDecision | None:
             for pattern in self.policy.blocked_commands_regex:
@@ -164,12 +172,8 @@ class MCPPolicyEngine:
                     )
             return None
 
-        for k, v in args.items():
-            if any(ck in k.lower() for ck in cmd_keys) and isinstance(v, str):
-                res = _scan_str(v)
-                if res:
-                    return res
-            elif isinstance(v, str):
+        for _, v in args.items():
+            if isinstance(v, str):
                 res = _scan_str(v)
                 if res:
                     return res

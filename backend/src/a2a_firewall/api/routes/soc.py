@@ -6,26 +6,25 @@ import asyncio
 import json
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import desc, select, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
 from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import (
-    DelegationChain,
     RuleToMitreTechnique,
     SOCAlert,
-    Violation,
     Workspace,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -136,7 +135,10 @@ async def create_soc_alert(
 @router.get("/alerts")
 async def list_soc_alerts(
     severity: str | None = Query(None, description="Filter by severity: P1, P2, P3, P4"),
-    status: str | None = Query(None, description="Filter by status: new, acknowledged, investigating, resolved, false_positive"),
+    status: str | None = Query(
+        None,
+        description="Filter by status: new, acknowledged, investigating, resolved, false_positive",
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     ws: Workspace = Depends(get_current_workspace),
@@ -151,9 +153,7 @@ async def list_soc_alerts(
         query = query.where(SOCAlert.status == status)
 
     # Total count
-    count_query = select(func.count()).select_from(
-        query.subquery()
-    )
+    count_query = select(func.count()).select_from(query.subquery())
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
@@ -170,7 +170,9 @@ async def list_soc_alerts(
             {
                 "id": str(a.id),
                 "workspace_id": str(a.workspace_id),
-                "source_violation_id": str(a.source_violation_id) if a.source_violation_id else None,
+                "source_violation_id": str(a.source_violation_id)
+                if a.source_violation_id
+                else None,
                 "task_id": str(a.task_id) if a.task_id else None,
                 "severity": a.severity,
                 "status": a.status,
@@ -215,10 +217,10 @@ async def update_soc_alert(
     if body.status is not None:
         if body.status not in valid_statuses:
             raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-        alert.status = body.status  # type: ignore[assignment]
+        alert.status = body.status
 
     if body.assigned_analyst is not None:
-        alert.assigned_analyst = body.assigned_analyst  # type: ignore[assignment]
+        alert.assigned_analyst = body.assigned_analyst
 
     await db.commit()
     await db.refresh(alert)
@@ -244,9 +246,7 @@ async def soc_alert_summary(
     total = total_result.scalar() or 0
 
     new_result = await db.execute(
-        select(func.count()).select_from(
-            base.where(SOCAlert.status == "new").subquery()
-        )
+        select(func.count()).select_from(base.where(SOCAlert.status == "new").subquery())
     )
     new_count = new_result.scalar() or 0
 
@@ -260,18 +260,14 @@ async def soc_alert_summary(
     by_severity: dict[str, int] = {}
     for sev in ("P1", "P2", "P3", "P4"):
         r = await db.execute(
-            select(func.count()).select_from(
-                base.where(SOCAlert.severity == sev).subquery()
-            )
+            select(func.count()).select_from(base.where(SOCAlert.severity == sev).subquery())
         )
         by_severity[sev] = r.scalar() or 0
 
     by_status: dict[str, int] = {}
     for st in ("new", "acknowledged", "investigating", "resolved", "false_positive"):
         r = await db.execute(
-            select(func.count()).select_from(
-                base.where(SOCAlert.status == st).subquery()
-            )
+            select(func.count()).select_from(base.where(SOCAlert.status == st).subquery())
         )
         by_status[st] = r.scalar() or 0
 
@@ -297,7 +293,7 @@ async def soc_alerts_stream(
 
     last_check = datetime.utcnow()
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         nonlocal last_check
         while True:
             if await request.is_disconnected():

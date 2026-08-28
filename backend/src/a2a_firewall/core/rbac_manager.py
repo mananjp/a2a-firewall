@@ -51,14 +51,21 @@ STANDARD_ROLES: dict[str, dict[str, Any]] = {
         "name": "Security Administrator",
         "description": "Manage security policies, network rules, IP allowlists, data retention, compliance, and IPS.",
         "permissions": [
-            "policies:read", "policies:write",
-            "network:read", "network:manage",
-            "retention:read", "retention:manage",
-            "compliance:read", "compliance:manage",
+            "policies:read",
+            "policies:write",
+            "network:read",
+            "network:manage",
+            "retention:read",
+            "retention:manage",
+            "compliance:read",
+            "compliance:manage",
             "spend:read",
-            "audit:read", "audit:export",
-            "agents:read", "agents:write",
-            "soc:read", "soc:write",
+            "audit:read",
+            "audit:export",
+            "agents:read",
+            "agents:write",
+            "soc:read",
+            "soc:write",
             "members:read",
         ],
     },
@@ -66,7 +73,8 @@ STANDARD_ROLES: dict[str, dict[str, Any]] = {
         "name": "SOC Analyst",
         "description": "Investigate security violations, triage alerts, inspect traces, and review quarantined tasks.",
         "permissions": [
-            "soc:read", "soc:write",
+            "soc:read",
+            "soc:write",
             "audit:read",
             "compliance:read",
             "agents:read",
@@ -80,8 +88,10 @@ STANDARD_ROLES: dict[str, dict[str, Any]] = {
         "name": "Compliance & Security Auditor",
         "description": "Read-only access to all audit logs, delegation chains, compliance posture, and export features.",
         "permissions": [
-            "audit:read", "audit:export",
-            "compliance:read", "compliance:manage",
+            "audit:read",
+            "audit:export",
+            "compliance:read",
+            "compliance:manage",
             "spend:read",
             "policies:read",
             "network:read",
@@ -95,7 +105,8 @@ STANDARD_ROLES: dict[str, dict[str, Any]] = {
         "name": "Developer / Integration Engineer",
         "description": "Register and manage agents, test task schemas, run simulations, and view debugging telemetry.",
         "permissions": [
-            "agents:read", "agents:write",
+            "agents:read",
+            "agents:write",
             "policies:read",
             "spend:read",
             "soc:read",
@@ -159,4 +170,4 @@ def get_role_permissions(role: str, custom_permissions: list[str] | None = None)
     base = set(role_def.get("permissions", []))
     if custom_permissions:
         base.update(custom_permissions)
-    return sorted(list(base))
+    return sorted(base)

@@ -36,6 +36,7 @@ class PIIMatch:
 # Luhn check for card number validation
 # ---------------------------------------------------------------------------
 
+
 def _luhn_check(number: str) -> bool:
     """Validate a numeric string using the Luhn algorithm."""
     digits = [int(d) for d in number if d.isdigit()]
@@ -68,54 +69,34 @@ _CARD_PATTERN = re.compile(
 )
 
 # Card number with separators (spaces or dashes)
-_CARD_SEPARATED_PATTERN = re.compile(
-    r"\b(\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4})\b"
-)
+_CARD_SEPARATED_PATTERN = re.compile(r"\b(\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4})\b")
 
 # Aadhaar (India) — 12 digits, starting with 2-9
-_AADHAAR_PATTERN = re.compile(
-    r"\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b"
-)
+_AADHAAR_PATTERN = re.compile(r"\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b")
 
 # US SSN
-_SSN_PATTERN = re.compile(
-    r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b"
-)
+_SSN_PATTERN = re.compile(r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b")
 
 # Email
-_EMAIL_PATTERN = re.compile(
-    r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"
-)
+_EMAIL_PATTERN = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
 
 # Phone (international, with optional +country code)
-_PHONE_PATTERN = re.compile(
-    r"(?:\+\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{4}\b"
-)
+_PHONE_PATTERN = re.compile(r"(?:\+\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{4}\b")
 
 # Medical record number (generic pattern)
-_MRN_PATTERN = re.compile(
-    r"\bMRN[\s:#-]*\d{6,12}\b", re.IGNORECASE
-)
+_MRN_PATTERN = re.compile(r"\bMRN[\s:#-]*\d{6,12}\b", re.IGNORECASE)
 
 # ICD-10 diagnosis code
-_ICD10_PATTERN = re.compile(
-    r"\b[A-TV-Z]\d{2}(?:\.\d{1,4})?\b"
-)
+_ICD10_PATTERN = re.compile(r"\b[A-TV-Z]\d{2}(?:\.\d{1,4})?\b")
 
 # US Passport
-_PASSPORT_US_PATTERN = re.compile(
-    r"\b[A-Z]\d{8}\b"
-)
+_PASSPORT_US_PATTERN = re.compile(r"\b[A-Z]\d{8}\b")
 
 # IBAN (simplified)
-_IBAN_PATTERN = re.compile(
-    r"\b[A-Z]{2}\d{2}\s?[\dA-Z]{4}\s?(?:[\dA-Z]{4}\s?){2,7}[\dA-Z]{1,4}\b"
-)
+_IBAN_PATTERN = re.compile(r"\b[A-Z]{2}\d{2}\s?[\dA-Z]{4}\s?(?:[\dA-Z]{4}\s?){2,7}[\dA-Z]{1,4}\b")
 
 # Indian PAN (Permanent Account Number)
-_INDIAN_PAN_PATTERN = re.compile(
-    r"\b[A-Z]{5}\d{4}[A-Z]\b"
-)
+_INDIAN_PAN_PATTERN = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")
 
 
 # ---------------------------------------------------------------------------

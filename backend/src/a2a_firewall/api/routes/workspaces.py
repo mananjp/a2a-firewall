@@ -79,32 +79,34 @@ async def update_my_workspace(
     if body.fail_mode is not None:
         if body.fail_mode not in ("open", "closed"):
             raise HTTPException(status_code=400, detail="fail_mode must be 'open' or 'closed'")
-        ws.fail_mode = body.fail_mode  # type: ignore[assignment]
+        ws.fail_mode = body.fail_mode
     if body.groq_threshold is not None:
         if not 0 <= body.groq_threshold <= 1:
             raise HTTPException(status_code=400, detail="groq_threshold must be between 0 and 1")
-        ws.groq_threshold = body.groq_threshold  # type: ignore[assignment]
+        ws.groq_threshold = body.groq_threshold
     if body.block_threshold is not None:
         if not 0 <= body.block_threshold <= 1:
             raise HTTPException(status_code=400, detail="block_threshold must be between 0 and 1")
-        ws.block_threshold = body.block_threshold  # type: ignore[assignment]
+        ws.block_threshold = body.block_threshold
     if body.review_threshold is not None:
         if not 0 <= body.review_threshold <= 1:
             raise HTTPException(status_code=400, detail="review_threshold must be between 0 and 1")
-        ws.review_threshold = body.review_threshold  # type: ignore[assignment]
+        ws.review_threshold = body.review_threshold
     if body.default_deny is not None:
-        ws.default_deny = body.default_deny  # type: ignore[assignment]
+        ws.default_deny = body.default_deny
     if body.jurisdiction is not None:
-        ws.jurisdiction = body.jurisdiction  # type: ignore[assignment]
+        ws.jurisdiction = body.jurisdiction
     if body.industry is not None:
-        ws.industry = body.industry  # type: ignore[assignment]
+        ws.industry = body.industry
     if body.compliance_frameworks is not None:
-        ws.compliance_frameworks = body.compliance_frameworks  # type: ignore[assignment]
+        ws.compliance_frameworks = body.compliance_frameworks
     if body.ips_mode is not None:
         valid_modes = {"monitor", "block", "block_and_suspend"}
         if body.ips_mode not in valid_modes:
-            raise HTTPException(status_code=400, detail=f"ips_mode must be one of: {', '.join(valid_modes)}")
-        ws.ips_mode = body.ips_mode  # type: ignore[assignment]
+            raise HTTPException(
+                status_code=400, detail=f"ips_mode must be one of: {', '.join(valid_modes)}"
+            )
+        ws.ips_mode = body.ips_mode
     await db.commit()
     await db.refresh(ws)
     return {

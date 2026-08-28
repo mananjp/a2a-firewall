@@ -14,7 +14,6 @@ table with a `framework_tag` column for traceability.
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from typing import Any
@@ -297,9 +296,7 @@ async def get_installed_frameworks(
 ) -> list[dict[str, Any]]:
     """List all installed compliance frameworks for a workspace."""
     result = await db.execute(
-        select(ComplianceRulePack).where(
-            ComplianceRulePack.workspace_id == workspace_id
-        )
+        select(ComplianceRulePack).where(ComplianceRulePack.workspace_id == workspace_id)
     )
     packs = result.scalars().all()
     return [
@@ -314,9 +311,7 @@ async def get_installed_frameworks(
     ]
 
 
-def suggest_frameworks(
-    jurisdiction: str | None, industry: str | None
-) -> list[str]:
+def suggest_frameworks(jurisdiction: str | None, industry: str | None) -> list[str]:
     """Suggest compliance frameworks based on jurisdiction and industry."""
     frameworks: set[str] = set()
     if jurisdiction:

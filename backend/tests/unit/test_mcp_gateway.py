@@ -1,10 +1,11 @@
 """Unit tests for Model Context Protocol (MCP) Gateway and Tool Policy Engine."""
 
 import json
+
 import pytest
 
 from a2a_firewall.mcp.http_gateway import MCPHTTPGateway
-from a2a_firewall.mcp.models import JSONRPCRequest, MCPPolicy, MCPToolCall
+from a2a_firewall.mcp.models import MCPPolicy, MCPToolCall
 from a2a_firewall.mcp.policy_engine import MCPPolicyEngine
 from a2a_firewall.mcp.stdio_gateway import MCPStdioGateway
 
@@ -38,7 +39,7 @@ def test_mcp_policy_blocks_blacklisted_tool():
 def test_mcp_policy_blocks_path_traversal():
     """Verify directory traversal attacks in tool arguments are blocked."""
     engine = MCPPolicyEngine()
-    
+
     # Attack 1: Relative traversal
     call1 = MCPToolCall(
         name="read_document",
@@ -78,7 +79,9 @@ def test_mcp_policy_blocks_sql_injection_in_arguments():
     engine = MCPPolicyEngine()
     call = MCPToolCall(
         name="query_database",
-        arguments={"sql": "SELECT * FROM orders WHERE id='1' UNION SELECT username, password FROM users--"},
+        arguments={
+            "sql": "SELECT * FROM orders WHERE id='1' UNION SELECT username, password FROM users--"
+        },
         rpc_id=6,
     )
     decision = engine.evaluate_tool_call(call)
@@ -90,16 +93,18 @@ def test_mcp_policy_blocks_sql_injection_in_arguments():
 async def test_mcp_stdio_gateway_intercepts_and_synthesizes_error():
     """Verify stdio gateway intercepts dangerous tool call and returns synthetic JSON-RPC error."""
     gateway = MCPStdioGateway(server_cmd=["mock_server"])
-    
-    malicious_rpc = json.dumps({
-        "jsonrpc": "2.0",
-        "id": "req-99",
-        "method": "tools/call",
-        "params": {
-            "name": "delete_all",
-            "arguments": {"target": "../etc/sudoers"},
-        },
-    })
+
+    malicious_rpc = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": "req-99",
+            "method": "tools/call",
+            "params": {
+                "name": "delete_all",
+                "arguments": {"target": "../etc/sudoers"},
+            },
+        }
+    )
 
     resp_str = await gateway.handle_client_message(malicious_rpc)
     assert resp_str is not None
@@ -116,7 +121,7 @@ async def test_mcp_stdio_gateway_intercepts_and_synthesizes_error():
 async def test_mcp_http_gateway_validation():
     """Verify MCP HTTP gateway returns error response for malicious payloads."""
     gateway = MCPHTTPGateway()
-    
+
     payload = {
         "jsonrpc": "2.0",
         "id": 101,

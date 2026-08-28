@@ -9,6 +9,7 @@ threshold (default 7.0 = High).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from typing import Any
@@ -18,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.core.config import settings
 from a2a_firewall.db.models import AgentSoftwareInventory
-from a2a_firewall.detection.cve_lookup import cvss_severity, match_component
+from a2a_firewall.detection.cve_lookup import match_component
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +46,14 @@ async def run_cve_risk(
     agent_ids: list[uuid.UUID] = [sender.id]
     receiver_id_str = request_data.get("receiver_agent_id")
     if receiver_id_str:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             agent_ids.append(uuid.UUID(receiver_id_str))
-        except (ValueError, TypeError):
-            pass
 
     threshold = settings.CVE_CVSS_THRESHOLD
 
     for agent_id in agent_ids:
         result = await db.execute(
-            select(AgentSoftwareInventory).where(
-                AgentSoftwareInventory.agent_id == agent_id
-            )
+            select(AgentSoftwareInventory).where(AgentSoftwareInventory.agent_id == agent_id)
         )
         components = result.scalars().all()
 

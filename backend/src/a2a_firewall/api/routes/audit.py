@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import uuid
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -67,7 +68,7 @@ async def get_task_delegation_chain(
     if agent_ids:
         agents_res = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
         for ag in agents_res.scalars().all():
-            agents_map[cast(uuid.UUID, ag.id)] = cast(str, ag.name)
+            agents_map[ag.id] = ag.name
 
     hops = []
     for dc, sender_agent in rows:
@@ -134,7 +135,7 @@ async def export_delegation_chains(
     if agent_ids:
         agents_res = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
         for ag in agents_res.scalars().all():
-            agents_map[cast(uuid.UUID, ag.id)] = cast(str, ag.name)
+            agents_map[ag.id] = ag.name
 
     events = []
     for dc, sender_agent in rows:
@@ -219,15 +220,11 @@ async def list_enterprise_audit_logs(
     if entity_type:
         stmt = stmt.where(AuditLog.entity_type == entity_type)
     if from_date:
-        try:
+        with contextlib.suppress(ValueError):
             stmt = stmt.where(AuditLog.created_at >= datetime.fromisoformat(from_date))
-        except ValueError:
-            pass
     if to_date:
-        try:
+        with contextlib.suppress(ValueError):
             stmt = stmt.where(AuditLog.created_at <= datetime.fromisoformat(to_date))
-        except ValueError:
-            pass
     if search:
         stmt = stmt.where(
             (AuditLog.description.ilike(f"%{search}%"))
@@ -308,7 +305,17 @@ async def export_enterprise_audit_logs(
         output = io.StringIO()
         writer = csv.DictWriter(
             output,
-            fieldnames=["timestamp", "actor", "actor_type", "action", "entity_type", "entity_id", "description", "ip_address", "status"],
+            fieldnames=[
+                "timestamp",
+                "actor",
+                "actor_type",
+                "action",
+                "entity_type",
+                "entity_id",
+                "description",
+                "ip_address",
+                "status",
+            ],
         )
         writer.writeheader()
         for it in items:
@@ -325,4 +332,3 @@ async def export_enterprise_audit_logs(
         "exported_count": len(items),
         "logs": items,
     }
-

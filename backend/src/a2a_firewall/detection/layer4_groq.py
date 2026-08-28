@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
@@ -69,7 +70,7 @@ def _repair_json(raw: str) -> dict[str, Any]:
 
     # 1. Try direct parse first
     try:
-        return json.loads(text)
+        return cast("dict[str, Any]", json.loads(text))
     except json.JSONDecodeError:
         pass
 
@@ -115,7 +116,7 @@ def _repair_json(raw: str) -> dict[str, Any]:
     repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
 
     try:
-        return json.loads(repaired)
+        return cast("dict[str, Any]", json.loads(repaired))
     except json.JSONDecodeError:
         pass
 
@@ -132,10 +133,8 @@ def _repair_json(raw: str) -> dict[str, Any]:
     # risk_score_delta
     m = re.search(r'"risk_score_delta"\s*:\s*(-?[\d.]+)', repaired)
     if m:
-        try:
+        with contextlib.suppress(ValueError):
             result["risk_score_delta"] = float(m.group(1))
-        except ValueError:
-            pass
     # rationale
     m = re.search(r'"rationale"\s*:\s*"((?:[^"\\]|\\.)*)"?', repaired)
     if m:
@@ -143,10 +142,8 @@ def _repair_json(raw: str) -> dict[str, Any]:
     # intent_consistency
     m = re.search(r'"intent_consistency"\s*:\s*([\d.]+)', repaired)
     if m:
-        try:
+        with contextlib.suppress(ValueError):
             result["intent_consistency"] = float(m.group(1))
-        except ValueError:
-            pass
 
     if result:
         result.setdefault("injection_detected", False)
@@ -223,10 +220,9 @@ def _sanitize_and_validate_response(
 
     # 4. Cross-validation with rules: if rules detected an injection but Groq says clean,
     # don't allow Groq to completely wipe out the rule risk (cap negative delta)
-    if rules_risk_delta >= 0.7 and not injection_detected:
-        if risk_score_delta < -0.2:
-            risk_score_delta = -0.2
-            hallucination_flags.append("groq_rules_disagreement_clamped")
+    if rules_risk_delta >= 0.7 and not injection_detected and risk_score_delta < -0.2:
+        risk_score_delta = -0.2
+        hallucination_flags.append("groq_rules_disagreement_clamped")
 
     # 5. Intent consistency (if present)
     intent_consistency = raw_dict.get("intent_consistency")
@@ -401,7 +397,6 @@ async def groq_inspect(
         return _groq_unavailable(latency_ms, "groq_unavailable", str(e))
 
 
-
 def _groq_fallback(latency_ms: int, code: str, detail: str, workspace: Any) -> dict[str, Any]:
     """Handle malformed or hallucinated responses safely according to workspace fail_mode."""
     is_closed = getattr(workspace, "fail_mode", "closed") == "closed"
@@ -426,4 +421,3 @@ def _groq_unavailable(latency_ms: int, code: str, detail: str) -> dict[str, Any]
         "latency_ms": latency_ms,
         "model": settings.GROQ_MODEL,
     }
-

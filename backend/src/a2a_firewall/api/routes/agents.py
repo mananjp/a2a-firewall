@@ -126,7 +126,7 @@ async def suspend_agent(
         from fastapi import HTTPException
 
         raise HTTPException(404, "Agent not found")
-    agent.status = "suspended"  # type: ignore[assignment]
+    agent.status = "suspended"
     await db.commit()
     return {"id": str(agent.id), "status": agent.status}
 
@@ -146,7 +146,7 @@ async def reactivate_agent(
         from fastapi import HTTPException
 
         raise HTTPException(404, "Agent not found")
-    agent.status = "active"  # type: ignore[assignment]
+    agent.status = "active"
     await db.commit()
     return {"id": str(agent.id), "status": agent.status}
 
@@ -167,7 +167,7 @@ async def rotate_agent_key(
 
         raise HTTPException(404, "Agent not found")
     new_raw, new_hash = generate_api_key("agt")
-    agent.api_key_hash = new_hash  # type: ignore[assignment]
+    agent.api_key_hash = new_hash
     await db.commit()
     return {"id": str(agent.id), "api_key": new_raw}
 
@@ -261,6 +261,7 @@ async def get_inventory(
 ) -> dict[str, Any]:
     """Get an agent's software inventory."""
     from fastapi import HTTPException
+
     from a2a_firewall.db.models import AgentSoftwareInventory
 
     agent_res = await db.execute(
@@ -270,9 +271,7 @@ async def get_inventory(
         raise HTTPException(404, "Agent not found")
 
     result = await db.execute(
-        select(AgentSoftwareInventory).where(
-            AgentSoftwareInventory.agent_id == uuid.UUID(agent_id)
-        )
+        select(AgentSoftwareInventory).where(AgentSoftwareInventory.agent_id == uuid.UUID(agent_id))
     )
     components = result.scalars().all()
     return {
@@ -298,8 +297,9 @@ async def scan_agent_vulnerabilities(
 ) -> dict[str, Any]:
     """Scan an agent's software inventory against CVE data."""
     from fastapi import HTTPException
+
     from a2a_firewall.db.models import AgentSoftwareInventory
-    from a2a_firewall.detection.cve_lookup import match_component, cvss_severity
+    from a2a_firewall.detection.cve_lookup import match_component
 
     agent_res = await db.execute(
         select(Agent).where(Agent.id == uuid.UUID(agent_id), Agent.workspace_id == ws.id)
@@ -308,9 +308,7 @@ async def scan_agent_vulnerabilities(
         raise HTTPException(404, "Agent not found")
 
     result = await db.execute(
-        select(AgentSoftwareInventory).where(
-            AgentSoftwareInventory.agent_id == uuid.UUID(agent_id)
-        )
+        select(AgentSoftwareInventory).where(AgentSoftwareInventory.agent_id == uuid.UUID(agent_id))
     )
     components = result.scalars().all()
 
@@ -345,4 +343,3 @@ async def scan_agent_vulnerabilities(
         "vulnerabilities_found": len(vulnerabilities),
         "vulnerabilities": vulnerabilities,
     }
-

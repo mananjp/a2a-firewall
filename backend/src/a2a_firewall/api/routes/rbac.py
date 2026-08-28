@@ -27,8 +27,13 @@ router = APIRouter()
 class MemberCreate(BaseModel):
     email: str
     name: str
-    role: str = Field("developer", description="admin, security_admin, soc_analyst, auditor, developer, viewer, or custom role name")
-    permissions: list[str] = Field(default_factory=list, description="Explicit fine-grained capability grants")
+    role: str = Field(
+        "developer",
+        description="admin, security_admin, soc_analyst, auditor, developer, viewer, or custom role name",
+    )
+    permissions: list[str] = Field(
+        default_factory=list, description="Explicit fine-grained capability grants"
+    )
 
 
 class MemberUpdate(BaseModel):
@@ -118,7 +123,11 @@ async def list_members(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all team members and their active roles & permission capabilities."""
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws.id).order_by(WorkspaceMember.created_at))
+    res = await db.execute(
+        select(WorkspaceMember)
+        .where(WorkspaceMember.workspace_id == ws.id)
+        .order_by(WorkspaceMember.created_at)
+    )
     members = res.scalars().all()
 
     # If members list is empty, auto-include the primary workspace admin as a member
@@ -214,7 +223,11 @@ async def update_member(
     except ValueError as e:
         raise HTTPException(400, "Invalid member_id UUID") from e
 
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.id == m_uuid, WorkspaceMember.workspace_id == ws.id))
+    res = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.id == m_uuid, WorkspaceMember.workspace_id == ws.id
+        )
+    )
     member = res.scalar_one_or_none()
     if not member:
         raise HTTPException(404, "Member not found")
@@ -267,7 +280,11 @@ async def remove_member(
     except ValueError as e:
         raise HTTPException(400, "Invalid member_id UUID") from e
 
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.id == m_uuid, WorkspaceMember.workspace_id == ws.id))
+    res = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.id == m_uuid, WorkspaceMember.workspace_id == ws.id
+        )
+    )
     member = res.scalar_one_or_none()
     if not member:
         raise HTTPException(404, "Member not found")

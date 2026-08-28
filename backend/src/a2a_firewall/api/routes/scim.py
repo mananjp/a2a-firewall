@@ -6,7 +6,6 @@ deprovisioning, and attribute synchronization from identity providers (Okta, Mic
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import uuid
 from datetime import datetime
@@ -36,7 +35,14 @@ async def get_scim_workspace(
 ) -> Workspace:
     """Authenticate SCIM requests via Bearer token (either standard Workspace key or dedicated SCIM token)."""
     if not authorization.startswith("Bearer "):
-        raise HTTPException(401, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid auth header", "status": "401"})
+        raise HTTPException(
+            401,
+            detail={
+                "schemas": [SCIM_ERROR_SCHEMA],
+                "detail": "Invalid auth header",
+                "status": "401",
+            },
+        )
     raw_key = authorization.removeprefix("Bearer ").strip()
     key_hash = hash_api_key(raw_key)
 
@@ -55,7 +61,14 @@ async def get_scim_workspace(
     ws_res = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
     ws = ws_res.scalar_one_or_none()
     if not ws:
-        raise HTTPException(401, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid SCIM Bearer token", "status": "401"})
+        raise HTTPException(
+            401,
+            detail={
+                "schemas": [SCIM_ERROR_SCHEMA],
+                "detail": "Invalid SCIM Bearer token",
+                "status": "401",
+            },
+        )
     return ws
 
 
@@ -201,9 +214,18 @@ async def create_scim_user(
         email = body["emails"][0].get("value")
 
     if not email:
-        raise HTTPException(400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "userName or email required", "status": "400"})
+        raise HTTPException(
+            400,
+            detail={
+                "schemas": [SCIM_ERROR_SCHEMA],
+                "detail": "userName or email required",
+                "status": "400",
+            },
+        )
 
-    name = body.get("displayName") or (body.get("name") or {}).get("formatted") or email.split("@")[0]
+    name = (
+        body.get("displayName") or (body.get("name") or {}).get("formatted") or email.split("@")[0]
+    )
     active = body.get("active", True)
     ext_id = body.get("externalId")
 
@@ -213,7 +235,9 @@ async def create_scim_user(
 
     # Check if already exists
     existing = await db.execute(
-        select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws.id, WorkspaceMember.email == email)
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == ws.id, WorkspaceMember.email == email
+        )
     )
     m = existing.scalar_one_or_none()
 
@@ -261,12 +285,21 @@ async def get_scim_user(
     try:
         u_uuid = uuid.UUID(user_id)
     except ValueError as e:
-        raise HTTPException(400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}) from e
+        raise HTTPException(
+            400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}
+        ) from e
 
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id))
+    res = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id
+        )
+    )
     m = res.scalar_one_or_none()
     if not m:
-        raise HTTPException(404, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "User not found", "status": "404"})
+        raise HTTPException(
+            404,
+            detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "User not found", "status": "404"},
+        )
     return _to_scim_user(m)
 
 
@@ -281,12 +314,21 @@ async def patch_scim_user(
     try:
         u_uuid = uuid.UUID(user_id)
     except ValueError as e:
-        raise HTTPException(400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}) from e
+        raise HTTPException(
+            400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}
+        ) from e
 
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id))
+    res = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id
+        )
+    )
     m = res.scalar_one_or_none()
     if not m:
-        raise HTTPException(404, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "User not found", "status": "404"})
+        raise HTTPException(
+            404,
+            detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "User not found", "status": "404"},
+        )
 
     body = await request.json()
     ops = body.get("Operations", [])
@@ -330,9 +372,15 @@ async def delete_scim_user(
     try:
         u_uuid = uuid.UUID(user_id)
     except ValueError as e:
-        raise HTTPException(400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}) from e
+        raise HTTPException(
+            400, detail={"schemas": [SCIM_ERROR_SCHEMA], "detail": "Invalid UUID", "status": "400"}
+        ) from e
 
-    res = await db.execute(select(WorkspaceMember).where(WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id))
+    res = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.id == u_uuid, WorkspaceMember.workspace_id == ws.id
+        )
+    )
     m = res.scalar_one_or_none()
     if m:
         email = m.email
@@ -407,7 +455,11 @@ async def list_scim_tokens(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List active SCIM tokens."""
-    res = await db.execute(select(SCIMToken).where(SCIMToken.workspace_id == ws.id).order_by(SCIMToken.created_at.desc()))
+    res = await db.execute(
+        select(SCIMToken)
+        .where(SCIMToken.workspace_id == ws.id)
+        .order_by(SCIMToken.created_at.desc())
+    )
     tokens = res.scalars().all()
     return [
         {

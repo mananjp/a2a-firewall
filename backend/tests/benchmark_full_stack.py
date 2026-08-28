@@ -37,7 +37,7 @@ async def benchmark_mcp_governance(n: int = 200) -> dict[str, float]:
     latencies_ms: list[float] = []
     for _ in range(n):
         t0 = time.perf_counter()
-        decision = engine.evaluate_tool_call(call)
+        engine.evaluate_tool_call(call)
         latencies_ms.append((time.perf_counter() - t0) * 1000)
 
     latencies_ms.sort()
@@ -63,7 +63,7 @@ async def benchmark_normalizer(n: int = 200) -> dict[str, float]:
     latencies_ms: list[float] = []
     for _ in range(n):
         t0 = time.perf_counter()
-        norm = AIRequestNormalizer.normalize(
+        AIRequestNormalizer.normalize(
             method="POST",
             path="/v1/chat/completions",
             headers={"content-type": "application/json"},
@@ -131,15 +131,21 @@ async def main() -> None:
 
     print("\n[1/3] Benchmarking AI Protocol Normalizer (OpenAI ChatCompletions)...")
     norm_res = await benchmark_normalizer(n=300)
-    print(f"      p50: {norm_res['p50']} ms | p95: {norm_res['p95']} ms | p99: {norm_res['p99']} ms")
+    print(
+        f"      p50: {norm_res['p50']} ms | p95: {norm_res['p95']} ms | p99: {norm_res['p99']} ms"
+    )
 
     print("\n[2/3] Benchmarking Layer 2 MCP Tool Governance & Security Policy Engine...")
     mcp_res = await benchmark_mcp_governance(n=300)
     print(f"      p50: {mcp_res['p50']} ms | p95: {mcp_res['p95']} ms | p99: {mcp_res['p99']} ms")
 
-    print("\n[3/3] Benchmarking Layer 1 Full TLS Proxy Interception (TCP + TLS MITM + Rule Gates)...")
+    print(
+        "\n[3/3] Benchmarking Layer 1 Full TLS Proxy Interception (TCP + TLS MITM + Rule Gates)..."
+    )
     proxy_res = await benchmark_full_proxy_tls(n=100)
-    print(f"      p50: {proxy_res['p50']} ms | p95: {proxy_res['p95']} ms | p99: {proxy_res['p99']} ms")
+    print(
+        f"      p50: {proxy_res['p50']} ms | p95: {proxy_res['p95']} ms | p99: {proxy_res['p99']} ms"
+    )
 
     print("\n" + "=" * 65)
     print(" SUMMARY: FULL-STACK COMPOUNDED OVERHEAD ")
@@ -147,7 +153,9 @@ async def main() -> None:
     print(f" • Protocol Normalizer Overhead:        {norm_res['p50']:6.3f} ms (p50)")
     print(f" • MCP Tool Argument & Path Policy:      {mcp_res['p50']:6.3f} ms (p50)")
     print(f" • Complete TLS MITM Decrypt + Intercept: {proxy_res['p50']:6.3f} ms (p50)")
-    print(f" • End-to-End p99 Latency:               {proxy_res['p99']:6.3f} ms (Deterministic Gate)")
+    print(
+        f" • End-to-End p99 Latency:               {proxy_res['p99']:6.3f} ms (Deterministic Gate)"
+    )
     print("=" * 65)
 
 
