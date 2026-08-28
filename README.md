@@ -132,51 +132,49 @@ npm run dev
 
 ---
 
-## 🌐 3-Layer Production Interception & Platform Support Matrix
+## ✅ Core — Production Interception & Governance (GA)
 
-A2A Firewall employs a three-tier interception and enforcement model designed for enterprise zero-trust deployments:
+The **supported, production-ready** enforcement path ships as an application-level
+guardian that runs **without root or kernel privileges**:
 
-| Interception Layer | Mechanism | What It Protects | Guarantee Level |
-| :--- | :--- | :--- | :--- |
-| **Layer 1: Transparent TLS Proxy** (`a2a-proxy`) | Dynamic local Root CA (`ca.crt`) + HTTPS `CONNECT` MITM decryption | All HTTP/HTTPS traffic to OpenAI, Anthropic, Gemini, REST APIs (LangChain, AutoGen, CrewAI) | Zero-code-change inspection & sub-5ms filtering |
-| **Layer 2: MCP Tool Gateway** (`a2a_firewall/mcp`) | Structured JSON-RPC 2.0 stdio & HTTP/SSE parser (`tools/call`, `resources/read`) | Model Context Protocol tools, path traversal (`../`), destructive bash commands (`rm -rf`), SQL mutations | Pre-execution tool call block |
-| **Layer 3: Kernel eBPF & Egress Guard** (`a2a_firewall/egress_guard`) | Linux `cgroup/connect4` eBPF kernel program + Cross-platform socket monitor | Raw sockets, non-HTTP egress, proxy bypass evasion | **Linux**: Kernel drop.<br>**macOS/Windows**: Process socket audit & auto-kill |
+| Mechanism | What It Protects | Guarantee |
+| :--- | :--- | :--- |
+| **Transparent TLS Proxy** (`a2a-proxy`) | All HTTP/HTTPS traffic to OpenAI, Anthropic, Gemini, REST APIs (LangChain, AutoGen, CrewAI) via HTTPS `CONNECT` handling | Zero-code-change inspection & sub-5ms filtering |
+| **MCP Tool Gateway** (`a2a_firewall/mcp`) | Model Context Protocol tools (`tools/call`, `resources/read`): path traversal (`../`), destructive bash (`rm -rf`), SQL mutations | Pre-execution tool call block |
+| **In-process Python SDK** (`a2a_firewall`) | Zero-trust governance on every inter-agent message | Deterministic 5-layer pipeline decision (allow / block / SOC review) |
 
-### 🪟 Install-Once System-Wide Transparent Proxy (Linux)
+## 🧪 Roadmap — Active R&D (not yet production)
 
-Beyond per-process wrapping, the firewall can be installed as a **system daemon**
-(`a2a-proxy daemon`) that transparently captures outbound TCP 80/443 via
-iptables `REDIRECT`, with a `SO_MARK 0xA2A1` loop-exclusion so the proxy never
-re-enters itself, and OS CA auto-trust. Once installed (`a2a proxy-cli install`),
-governed agent tools are handled with **zero** proxy env-var setup.
+> **⚠️ Disclaimer.** The items below are **experimental and not yet covered by an
+> independent security review**. They require **root privileges and/or kernel-level
+> access** (iptables, systemd daemon, eBPF) and are provided for research/valuation
+> only. Do not enable them in a production or untrusted environment until reviewed
+> and hardened.
+
+**1. Kernel eBPF & Egress Guard** (`a2a_firewall/egress_guard`) — Linux
+`cgroup/connect4` eBPF kernel program plus a cross-platform socket monitor to
+catch raw sockets, non-HTTP egress, and proxy-bypass evasion.
+(**Linux**: kernel drop · **macOS/Windows**: process socket audit & auto-kill — see
+`docs/ADR-0003-transparent-proxy.md`.)
+
+**2. Install-Once System-Wide Transparent Proxy (Linux)** — a **system daemon**
+(`a2a-proxy daemon`) capturing outbound TCP 80/443 via iptables `REDIRECT`, with a
+`SO_MARK 0xA2A1` loop-exclusion and OS CA auto-trust:
 
 ```bash
 python -m a2a_firewall.proxy.cli install --no-dry-run   # systemd + iptables + CA + eBPF
 python -m a2a_firewall.proxy.cli uninstall --no-dry-run # full teardown (rules + CA trust)
 ```
 
-**Traffic scoping (important — not zero-touch):** interception is
-**registry-gated**, never blanket by default. Set `A2A_AGENT_UID` to the uid of
-a dedicated user (see "Prepare the agent user" in `docs/RUNBOOK.md`) so iptables
-REDIRECT carries `--uid-owner <uid>` and only processes running as that user are
-captured — the human's browser/email/banking is never intercepted. That requires
-two real steps: **create the user and run governed agents as that user**. If
-`A2A_AGENT_UID` is unset (or no governed process runs under that uid) the
-`--uid-owner` rules match nothing and **no** traffic is captured — a silent
-no-op, not a failure. The kernel eBPF `monitored_pids` map is populated from the
-process registry, and intercepted connections are attributed to the real
-`agent_id`/`workspace_id` (via `SO_PEERCRED`); unattributable traffic is
-explicitly marked `unassigned`.
+Interception is **registry-gated**, never blanket by default — set `A2A_AGENT_UID`
+(see `docs/RUNBOOK.md`) and run governed agents under that user; if unset, the
+`--uid-owner` rules match nothing and capture is a silent no-op. Inspection is ON by
+default (`A2A_INSPECT_ENABLED=1`), degrading to `allow` if Postgres/Groq are
+unavailable; eBPF attach is best-effort with fallback to the user-space process
+watcher; `uninstall` fully reverses install including CA untrust.
 
-**Inspection is ON by default in the installer:** the generated systemd unit
-exports `A2A_INSPECT_ENABLED=1`, so captured traffic runs the full 5-layer
-pipeline by default (never captured-but-uninspected), degrading to `allow` if
-Postgres/Groq are unavailable. eBPF attach is best-effort with automatic
-fallback to the user-space process watcher. `uninstall` fully reverses the
-install including CA untrust.
-See `docs/ADR-0003-transparent-proxy.md` and `docs/RUNBOOK.md`.
-
-### 📊 Full-Stack Latency & Overhead Benchmark (N=300 runs)
+**3. Full-Stack Latency & Overhead Benchmark** — measured on a local dev machine
+(**pipeline/on-machine only**, not a remote deployment):
 
 | Stage | Operation | Latency (p50) | Latency (p99) |
 | :--- | :--- | :--- | :--- |

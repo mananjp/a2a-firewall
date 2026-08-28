@@ -5,15 +5,34 @@
 **Workspace**: `9429ec60-fd9e-4390-8cae-8af351d8c445`  
 **SDK Package**: `a2a-firewall-sdk` (PyPI / npm v0.2.0)
 
+> **⚠️ Methodology note (read first).** This report intentionally separates two
+> *different* latency measurements that are easy to conflate:
+>
+> - **Full HTTP round-trip** = the wall-clock time of a real request travelling
+>   `client → network → Render (free-tier) → response`. These appear in
+>   *Section 3* and include cold-instance wake-up latency plus network transit.
+> - **Pipeline-only processing time** = in-process timing of the deterministic
+>   inspection layers (Layer 0 + Layer 3 rule engine + PII scanner) measured with
+>   a mocked database and **no network or LLM/Groq component**. These appear in
+>   *Section 4* as sub-millisecond figures.
+>
+> The two numbers are **not comparable to each other** and should never be placed
+> side by side as if they measured the same thing.
+
 ---
 
 ## 1. Executive Summary
 
-This case study proves the operational capabilities of the **A2A Firewall** inter-agent governance mesh in a live multi-agent deployment. 
+This case study demonstrates the operational capabilities of the **A2A Firewall**
+inter-agent governance mesh in a live multi-agent deployment.
 
-In multi-agent architectures, agents delegate sub-tasks autonomously. Without a dedicated governance mesh, a single compromised prompt or malicious lateral delegation can compromise the entire agent swarm. 
+In multi-agent architectures, agents delegate sub-tasks autonomously. Without a
+dedicated governance mesh, a single compromised prompt or malicious lateral
+delegation can compromise the entire agent swarm.
 
-A2A Firewall eliminates this risk by inspecting every inter-agent communication through a **multi-layer zero-trust pipeline** combining deterministic Ed25519 signing, Macaroon-style capability attenuation, strict RBAC/rule gates, and semantic AI analysis.
+A2A Firewall inspects every inter-agent communication through a **multi-layer
+zero-trust pipeline** combining deterministic Ed25519 signing, Macaroon-style
+capability attenuation, strict RBAC/rule gates, and semantic AI analysis.
 
 ---
 
@@ -31,14 +50,20 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
 
 ## 3. Test Scenarios & Real Execution Proof
 
+> **Latency label for all figures in this section:** *full HTTP round-trip*
+> against `a2a-firewall1.onrender.com`, a Render **free-tier** instance that was
+> likely **cold-started** (dyno waking from sleep). These figures include network
+> transit and host startup; they are **not** the in-process inspection time shown
+> in Section 4.
+
 ### Scenario 1: Legitimate Delegation Chain (Clean Pipeline)
 
 - **Workflow**: Planner Agent &rarr; Researcher Agent &rarr; Summarizer Agent
 - **Payload**: Energy transition research request followed by executive brief synthesis.
 - **Outcome**: **ALLOWED (100% Legitimate Traffic Passed)**
-- **Telemetry**:
-  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Latency: `2712.47ms`)
-  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Latency: `2390.0ms`)
+- **Round-trip telemetry** *(full HTTP, cold instance)*:
+  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Round-trip Latency: `2712.47ms`)
+  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Round-trip Latency: `2390.0ms`)
 - **Cryptographic Lineage Hash**: `d9afce8ad5f6c2f9f3c5a9e3286c3404c95f0565a6653267a6aa61e3e4396ad6`
 
 ---
@@ -60,26 +85,54 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
   > `ACC-9921' UNION SELECT api_key_hash, password_hash, signing_key FROM workspaces--`
 - **Outcome**: **BLOCKED (Deterministic Gate)**
 - **Risk Score**: `0.95`
-- **Detection Latency**: `2859.99ms` (Fast deterministic execution without LLM latency)
+- **Round-trip Detection Latency**: `2859.99ms` *(full HTTP round-trip, cold instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
 
 ---
 
 ## 4. Benchmark & Accuracy Metrics
 
-Measured across the 170-item labeled attack and benign edge-case benchmark corpus:
+> **Latency label for all figures in this section:** *pipeline-only, in-process
+> deterministic-layer timing* (Layer 0 preflight + Layer 3 rule engine + PII
+> scanner), mocked database, no network, no LLM/Groq. This is the correct frame
+> for the sub-millisecond figures — not a claim about end-to-end round-trips.
 
-- **False Positive Rate**: **0.0%** (0 false blocks across 41 benign enterprise edge-cases)
-- **Deterministic Latency**:
-  - `p50`: 0.68 ms
-  - `p95`: 1.36 ms
-  - `p99`: 1.68 ms
-- **Defense in Depth**: 100% of malicious attempts blocked at Layer 0, Layer 3, or Layer 4 before reaching target agents.
+Measured by `backend/tests/benchmark_accuracy.py` over the labeled **attack and
+benign edge-case corpus** (now **340 labeled fixtures: 129 malicious / 211
+benign**; benign sample expanded to reduce the statistical weakness of a 41-item
+baseline):
+
+- **False Positive Rate**: **0.0%** (0 false blocks across **211 benign**
+  enterprise edge-cases, up from 41). Even with the ~5x larger benign sample the
+  deterministic layers did not block any clean request.
+- **Pipeline-only Deterministic Latency** (in-process, no network/LLM):
+  - `p50`: 0.63 ms
+  - `p95`: 1.29 ms
+  - `p99`: 2.26 ms
+- **Live defensive coverage**: 100% of the **three attack scenarios executed in
+  this report** (prompt injection, SQL injection / credential exfiltration, and
+  clean-pipeline control) behaved as expected — the two adversarial scenarios
+  were blocked.
+- **Honest caveat on the offline corpus:** the offline benchmark harness also
+  contains malicious fixtures that the current *deterministic-only* rules do not
+  yet block (i.e. the reproducible corpus TPR is **not** 100%). The live scenario
+  results above are real, but "100% of malicious attempts blocked" is **not** a
+  claim the offline benchmark supports today. Full-pipeline detection (including
+  the Layer 4 Groq semantic layer, which is not exercised in the deterministic
+  benchmark harness) is tracked as ongoing R&D, not asserted as complete here.
 
 ---
 
 ## 5. Conclusion & Enterprise Readiness
 
 The live execution confirms:
-1. **Zero Impact on Clean Traffic**: Inter-agent latency for clean messages is sub-2ms in deterministic paths.
-2. **Cryptographic Tamper-Evidence**: Every hop is signed and hash-chained, providing non-repudiable audit logs.
-3. **True Security Isolation**: Sub-agents cannot be coerced into exceeding their assigned capability boundaries.
+
+1. **Low deterministic pipeline overhead on clean traffic**: the in-process
+   deterministic layers add sub-millisecond processing (p50 ~0.63ms). This does
+   **not** include network or host latency — a full HTTP round-trip to a cold
+   Render free-tier instance is several seconds, overwhelmingly network/host
+   time, not inspection time.
+2. **Cryptographic Tamper-Evidence**: every hop is signed and hash-chained,
+   providing non-repudiable audit logs.
+3. **True Security Isolation (exemplified)**: the live direct-solicitation and
+   SQLi/credential-exfiltration attempts were blocked; capability-boundary
+   enforcement is demonstrated by the delegation configuration.
