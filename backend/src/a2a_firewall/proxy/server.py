@@ -41,12 +41,14 @@ class A2AProxyServer:
         inspect_callback: Callable[[NormalizedAIRequest], Coroutine[Any, Any, dict[str, Any]]]
         | None = None,
         fail_mode: str = "closed",  # "closed" or "open"
+        process_registry: Any = None,
     ):
         self.host = host
         self.port = port
         self.ca = ca or CertificateAuthority()
         self.inspect_callback = inspect_callback
         self.fail_mode = fail_mode
+        self.process_registry = process_registry
         self._server: asyncio.Server | None = None
         self._running = False
 
@@ -189,6 +191,7 @@ class A2AProxyServer:
         )
         # Attach host for downstream enterprise inspection.
         normalized.host = resolved_host
+        self._attribute_identity(normalized, client_writer)
 
         # Run Inspection
         inspection_res = await self._inspect_request(normalized)
@@ -233,6 +236,7 @@ class A2AProxyServer:
             headers=headers,
             body_bytes=body_bytes,
         )
+        self._attribute_identity(normalized, client_writer)
 
         inspection_res = await self._inspect_request(normalized)
         if inspection_res.get("decision") == "block":
@@ -284,6 +288,34 @@ class A2AProxyServer:
             body_bytes = await reader.readexactly(content_length)
 
         return headers, body_bytes
+
+    def _attribute_identity(self, req: NormalizedAIRequest, writer: asyncio.StreamWriter) -> None:
+        """Tag a normalized request with the initiating process identity.
+
+        When a :class:`~a2a_firewall.egress_guard.process_registry.ProcessRegistry`
+        is configured, resolves the peer PID from the accepted socket
+        (``SO_PEERCRED`` on Linux) and stamps the real ``agent_id`` /
+        ``workspace_id`` so downstream enterprise inspection attributes the
+        request to a real agent rather than a random UUID. Best-effort: if the
+        PID cannot be resolved or is not registered, the request stays
+        unattributed (the built-in allow-marking handles it).
+        """
+        if self.process_registry is None:
+            return
+        sock = writer.get_extra_info("socket")
+        if sock is None:
+            return
+        fileno = sock.fileno() if hasattr(sock, "fileno") else sock
+        if not isinstance(fileno, int):
+            return
+        from a2a_firewall.egress_guard.process_registry import resolve_peer_identity
+
+        identity = resolve_peer_identity(fileno, self.process_registry)
+        if identity is None:
+            return
+        req.peer_pid = identity.pid
+        req.agent_id = identity.agent_id
+        req.workspace_id = identity.workspace_id
 
     async def _inspect_request(self, req: NormalizedAIRequest) -> dict[str, Any]:
         """Execute inspection policy on normalized request."""

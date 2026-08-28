@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     A2A_REDIRECT_ENABLED: bool = False  # install iptables PREROUTING REDIRECT
     A2A_INSPECT_ENABLED: bool = False  # route proxy traffic through full run_inspection pipeline
     A2A_DEFAULT_DRY_RUN: bool = True  # installer commands are no-ops unless forced off
+    A2A_AGENT_UID: int | None = None  # OS uid of agent processes; scopes iptables REDIRECT
 
 
 settings = Settings()

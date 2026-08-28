@@ -65,15 +65,23 @@ async def run_proxy_server(
     enable_egress_guard: bool = False,
     mark_socket: bool = False,
     inspect_enabled: bool = False,
+    process_registry: Any = None,
 ) -> None:
     """Run the proxy with optional egress guard, socket marking, and inspection.
 
     This is the shared implementation for both the interactive ``start`` and
-    the background ``daemon`` entry points.
+    the background ``daemon`` entry points. ``process_registry`` (if given) is
+    used to attribute intercepted traffic to a real agent identity.
     """
     ca = CertificateAuthority(ca_dir=ca_dir)
     inspect_cb: Callable[[Any], Any] | None = _inspect_callback if inspect_enabled else None
-    server = A2AProxyServer(host=host, port=port, ca=ca, inspect_callback=inspect_cb)
+    server = A2AProxyServer(
+        host=host,
+        port=port,
+        ca=ca,
+        inspect_callback=inspect_cb,
+        process_registry=process_registry,
+    )
     await server.start()
     print(f"[A2A Proxy] Running on http://{host}:{port}")
     print(f"[A2A Proxy] Root CA Certificate: {ca.root_cert_path}")
@@ -117,6 +125,9 @@ async def start_proxy_main(host: str, port: int, ca_dir: str | None = None) -> N
 
 async def daemon_main(host: str, port: int, ca_dir: str | None = None) -> None:
     """Run the proxy as a background daemon (systemd ExecStart target)."""
+    from a2a_firewall.egress_guard.process_registry import ProcessRegistry
+
+    registry: Any = ProcessRegistry() if _inspect_enabled() else None
     await run_proxy_server(
         host=host,
         port=port,
@@ -124,6 +135,7 @@ async def daemon_main(host: str, port: int, ca_dir: str | None = None) -> None:
         enable_egress_guard=True,
         mark_socket=True,
         inspect_enabled=_inspect_enabled(),
+        process_registry=registry,
     )
 
 
@@ -217,6 +229,12 @@ def main() -> None:
         "uninstall", help="Remove the system-wide service install"
     )
     uninstall_parser.add_argument(
+        "--port", type=int, default=8080, help="Proxy port the redirect rules target"
+    )
+    uninstall_parser.add_argument(
+        "--ca-dir", default=None, help="CA directory that was trusted system-wide"
+    )
+    uninstall_parser.add_argument(
         "--no-dry-run", action="store_true", help="Actually apply changes"
     )
 
@@ -280,8 +298,12 @@ def _cmd_install(args: argparse.Namespace) -> None:
     results["unit"] = unit.render()
 
     if not args.no_redirect:
-        redirect = TransparentRedirect(proxy_port=args.port, dry_run=dry_run)
+        from a2a_firewall.core.config import settings
+
+        uid_owner: int | None = settings.A2A_AGENT_UID
+        redirect = TransparentRedirect(proxy_port=args.port, dry_run=dry_run, uid_owner=uid_owner)
         results["redirect_rules"] = redirect.apply_rules()
+        results["redirect_uid_owner"] = uid_owner
 
     print(json.dumps(results, indent=2, default=str))
     if dry_run:
@@ -289,11 +311,20 @@ def _cmd_install(args: argparse.Namespace) -> None:
 
 
 def _cmd_uninstall(args: argparse.Namespace) -> None:
-    """Handle the `uninstall` subcommand."""
+    """Handle the `uninstall` subcommand (mirror of `install`'s side effects)."""
     dry_run = _run_installer_dry_run(not args.no_dry_run)
     results: dict[str, object] = {}
-    redirect = TransparentRedirect(proxy_port=8080, dry_run=dry_run)
+    redirect = TransparentRedirect(proxy_port=args.port, dry_run=dry_run)
     results["redirect_rules_removed"] = redirect.remove_rules()
+
+    # Reverse the CA trust that `install` applied — never leave the A2A root
+    # CA in the OS trust store after uninstall.
+    from a2a_firewall.proxy.trust import Capability, HostTrust
+
+    cap = Capability(sys_name=os.name if not dry_run else "POSIX", proc_libc_ver="0")
+    trust = HostTrust(capability=cap, ca_dir=args.ca_dir, dry_run=dry_run)
+    results["ca_trust_removed"] = trust.remove_from_system()
+
     print(json.dumps(results, indent=2, default=str))
     if dry_run:
         print("\n[dry-run] No changes applied. Re-run with --no-dry-run to uninstall.")
@@ -301,8 +332,13 @@ def _cmd_uninstall(args: argparse.Namespace) -> None:
 
 def _cmd_status() -> None:
     """Handle the `status` subcommand."""
-    status: dict[str, object] = {"supported": TransparentRedirect.is_supported()}
-    status["redirect"] = ratelimit_info()
+    from a2a_firewall.core.config import settings
+
+    status: dict[str, object] = {
+        "supported": TransparentRedirect.is_supported(),
+        "agent_uid": settings.A2A_AGENT_UID,
+    }
+    status["redirect"] = ratelimit_info(uid_owner=settings.A2A_AGENT_UID)
     status["ca_trust"] = {
         "cert_path": CertificateAuthority().root_cert_path,
         "trust_dir": "/usr/local/share/ca-certificates",

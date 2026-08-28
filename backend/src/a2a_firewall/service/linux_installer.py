@@ -15,8 +15,10 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from a2a_firewall.core.config import settings
+from a2a_firewall.egress_guard.process_registry import ProcessRegistry
 from a2a_firewall.egress_guard.transparent_redirect import TransparentRedirect
 from a2a_firewall.proxy.trust import Capability, HostTrust
 from a2a_firewall.service.unit import SystemdUnit
@@ -28,9 +30,11 @@ logger = logging.getLogger("a2a_firewall.service.installer")
 class LinuxInstaller:
     """Performs a transparent proxy install/uninstall on Linux hosts."""
 
-    unit: SystemdUnit = SystemdUnit()
+    unit: SystemdUnit = field(default_factory=SystemdUnit)
     ca_dir: str | None = None
     dry_run: bool = True
+    registry: ProcessRegistry = field(default_factory=ProcessRegistry)
+    uid_owner: int | None = field(default_factory=lambda: settings.A2A_AGENT_UID)
 
     def _run(self, cmd: list[str]) -> bool:
         """Run a system command, or log it in dry-run mode."""
@@ -63,9 +67,12 @@ class LinuxInstaller:
             steps["daemon_reload"] = self._run(["systemctl", "daemon-reload"])
         steps["service_enabled"] = self._run(["systemctl", "enable", self.unit.unit_filename])
 
-        # 3. Transparent redirect (applies iptables rules)
-        redirect = TransparentRedirect(proxy_port=8080, dry_run=self.dry_run)
+        # 3. Transparent redirect (applies iptables rules, scoped to the agent uid)
+        redirect = TransparentRedirect(
+            proxy_port=8080, dry_run=self.dry_run, uid_owner=self.uid_owner
+        )
         steps["redirect_rules"] = redirect.apply_rules()
+        steps["redirect_uid_owner"] = self.uid_owner
 
         logger.info("Install complete (dry_run=%s): %s", self.dry_run, steps)
         return steps
@@ -94,11 +101,17 @@ class LinuxInstaller:
     # Uninstall & status
     # ------------------------------------------------------------------ #
     def uninstall(self) -> dict[str, object]:
-        """Disable/stop the service, remove redirects, and remove unit file."""
+        """Disable/stop the service, remove redirects, untrust CA, remove unit."""
         steps: dict[str, object] = {}
         steps["service_disabled"] = self._run(["systemctl", "disable", self.unit.unit_filename])
-        redirect = TransparentRedirect(proxy_port=8080, dry_run=self.dry_run)
+        redirect = TransparentRedirect(
+            proxy_port=8080, dry_run=self.dry_run, uid_owner=self.uid_owner
+        )
         steps["redirect_rules_removed"] = redirect.remove_rules()
+        # Reverse the CA trust so the A2A root cert is never left behind.
+        cap = Capability(sys_name="POSIX", proc_libc_ver="0")
+        trust = HostTrust(capability=cap, ca_dir=self.ca_dir, dry_run=self.dry_run)
+        steps["ca_trust_removed"] = trust.remove_from_system()
         steps["unit_removed"] = self._remove_unit()
         steps["daemon_reload"] = self._run(["systemctl", "daemon-reload"])
         return steps

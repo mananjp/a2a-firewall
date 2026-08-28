@@ -145,18 +145,27 @@ A2A Firewall employs a three-tier interception and enforcement model designed fo
 ### 🪟 Install-Once System-Wide Transparent Proxy (Linux)
 
 Beyond per-process wrapping, the firewall can be installed as a **system daemon**
-(`a2a-proxy daemon`) that transparently captures **all** outbound TCP 80/443 via
+(`a2a-proxy daemon`) that transparently captures outbound TCP 80/443 via
 iptables `REDIRECT`, with a `SO_MARK 0xA2A1` loop-exclusion so the proxy never
 re-enters itself, and OS CA auto-trust. Once installed (`a2a proxy-cli install`),
-every agent tool on the host is governed with **zero** proxy env-var setup.
+governed agent tools are handled with **zero** proxy env-var setup.
 
 ```bash
 python -m a2a_firewall.proxy.cli install --no-dry-run   # systemd + iptables + CA + eBPF
-python -m a2a_firewall.proxy.cli uninstall --no-dry-run # teardown
+python -m a2a_firewall.proxy.cli uninstall --no-dry-run # full teardown (rules + CA trust)
 ```
+
+**Traffic scoping (important):** interception is **registry-gated**, never
+blanket by default. Set `A2A_AGENT_UID` so iptables REDIRECT carries
+`--uid-owner <uid>` and only registered agent processes are captured — the
+human's browser/email/banking is never intercepted. The kernel eBPF
+`monitored_pids` map is populated from the process registry, and intercepted
+connections are attributed to the real `agent_id`/`workspace_id` (via
+`SO_PEERCRED`); unattributable traffic is explicitly marked `unassigned`.
 
 eBPF attach is best-effort with automatic fallback to the user-space process
 watcher. Full 5-layer detection is enabled with `A2A_INSPECT_ENABLED=true`.
+`uninstall` fully reverses the install including CA untrust.
 See `docs/ADR-0003-transparent-proxy.md` and `docs/RUNBOOK.md`.
 
 ### 📊 Full-Stack Latency & Overhead Benchmark (N=300 runs)

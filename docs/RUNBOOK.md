@@ -175,12 +175,24 @@ backend/.venv/Scripts/python -m a2a_firewall.proxy.cli daemon --egress-guard \
 ```
 
 Notes:
+- **Scoping (important)**: with `A2A_AGENT_UID` set, the iptables REDIRECT
+  rules carry `--uid-owner <uid>` and only redirect processes running as that
+  user. Without it the rules are blanket (every process on the host), so set it
+  before enabling `A2A_REDIRECT_ENABLED` to avoid intercepting the human's
+  browser/email/banking traffic.
 - `SO_MARK 0xA2A1` is set on the proxy's own sockets and the iptables REDIRECT
-  rules exclude that mark, preventing a redirect loop.
+  rules exclude that mark, preventing a redirect loop. Only registered agent
+  PIDs are populated into the kernel eBPF `monitored_pids` map.
 - eBPF attach is best-effort: if `clang`/`bpftool` are missing it quietly falls
   back to the user-space process watcher. It never crashes the service.
 - `A2A_INSPECT_ENABLED=true` routes traffic through the full 5-layer detection
-  pipeline (requires Postgres + Groq).
+  pipeline (requires Postgres + Groq). When a connection can be attributed to a
+  registered agent (via `SO_PEERCRED` + the process registry) the inspection
+  carries the real `agent_id`/`workspace_id`; otherwise it is marked
+  `unassigned` and allowed by the built-in gate.
+- `uninstall` fully reverses the install: it removes the iptables REDIRECT
+  rules **and** untrusts the A2A root CA (`HostTrust.remove_from_system()`) so
+  no trust is left behind.
 
 ## Configuration Reference
 
@@ -212,6 +224,7 @@ All settings live in `backend/src/a2a_firewall/core/config.py` and read from `.e
 | `A2A_REDIRECT_ENABLED` | false | Install iptables PREROUTING/OUTPUT REDIRECT rules (Linux+root) |
 | `A2A_INSPECT_ENABLED` | false | Route proxy traffic through full run_inspection pipeline |
 | `A2A_DEFAULT_DRY_RUN` | true | Installer/system commands log instead of mutating the system |
+| `A2A_AGENT_UID` | (unset) | OS uid of agent processes; scopes iptables REDIRECT via `--uid-owner` so unrelated processes are never intercepted |
 
 ## Troubleshooting
 

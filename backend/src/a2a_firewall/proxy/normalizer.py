@@ -28,6 +28,9 @@ class NormalizedAIRequest:
     model: str | None = None
     is_streaming: bool = False
     host: str | None = None
+    peer_pid: int | None = None
+    agent_id: str | None = None
+    workspace_id: str | None = None
 
     def to_orchestrator_dict(
         self,

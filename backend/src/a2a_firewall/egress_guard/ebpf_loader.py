@@ -27,6 +27,11 @@ class EbpfCompileError(RuntimeError):
     """Raised when the eBPF C program cannot be compiled and attached."""
 
 
+def _pack_u32(value: int) -> str:
+    """Pack a u32 as a little-endian hex string for ``bpftool`` key/value args."""
+    return "0x" + value.to_bytes(4, "little").hex()
+
+
 class EgressGuardLoader:
     """Manages kernel-level eBPF attachment and user-space fallback monitor."""
 
@@ -157,7 +162,11 @@ class EgressGuardLoader:
         self.ebpf_active = True
         logger.info("Attached eBPF connect4 filter to cgroup %s", cgroup_path)
 
-    def start(self, monitored_pids: list[int] | None = None) -> None:
+    def start(
+        self,
+        monitored_pids: list[int] | None = None,
+        proxy_pid: int | None = None,
+    ) -> None:
         """Start the egress guard.
 
         Enables user-space monitoring first (always works), then attempts a
@@ -172,6 +181,10 @@ class EgressGuardLoader:
             try:
                 obj = self.compile_program()
                 self.attach_program(obj)
+                # Best-effort: populate the kernel monitored_pids map so the
+                # cgroup filter actually enforces on registered agent PIDs
+                # (and exempts the proxy itself from the redirect loop).
+                self.populate_kernel_maps(pids, proxy_pid=proxy_pid)
                 logger.info("Linux eBPF kernel socket filter attached.")
             except EbpfCompileError as e:
                 self.ebpf_error = str(e)
@@ -185,6 +198,96 @@ class EgressGuardLoader:
                 f"Running Egress Guard in user-space process socket mode (OS: {platform.system()})"
             )
             self.ebpf_active = False
+
+    # ------------------------------------------------------------------ #
+    # Kernel map population (best-effort, command-construction testable)
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def build_map_update_commands(
+        monitor_pids: list[int],
+        proxy_pid: int | None = None,
+        map_dir: str = "/sys/fs/bpf",
+    ) -> list[list[str]]:
+        """Return argv lists that write monitored/exempt PIDs into the kernel maps.
+
+        Assumes the program and maps were pinned to ``map_dir`` (the standard
+        ``bpftool prog load ... /sys/fs/bpf/a2a_egress`` pattern). The
+        ``monitored_pids`` map is seeded with the agent PIDs that must be
+        routed through the proxy; ``exempt_pids`` is seeded with the proxy's
+        own PID so its upstream traffic is never re-directed into itself.
+
+        Pure constructor — safe to unit-test on any host. Runtime execution is
+        delegated to :meth:`populate_kernel_maps` and is best-effort.
+        """
+        commands: list[list[str]] = []
+        for pid in monitor_pids:
+            commands.append(
+                [
+                    "bpftool",
+                    "map",
+                    "update",
+                    "pinned",
+                    f"{map_dir}/a2a_egress_map_monitored_pids",
+                    "key",
+                    _pack_u32(pid),
+                    "value",
+                    "1",
+                ]
+            )
+        if proxy_pid is not None:
+            commands.append(
+                [
+                    "bpftool",
+                    "map",
+                    "update",
+                    "pinned",
+                    f"{map_dir}/a2a_egress_map_exempt_pids",
+                    "key",
+                    _pack_u32(proxy_pid),
+                    "value",
+                    "1",
+                ]
+            )
+        return commands
+
+    def populate_kernel_maps(
+        self,
+        monitor_pids: list[int],
+        proxy_pid: int | None = None,
+        map_dir: str = "/sys/fs/bpf",
+    ) -> list[str]:
+        """Run :meth:`build_map_update_commands` when eBPF is active.
+
+        Logs failures as warnings (best-effort): if the maps were not pinned
+        (e.g. an older toolchain) the kernel filter simply falls back to the
+        empty-map allow-all behaviour rather than crashing the service.
+        """
+        if not self.is_ebpf_supported():
+            logger.debug("eBPF unavailable — skipping kernel map population")
+            return []
+        commands = self.build_map_update_commands(
+            monitor_pids, proxy_pid=proxy_pid, map_dir=map_dir
+        )
+        executed: list[str] = []
+        for cmd in commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True)
+            except OSError as e:  # pragma: no cover - depends on environment
+                logger.warning("Could not update eBPF map (%s): %s", " ".join(cmd), e)
+                continue
+            if result.returncode != 0:
+                logger.warning(
+                    "eBPF map update best-effort failed (will fall back to empty map): %s",
+                    result.stderr[:300],
+                )
+                continue
+            executed.append(" ".join(cmd))
+        logger.info(
+            "Populated %d/%d kernel eBPF map entries",
+            len(executed),
+            len(commands),
+        )
+        return executed
 
     def monitor_pid(self, pid: int) -> None:
         """Add PID to monitored set."""

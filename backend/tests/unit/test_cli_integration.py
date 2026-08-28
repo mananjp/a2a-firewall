@@ -51,3 +51,41 @@ def test_normalized_request_has_host_field():
     req = NormalizedAIRequest()
     req.host = "api.openai.com"
     assert req.host == "api.openai.com"
+
+
+def test_normalized_request_carries_identity_fields():
+    req = NormalizedAIRequest(peer_pid=1234, agent_id="agt-1", workspace_id="ws-1")
+    assert req.peer_pid == 1234
+    assert req.agent_id == "agt-1"
+    assert req.workspace_id == "ws-1"
+
+
+def test_to_enterprise_request_uses_real_agent_identity():
+    req = NormalizedAIRequest(
+        task_type="llm_inference",
+        payload={"query": "hello"},
+        peer_pid=1234,
+        agent_id="agt-real",
+        workspace_id="ws-real",
+    )
+    request_data = _to_enterprise_request(req)
+    assert request_data["sender_id"] == "agt-real"
+    assert request_data["workspace_id"] == "ws-real"
+    assert request_data["peer_pid"] == 1234
+
+
+def test_process_registry_roundtrip():
+    from a2a_firewall.egress_guard.process_registry import ProcessRegistry
+
+    registry = ProcessRegistry()
+    registry.register(agent_id="agt-1", workspace_id="ws-1", pid=100, uid=1001)
+    identity = registry.lookup(100)
+    assert identity is not None
+    assert identity.agent_id == "agt-1"
+    assert identity.workspace_id == "ws-1"
+    assert identity.uid == 1001
+    assert registry.iter_pids() == [100]
+    assert registry.iter_agent_uids() == {1001}
+    registry.unregister(100)
+    assert registry.lookup(100) is None
+    assert len(registry) == 0

@@ -76,3 +76,34 @@ def test_rule_construction_is_deterministic():
     a = _redirect()._rule_parts()
     b = _redirect()._rule_parts()
     assert a == b
+
+
+def test_uid_owner_noop_when_unset():
+    # Without an agent uid the rules must NOT carry an owner match, i.e. they
+    # are blanket redirection (caller's explicit choice).
+    for rule in _redirect()._rule_parts():
+        assert "--uid-owner" not in rule
+
+
+def test_uid_owner_present_when_set():
+    # With an agent uid every rule must be scoped so unrelated processes
+    # (browser, email, banking) are never redirected.
+    r = _redirect(uid_owner=1001)
+    rules = r._rule_parts()
+    assert len(rules) == len(REDIRECT_PORTS) * 2
+    for rule in rules:
+        assert "--uid-owner" in rule
+        assert rule[rule.index("--uid-owner") + 1] == "1001"
+
+
+def test_uid_owner_persists_in_commands():
+    r = _redirect(uid_owner=1001, dry_run=True)
+    for cmd in r.apply_rules():
+        assert "--uid-owner 1001" in cmd
+    for cmd in r.remove_rules():
+        assert "--uid-owner 1001" in cmd
+
+
+def test_ratelimit_info_includes_uid():
+    info = ratelimit_info(uid_owner=1001)
+    assert info["uid_owner"] == 1001

@@ -71,3 +71,46 @@ baseline cleanup / a follow-up.
 - Linux CI job exercising real iptables/systemd/eBPF attach end-to-end
   (kernel-level verification could not run on the Windows dev machine).
 - Baseline lint/mypy cleanup across the ~19 unrelated files.
+
+---
+
+## Hardening pass (post-review — the three "not done yet" concerns)
+
+Follow-up review surfaced three concrete gaps. All addressed in a second
+commit (`feat(proxy):` hardening):
+
+### 1. Identity attribution — now REAL, registry-backed
+- New `egress_guard/process_registry.py`: `AgentIdentity(PID, agent_id,
+  workspace_id, uid)` + thread-safe `ProcessRegistry` (register/unregister/
+  lookup/iter_pids/iter_agent_uids) + `resolve_peer_identity()` (Linux
+  `SO_PEERCRED`).
+- `NormalizedAIRequest` now carries `peer_pid` / `agent_id` / `workspace_id`.
+- `proxy/server.py` resolves the initiating PID on accept and stamps the real
+  identity; `pipeline_bridge._resolve_context` looks up **that** agent instead
+  of `Agent.limit(1)`.
+- **Honest unassigned handling**: traffic that cannot be mapped to a registered
+  agent is allowed by the built-in gate and marked `identity="unassigned"` — the
+  proxy never fabricates a fake identity / random UUID for a real process.
+
+### 2. Non-agent traffic scoping — registry-gated, never blanket-by-default
+- `TransparentRedirect` gained `uid_owner`; when `A2A_AGENT_UID` is set every
+  REDIRECT rule carries `--uid-owner <uid>` so **only registered agent
+  processes** are redirected — a human's browser/email/banking is never
+  intercepted. Blanket redirection becomes an explicit, documented choice.
+- The eBPF `monitored_pids` map is now actually populated from the registry at
+  attach time (plus the proxy PID into `exempt_pids`) via
+  `EgressGuardLoader.populate_kernel_maps()`, fixing the prior empty-map
+  no-op that enforced nothing.
+- New config `A2A_AGENT_UID` (pydantic settings).
+
+### 3. Uninstall cleanliness — CA fully reverted
+- `Proxy CLI uninstall` and `LinuxInstaller.uninstall` now call
+  `HostTrust.remove_from_system()` (was missing entirely).
+- `scripts/uninstall-linux.sh` removes the cert + `update-ca-certificates`.
+- Uninstall and install now share the same `--port` / `--ca-dir` so the exact
+  same scoped rules are removed (`-D` mirrors `-A`).
+
+### Tests
+202 unit tests pass (was 190) + proxy integration tests. New/updated coverage:
+process registry, uid-scoped redirect rules, eBPF map-command construction,
+CA-untrust-on-uninstall (CLI + installer), honest identity attribution.

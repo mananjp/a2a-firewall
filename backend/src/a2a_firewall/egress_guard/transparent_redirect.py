@@ -48,6 +48,7 @@ class TransparentRedirect:
     fwmark: int = A2A_FWMARK
     chain: str = "A2A_FIREWALL_REDIRECT"
     dry_run: bool = True
+    uid_owner: int | None = None
     _applied: bool = False
 
     # ------------------------------------------------------------------ #
@@ -70,12 +71,12 @@ class TransparentRedirect:
         """Return the ordered side-effect-free rule argv lists."""
         rules: list[list[str]] = []
         for port in self.ports:
-            rules.append(
-                [
+            for table_line in ("PREROUTING", "OUTPUT"):
+                parts: list[str] = [
                     "-t",
                     "nat",
                     "-A",
-                    "PREROUTING",
+                    table_line,
                     "-p",
                     "tcp",
                     "--match",
@@ -85,33 +86,15 @@ class TransparentRedirect:
                     _as_mark(self.fwmark),
                     "--dport",
                     str(port),
-                    "-j",
-                    "REDIRECT",
-                    "--to-ports",
-                    str(self.proxy_port),
                 ]
-            )
-            rules.append(
-                [
-                    "-t",
-                    "nat",
-                    "-A",
-                    "OUTPUT",
-                    "-p",
-                    "tcp",
-                    "--match",
-                    "mark",
-                    "!",
-                    "--mark",
-                    _as_mark(self.fwmark),
-                    "--dport",
-                    str(port),
-                    "-j",
-                    "REDIRECT",
-                    "--to-ports",
-                    str(self.proxy_port),
-                ]
-            )
+                # Optional coarse network-layer scoping: only redirect traffic
+                # originating from the configured agent uid. Without this the
+                # rules blanket-capture every process (human browser, email,
+                # banking), which is a privacy risk, not a feature.
+                if self.uid_owner is not None:
+                    parts += ["--match", "owner", "--uid-owner", str(self.uid_owner)]
+                parts += ["-j", "REDIRECT", "--to-ports", str(self.proxy_port)]
+                rules.append(parts)
         return rules
 
     def apply_rules(self) -> list[str]:
@@ -225,10 +208,11 @@ def mark_own_socket(enable: bool = True, nonce: bytes | None = None) -> None:
         logger.warning("Could not set SO_MARK: %s", e)
 
 
-def ratelimit_info() -> dict[str, object]:
+def ratelimit_info(uid_owner: int | None = None) -> dict[str, object]:
     """Human-readable summary of the planned redirection, for status output."""
     return {
         "supported": TransparentRedirect.is_supported(),
         "ports": list(REDIRECT_PORTS),
         "fwmark": _as_mark(A2A_FWMARK),
+        "uid_owner": uid_owner,
     }
