@@ -132,6 +132,26 @@ npm run dev
 
 ---
 
+## 🌐 3-Layer Production Interception & Platform Support Matrix
+
+A2A Firewall employs a three-tier interception and enforcement model designed for enterprise zero-trust deployments:
+
+| Interception Layer | Mechanism | What It Protects | Guarantee Level |
+| :--- | :--- | :--- | :--- |
+| **Layer 1: Transparent TLS Proxy** (`a2a-proxy`) | Dynamic local Root CA (`ca.crt`) + HTTPS `CONNECT` MITM decryption | All HTTP/HTTPS traffic to OpenAI, Anthropic, Gemini, REST APIs (LangChain, AutoGen, CrewAI) | Zero-code-change inspection & sub-5ms filtering |
+| **Layer 2: MCP Tool Gateway** (`a2a_firewall/mcp`) | Structured JSON-RPC 2.0 stdio & HTTP/SSE parser (`tools/call`, `resources/read`) | Model Context Protocol tools, path traversal (`../`), destructive bash commands (`rm -rf`), SQL mutations | Pre-execution tool call block |
+| **Layer 3: Kernel eBPF & Egress Guard** (`a2a_firewall/egress_guard`) | Linux `cgroup/connect4` eBPF kernel program + Cross-platform socket monitor | Raw sockets, non-HTTP egress, proxy bypass evasion | **Linux**: Kernel drop.<br>**macOS/Windows**: Process socket audit & auto-kill |
+
+### 📊 Full-Stack Latency & Overhead Benchmark (N=300 runs)
+
+| Stage | Operation | Latency (p50) | Latency (p99) |
+| :--- | :--- | :--- | :--- |
+| **Normalizer** | Protocol parsing & feature extraction | `0.006 ms` | `0.014 ms` |
+| **MCP Policy** | Tool argument & path boundary evaluation | `0.682 ms` | `0.804 ms` |
+| **TLS MITM Proxy** | Full TCP connect + TLS MITM termination + Policy Gate | `4.450 ms` | `70.878 ms` |
+
+---
+
 ## 🔌 Python SDK Usage
 
 ```python

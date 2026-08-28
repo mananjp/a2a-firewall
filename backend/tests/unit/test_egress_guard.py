@@ -24,7 +24,6 @@ def test_egress_guard_loader_initialization():
     loader = EgressGuardLoader(proxy_port=8080)
     assert loader.proxy_port == 8080
     assert loader.watcher is not None
-    # Verify is_ebpf_supported runs cleanly
     supported = EgressGuardLoader.is_ebpf_supported()
     assert isinstance(supported, bool)
 
@@ -42,8 +41,34 @@ def test_process_watcher_pid_management():
     assert 5678 in watcher.monitored_pids
 
 
+def test_zero_false_positive_on_legitimate_internal_traffic():
+    """Verify that legitimate DB, Redis, internal backend, and DNS connections are never flagged as bypasses."""
+    watcher = ProcessEgressWatcher(proxy_port=8080)
+    watcher.add_monitored_pid(5001)
+
+    # Simulated legitimate agent connections:
+    # - Local proxy (127.0.0.1:8080)
+    # - Local PostgreSQL (127.0.0.1:5432)
+    # - Local Redis (127.0.0.1:6379)
+    # - Loopback DNS (127.0.0.53:53)
+    # - Internal API (127.0.0.1:8000)
+    mock_legitimate_conns = [
+        MockConn(pid=5001, raddr=MockAddr(ip="127.0.0.1", port=8080), status="ESTABLISHED"),
+        MockConn(pid=5001, raddr=MockAddr(ip="127.0.0.1", port=5432), status="ESTABLISHED"),
+        MockConn(pid=5001, raddr=MockAddr(ip="127.0.0.1", port=6379), status="ESTABLISHED"),
+        MockConn(pid=5001, raddr=MockAddr(ip="127.0.0.53", port=53), status="ESTABLISHED"),
+        MockConn(pid=5001, raddr=MockAddr(ip="127.0.0.1", port=8000), status="ESTABLISHED"),
+    ]
+
+    with patch("psutil.net_connections", return_value=mock_legitimate_conns):
+        violations = watcher.scan_connections()
+
+    # Must be zero false positives!
+    assert len(violations) == 0
+
+
 def test_process_watcher_detects_proxy_bypass():
-    """Verify that unproxied connections to external IPs are flagged as bypass violations."""
+    """Verify that unproxied connections to external public IPs are flagged as bypass violations."""
     captured_violations = []
 
     def on_bypass(v: BypassViolation):
@@ -56,10 +81,6 @@ def test_process_watcher_detects_proxy_bypass():
     )
     watcher.add_monitored_pid(9999)
 
-    # Mock psutil net_connections with:
-    # 1. Monitored PID connecting to local proxy (allowed)
-    # 2. Monitored PID connecting directly to public IP 142.250.190.46:443 (bypass!)
-    # 3. Unmonitored PID connecting to public IP (ignored)
     mock_connections = [
         MockConn(pid=9999, raddr=MockAddr(ip="127.0.0.1", port=8080), status="ESTABLISHED"),
         MockConn(pid=9999, raddr=MockAddr(ip="142.250.190.46", port=443), status="ESTABLISHED"),
