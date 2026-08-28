@@ -124,6 +124,25 @@ class CaseStudyRunner:
             }
             self.log("SETUP", f"Registered agent '{name}': ID={agent_id[:8]}... Key={pub_hex[:12]}...")
 
+        # Grant inter-agent communication permissions
+        agent_names = list(self.agents.keys())
+        for s_name in agent_names:
+            for r_name in agent_names:
+                if s_name == r_name:
+                    continue
+                perm_payload = {
+                    "receiver_id": self.agents[r_name]["id"],
+                    "task_type": None,
+                    "allowed": True,
+                }
+                p_res = self.http.post(
+                    f"/v1/agents/{self.agents[s_name]['id']}/permissions",
+                    headers=auth_headers,
+                    json=perm_payload,
+                )
+                if p_res.status_code == 200:
+                    self.log("SETUP", f"Granted permission: {s_name} -> {r_name} (all task types)")
+
     def get_firewall_client(self, agent_name: str) -> A2AFirewall:
         """Create an SDK client for a specific agent."""
         agent = self.agents[agent_name]
