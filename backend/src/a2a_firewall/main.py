@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+
+logger = logging.getLogger("a2a_firewall")
 
 from a2a_firewall.api.routes import (
     agents,
@@ -36,7 +40,7 @@ from a2a_firewall.api.routes import (
 )
 from a2a_firewall.core.config import settings
 from a2a_firewall.core.network_security import check_ip_allowlist, extract_client_ip
-from a2a_firewall.core.rate_limit import check_workspace
+from a2a_firewall.core.rate_limit import check_workspace, check_workspace_async
 from a2a_firewall.core.rate_limit import configure as configure_rate_limit
 from a2a_firewall.core.security import hash_api_key
 from a2a_firewall.core.telemetry import setup_telemetry
@@ -50,7 +54,9 @@ if settings.RATE_LIMIT_ENABLED:
     configure_rate_limit(
         workspace_max_per_min=settings.WORKSPACE_RATE_LIMIT_PER_MIN,
         agent_max_per_min=settings.AGENT_INSPECT_RATE_LIMIT_PER_MIN,
+        backend=settings.RATE_LIMIT_BACKEND,
     )
+    logger.info("Rate limiter: backend=%s", settings.RATE_LIMIT_BACKEND)
 
 
 @app.middleware("http")
@@ -61,7 +67,12 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
         return await call_next(request)
 
     # Exclude open registration & dev auth from IP allowlist blocking
-    is_public_endpoint = path in ("/v1/workspaces/register", "/v1/auth/login", "/v1/network/my-ip")
+    is_public_endpoint = path in (
+        "/v1/workspaces/register",
+        "/v1/auth/register",
+        "/v1/auth/login",
+        "/v1/network/my-ip",
+    )
 
     client_ip = extract_client_ip(request)
     auth_header = request.headers.get("authorization", "")
@@ -130,6 +141,11 @@ app.add_middleware(
 )
 
 setup_telemetry(app)
+
+# Startup status logging
+_otel_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() == "true"
+logger.info("OpenTelemetry: %s", "DISABLED" if _otel_disabled else "ACTIVE")
+logger.info("Auth mode: %s", "DEV (email-only login enabled)" if settings.DEBUG else "PRODUCTION (password required)")
 
 app.include_router(workspaces.router, prefix="/v1/workspaces", tags=["workspaces"])
 app.include_router(auth.router, prefix="/v1/auth", tags=["auth"])

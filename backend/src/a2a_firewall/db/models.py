@@ -13,6 +13,7 @@ class Workspace(Base):
     name = Column(String, nullable=False)
     admin_email = Column(String, nullable=False, unique=True)
     api_key_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)  # Argon2id hash, nullable for legacy rows
     fail_mode = Column(String, default="closed")
     groq_threshold = Column(Float, default=0.3)
     block_threshold = Column(Float, default=0.8)

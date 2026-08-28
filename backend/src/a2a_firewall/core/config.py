@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         host = parts.hostname
         if (
             host
-            and host not in ("localhost", "127.0.0.1", "db", "test", "0.0.0.0")
+            and host not in ("localhost", "127.0.0.1", "db", "test", "0.0.0.0")  # nosec B104
             and sslmode != "disable"
         ):
             self.DATABASE_SSL_REQUIRED = True
@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     WORKSPACE_RATE_LIMIT_PER_MIN: int = 1000
     AGENT_INSPECT_RATE_LIMIT_PER_MIN: int = 60
     RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_BACKEND: str = "memory"  # "memory" | "postgres"
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4318"
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
     OTEL_SERVICE_NAME: str = "a2a-firewall"

@@ -2,6 +2,10 @@
 
 Auto-provisions agents and permissions on first run so the user never has to
 manually configure anything.
+
+Data source labeling (Roadmap 1.3):
+- ``POST /v1/simulation/run`` → data_source="live" — every step hits run_inspection().
+- ``GET /v1/simulation/knowledge`` → data_source="reference" — static agent metadata.
 """
 
 from __future__ import annotations
@@ -249,7 +253,7 @@ AGENT_PRIOR_KNOWLEDGE: dict[str, dict[str, Any]] = {
 @router.get("/knowledge")
 async def get_simulation_agent_knowledge() -> dict[str, Any]:
     """Return prior knowledge, memory context, and permission boundaries for all simulation agents."""
-    return {"agents": AGENT_PRIOR_KNOWLEDGE}
+    return {"agents": AGENT_PRIOR_KNOWLEDGE, "data_source": "reference"}
 
 
 @router.post("/run")
@@ -336,4 +340,5 @@ async def run_simulation(
     return {
         "steps": step_results,
         "total": len(step_results),
+        "data_source": "live",
     }

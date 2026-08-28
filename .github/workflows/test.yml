@@ -156,6 +156,13 @@ jobs:
       - name: pip-audit
         run: .venv/bin/python -m pip_audit -r requirements.txt -r requirements-dev.txt
 
+      - name: bandit security scan
+        run: .venv/bin/bandit -r src -ll --skip B101 -f json -o bandit-report.json || true
+
+      - name: bandit summary
+        if: always()
+        run: .venv/bin/bandit -r src -ll --skip B101 -f screen || true
+
   backend-build:
     name: Backend docker build
     runs-on: ubuntu-latest

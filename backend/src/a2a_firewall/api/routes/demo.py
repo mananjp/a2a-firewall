@@ -3,6 +3,12 @@
 Authenticated users can call ``POST /v1/demo/run`` with a scenario name and
 receive the full firewall response without needing to construct valid
 InspectRequest bodies or know agent IDs.
+
+Data source labeling (Roadmap 1.3):
+- ``POST /v1/demo/run`` → data_source="live" — always hits the real detection pipeline.
+- ``POST /v1/demo/run-delegation`` → data_source="live" by default,
+  data_source="simulated" when ``use_static=true`` (returns canned results).
+- ``GET /v1/demo/bootstrap`` and ``GET /v1/demo/delegation-bootstrap`` → metadata only.
 """
 
 from __future__ import annotations
@@ -228,6 +234,7 @@ async def demo_run(
     inspection_result["demo_label"] = scenario["label"]
     inspection_result["demo_description"] = scenario["description"]
     inspection_result["demo_payload"] = scenario["payload"]
+    inspection_result["data_source"] = "live"
 
     return inspection_result
 
@@ -539,6 +546,7 @@ async def demo_run_delegation(
             "demo_label": scenario["label"],
             "demo_description": scenario["description"],
             "demo_payload": scenario["child_payload"],
+            "data_source": "simulated",
             **static,
         }
 
@@ -736,5 +744,6 @@ async def demo_run_delegation(
         "trace_id": root_trace_id,
     }
     child_result["is_static"] = False
+    child_result["data_source"] = "live"
 
     return child_result

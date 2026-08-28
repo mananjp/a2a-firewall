@@ -25,7 +25,14 @@ CORPUS_DIR = Path(__file__).parent.parent / "attack_corpus"
 
 
 def _load_fixtures() -> list[dict[str, Any]]:
-    return [json.loads(p.read_text()) for p in sorted(CORPUS_DIR.glob("*.json"))]
+    fixtures: list[dict[str, Any]] = []
+    for p in sorted(CORPUS_DIR.glob("*.json")):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            fixtures.extend(data)
+        elif isinstance(data, dict):
+            fixtures.append(data)
+    return fixtures
 
 
 def _mock_db_no_rules() -> AsyncMock:

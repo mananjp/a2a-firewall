@@ -20,7 +20,13 @@ services:
       - key: ALLOWED_ORIGINS
         value: https://a2a-firewall-frontend.onrender.com
       - key: OTEL_SDK_DISABLED
-        value: "true"
+        value: "false"
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
+      - key: RATE_LIMIT_BACKEND
+        value: "postgres"
       - key: RATE_LIMIT_ENABLED
         value: "true"
       - key: DEBUG
