@@ -142,6 +142,23 @@ A2A Firewall employs a three-tier interception and enforcement model designed fo
 | **Layer 2: MCP Tool Gateway** (`a2a_firewall/mcp`) | Structured JSON-RPC 2.0 stdio & HTTP/SSE parser (`tools/call`, `resources/read`) | Model Context Protocol tools, path traversal (`../`), destructive bash commands (`rm -rf`), SQL mutations | Pre-execution tool call block |
 | **Layer 3: Kernel eBPF & Egress Guard** (`a2a_firewall/egress_guard`) | Linux `cgroup/connect4` eBPF kernel program + Cross-platform socket monitor | Raw sockets, non-HTTP egress, proxy bypass evasion | **Linux**: Kernel drop.<br>**macOS/Windows**: Process socket audit & auto-kill |
 
+### 🪟 Install-Once System-Wide Transparent Proxy (Linux)
+
+Beyond per-process wrapping, the firewall can be installed as a **system daemon**
+(`a2a-proxy daemon`) that transparently captures **all** outbound TCP 80/443 via
+iptables `REDIRECT`, with a `SO_MARK 0xA2A1` loop-exclusion so the proxy never
+re-enters itself, and OS CA auto-trust. Once installed (`a2a proxy-cli install`),
+every agent tool on the host is governed with **zero** proxy env-var setup.
+
+```bash
+python -m a2a_firewall.proxy.cli install --no-dry-run   # systemd + iptables + CA + eBPF
+python -m a2a_firewall.proxy.cli uninstall --no-dry-run # teardown
+```
+
+eBPF attach is best-effort with automatic fallback to the user-space process
+watcher. Full 5-layer detection is enabled with `A2A_INSPECT_ENABLED=true`.
+See `docs/ADR-0003-transparent-proxy.md` and `docs/RUNBOOK.md`.
+
 ### 📊 Full-Stack Latency & Overhead Benchmark (N=300 runs)
 
 | Stage | Operation | Latency (p50) | Latency (p99) |

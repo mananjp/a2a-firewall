@@ -27,6 +27,7 @@ class NormalizedAIRequest:
     protocol: str = "generic_http"
     model: str | None = None
     is_streaming: bool = False
+    host: str | None = None
 
     def to_orchestrator_dict(
         self,
@@ -117,7 +118,7 @@ class AIRequestNormalizer:
                 continue
             role = msg.get("role", "")
             content = msg.get("content", "")
-            
+
             # Content can be string or list of content parts
             if isinstance(content, list):
                 extracted = []
@@ -178,7 +179,11 @@ class AIRequestNormalizer:
             role = msg.get("role", "")
             content = msg.get("content", "")
             if isinstance(content, list):
-                extracted = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                extracted = [
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                ]
                 content_str = " ".join(extracted)
             else:
                 content_str = str(content)
@@ -256,19 +261,32 @@ class AIRequestNormalizer:
                 resource_type="mcp_method",
                 resource_id=method,
                 action="rpc",
-                payload={"method": method, "params": params, "rpc_id": rpc_id, "query": json.dumps(params)},
+                payload={
+                    "method": method,
+                    "params": params,
+                    "rpc_id": rpc_id,
+                    "query": json.dumps(params),
+                },
                 extracted_text=f"MCP JSON-RPC method: {method}",
                 protocol="mcp",
             )
 
     @classmethod
-    def _normalize_generic_json(cls, body: dict[str, Any] | list[Any], path: str, method: str) -> NormalizedAIRequest:
+    def _normalize_generic_json(
+        cls, body: dict[str, Any] | list[Any], path: str, method: str
+    ) -> NormalizedAIRequest:
         """Normalize arbitrary JSON REST API payload."""
         body_str = json.dumps(body)
         query = ""
         if isinstance(body, dict):
             # Extract common prompt/query fields if present
-            query = body.get("query") or body.get("prompt") or body.get("input") or body.get("text") or body_str
+            query = (
+                body.get("query")
+                or body.get("prompt")
+                or body.get("input")
+                or body.get("text")
+                or body_str
+            )
         else:
             query = body_str
 

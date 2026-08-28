@@ -93,5 +93,11 @@ class Settings(BaseSettings):
     IPS_AUTO_SUSPEND_THRESHOLD: int = 3  # critical violations before auto-suspend
     IPS_AUTO_SUSPEND_WINDOW_MINUTES: int = 10  # sliding window in minutes
 
+    # Transparent proxy / system-wide redirection
+    A2A_FW_MARK: int = 0xA2A1  # SO_MARK set on proxy's own sockets to avoid loop
+    A2A_REDIRECT_ENABLED: bool = False  # install iptables PREROUTING REDIRECT
+    A2A_INSPECT_ENABLED: bool = False  # route proxy traffic through full run_inspection pipeline
+    A2A_DEFAULT_DRY_RUN: bool = True  # installer commands are no-ops unless forced off
+
 
 settings = Settings()

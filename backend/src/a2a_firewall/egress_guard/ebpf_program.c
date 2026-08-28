@@ -16,6 +16,7 @@
 
 #define PROXY_PORT 8080
 #define LOOPBACK_IPV4 0x7F000001 /* 127.0.0.1 in network byte order */
+#define A2A_FWMARK 0xA2A1        /* sockets marked by the proxy itself are exempt */
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -23,6 +24,17 @@ struct {
     __type(key, __u32);   /* PID */
     __type(value, __u8);  /* 1 = Enforce Proxy Routing */
 } monitored_pids SEC(".maps");
+
+/* PIDs excluded from enforcement (e.g. the A2A proxy's own process).
+ * The proxy's own outbound connections must never be redirected back into
+ * itself — that would cause an infinite loop. This is the user-space
+ * complement to the fwmark check below. */
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u32);   /* PID */
+    __type(value, __u8);  /* 1 = Exempt */
+} exempt_pids SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -41,6 +53,19 @@ SEC("cgroup/connect4")
 int a2a_sock_connect4(struct bpf_sock_addr *ctx) {
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid = pid_tgid >> 32;
+
+    // Loop-avoidance: never intercept the A2A proxy's own sockets.
+    // 1. The proxy marks its own outbound sockets with A2A_FWMARK (set via
+    //    SO_MARK in user-space) so the iptables REDIRECT skips them.
+    // 2. As a defence-in-depth, the proxy's own PID in exempt_pids is also
+    //    skipped even for cgroup attachment.
+    if (ctx->mark == A2A_FWMARK) {
+        return 1; // ALLOW (proxy's own traffic, prevent feedback loop)
+    }
+    __u8 *is_exempt = bpf_map_lookup_elem(&exempt_pids, &pid);
+    if (is_exempt && *is_exempt == 1) {
+        return 1; // ALLOW (explicit exemption)
+    }
 
     // Check if this PID is monitored by A2A Firewall
     __u8 *is_monitored = bpf_map_lookup_elem(&monitored_pids, &pid);

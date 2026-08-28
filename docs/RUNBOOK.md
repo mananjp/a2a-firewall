@@ -148,6 +148,40 @@ The single most important security test:
 
 If any of these tests fails, **do not deploy**. Workspace isolation is the core claim.
 
+### System-Wide Transparent Proxy (Linux)
+
+Installs the proxy as a system daemon that transparently captures all outbound
+TCP 80/443 traffic via iptables REDIRECT, so agent tools need **no** env-var or
+process wrapping. Requires Linux + root. All commands are dry-run no-ops unless
+`A2A_DEFAULT_DRY_RUN=false` or `--no-dry-run` is passed.
+
+```bash
+# Inspect what install would do (safe, default)
+backend/.venv/Scripts/python -m a2a_firewall.proxy.cli install
+backend/.venv/Scripts/python -m a2a_firewall.proxy.cli status
+
+# Actually install (systemd unit + iptables REDIRECT + CA auto-trust + eBPF attach)
+backend/.venv/Scripts/python -m a2a_firewall.proxy.cli install --no-dry-run
+
+# Remove
+backend/.venv/Scripts/python -m a2a_firewall.proxy.cli uninstall --no-dry-run
+```
+
+The daemon can also be run without installing:
+
+```bash
+backend/.venv/Scripts/python -m a2a_firewall.proxy.cli daemon --egress-guard \
+  --inspect
+```
+
+Notes:
+- `SO_MARK 0xA2A1` is set on the proxy's own sockets and the iptables REDIRECT
+  rules exclude that mark, preventing a redirect loop.
+- eBPF attach is best-effort: if `clang`/`bpftool` are missing it quietly falls
+  back to the user-space process watcher. It never crashes the service.
+- `A2A_INSPECT_ENABLED=true` routes traffic through the full 5-layer detection
+  pipeline (requires Postgres + Groq).
+
 ## Configuration Reference
 
 All settings live in `backend/src/a2a_firewall/core/config.py` and read from `.env`:
@@ -174,6 +208,10 @@ All settings live in `backend/src/a2a_firewall/core/config.py` and read from `.e
 | `DELEGATION_DEFAULT_EXPIRY_SECONDS` | 3600 | Default TTL for minted macaroon tokens |
 | `IDENTITY_CARD_TTL_SECONDS` | 86400 | Agent identity card validity (24h) |
 | `INTENT_DRIFT_THRESHOLD` | 0.7 | Max allowed semantic drift score (0.0-1.0) |
+| `A2A_FW_MARK` | `0xA2A1` | SO_MARK applied to proxy sockets to avoid REDIRECT loop |
+| `A2A_REDIRECT_ENABLED` | false | Install iptables PREROUTING/OUTPUT REDIRECT rules (Linux+root) |
+| `A2A_INSPECT_ENABLED` | false | Route proxy traffic through full run_inspection pipeline |
+| `A2A_DEFAULT_DRY_RUN` | true | Installer/system commands log instead of mutating the system |
 
 ## Troubleshooting
 

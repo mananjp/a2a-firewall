@@ -8,21 +8,18 @@ runs inspection, and blocks or forwards traffic.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-import ssl
-import sys
-import time
+import re
 import urllib.parse
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import httpx
 
-import re
-
 from a2a_firewall.detection.ips_signatures import SignatureEngine
 from a2a_firewall.detection.layer3_rules import (
-    DELEGATION_ABUSE_PATTERNS,
     INJECTION_PATTERNS,
     SQL_INJECTION_PATTERNS,
 )
@@ -41,7 +38,8 @@ class A2AProxyServer:
         host: str = "127.0.0.1",
         port: int = 8080,
         ca: CertificateAuthority | None = None,
-        inspect_callback: Callable[[NormalizedAIRequest], Coroutine[Any, Any, dict[str, Any]]] | None = None,
+        inspect_callback: Callable[[NormalizedAIRequest], Coroutine[Any, Any, dict[str, Any]]]
+        | None = None,
         fail_mode: str = "closed",  # "closed" or "open"
     ):
         self.host = host
@@ -146,7 +144,7 @@ class A2AProxyServer:
                 sslcontext=server_ssl_ctx,
                 server_side=True,
             )
-            client_writer._transport = tls_transport
+            client_writer._transport = tls_transport  # type: ignore[attr-defined]
             logger.info(f"TLS handshake completed with client for {target_host}")
         except Exception as e:
             logger.exception(f"TLS handshake failed for {target_host}: {e}")
@@ -164,8 +162,23 @@ class A2AProxyServer:
         if len(parts) < 3:
             return
 
-        method, path, version = parts[0], parts[1], parts[2]
+        method, path, _version = parts[0], parts[1], parts[2]
         headers, body_bytes = await self._read_headers_and_body(client_reader)
+
+        # Transparent-mode host resolution: when a connection was REDIRECTed to
+        # the proxy by iptables, the CONNECT target is the proxy itself
+        # (127.0.0.1:8080), not the origin. The real origin is carried in the
+        # HTTP Host header, which we must trust to reach the correct upstream.
+        resolved_host, resolved_port = target_host, target_port
+        http_host = headers.get("host")
+        if http_host:
+            host_part, _, port_part = http_host.partition(":")
+            if host_part and host_part not in ("127.0.0.1", "localhost", "0.0.0.0"):
+                resolved_host = host_part
+                if port_part:
+                    resolved_port = int(port_part)
+                elif target_port in (80,) or path.startswith("http://"):
+                    resolved_port = 80
 
         # Normalize request
         normalized = AIRequestNormalizer.normalize(
@@ -174,6 +187,8 @@ class A2AProxyServer:
             headers=headers,
             body_bytes=body_bytes,
         )
+        # Attach host for downstream enterprise inspection.
+        normalized.host = resolved_host
 
         # Run Inspection
         inspection_res = await self._inspect_request(normalized)
@@ -187,8 +202,8 @@ class A2AProxyServer:
 
         # Forward to upstream target
         await self._forward_upstream_https(
-            target_host=target_host,
-            target_port=target_port,
+            target_host=resolved_host,
+            target_port=resolved_port,
             method=method,
             path=path,
             headers=headers,
@@ -225,14 +240,15 @@ class A2AProxyServer:
             return
 
         # Forward plain HTTP
-        host = parsed.hostname or headers.get("host", "localhost")
-        port = parsed.port or 80
-
         async with httpx.AsyncClient(verify=False) as client:
             resp = await client.request(
                 method=method,
                 url=target_url,
-                headers={k: v for k, v in headers.items() if k.lower() not in ("host", "proxy-connection")},
+                headers={
+                    k: v
+                    for k, v in headers.items()
+                    if k.lower() not in ("host", "proxy-connection")
+                },
                 content=body_bytes,
             )
             client_writer.write(f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}\r\n".encode())
@@ -260,10 +276,8 @@ class A2AProxyServer:
                 k, v = line_str.split(":", 1)
                 headers[k.strip().lower()] = v.strip()
                 if k.strip().lower() == "content-length":
-                    try:
+                    with contextlib.suppress(ValueError):
                         content_length = int(v.strip())
-                    except ValueError:
-                        pass
 
         body_bytes = b""
         if content_length > 0:
@@ -284,7 +298,9 @@ class A2AProxyServer:
                         "decision": "block",
                         "block_reason": f"inspection_error: {e}",
                         "risk_score": 1.0,
-                        "violations": [{"layer": "system", "violation_type": "proxy_inspection_error"}],
+                        "violations": [
+                            {"layer": "system", "violation_type": "proxy_inspection_error"}
+                        ],
                     }
                 return {"decision": "allow", "risk_score": 0.0, "violations": []}
 
@@ -307,12 +323,14 @@ class A2AProxyServer:
         sig_engine = SignatureEngine()
         ips_hits = sig_engine.scan(text_to_scan)
         for hit in ips_hits:
-            violations.append({
-                "layer": "rule",
-                "violation_type": f"ips_signature_{hit['signature_id']}",
-                "severity": hit.get("severity", "critical"),
-                "details": hit,
-            })
+            violations.append(
+                {
+                    "layer": "rule",
+                    "violation_type": f"ips_signature_{hit['signature_id']}",
+                    "severity": hit.get("severity", "critical"),
+                    "details": hit,
+                }
+            )
 
         # Scan for PII leaks
         pii_matches = scan_all_pii(text_to_scan)
@@ -323,28 +341,34 @@ class A2AProxyServer:
         payload_str = (text_to_scan + " " + json.dumps(req.payload)).lower()
         for pattern in INJECTION_PATTERNS:
             if re.search(pattern, payload_str, re.IGNORECASE):
-                violations.append({
-                    "layer": "rule",
-                    "violation_type": "forbidden_pattern",
-                    "severity": "high",
-                    "details": {"pattern": pattern},
-                })
+                violations.append(
+                    {
+                        "layer": "rule",
+                        "violation_type": "forbidden_pattern",
+                        "severity": "high",
+                        "details": {"pattern": pattern},
+                    }
+                )
 
         # Scan SQL injection patterns
         for pattern, vtype, _ in SQL_INJECTION_PATTERNS:
             if re.search(pattern, payload_str, re.IGNORECASE):
-                violations.append({
-                    "layer": "rule",
-                    "violation_type": "sql_injection",
-                    "severity": "critical",
-                    "details": {"pattern": pattern, "subtype": vtype},
-                })
+                violations.append(
+                    {
+                        "layer": "rule",
+                        "violation_type": "sql_injection",
+                        "severity": "critical",
+                        "details": {"pattern": pattern, "subtype": vtype},
+                    }
+                )
 
         if violations:
             return {
                 "decision": "block",
                 "block_reason": violations[0]["violation_type"],
-                "risk_score": 1.0 if any(v.get("severity") == "critical" for v in violations) else 0.9,
+                "risk_score": 1.0
+                if any(v.get("severity") == "critical" for v in violations)
+                else 0.9,
                 "violations": violations,
                 "task_id": req.task_id,
             }
@@ -378,7 +402,7 @@ class A2AProxyServer:
             "Server: A2A-Firewall-Proxy/0.2.0\r\n"
             "Connection: close\r\n"
             f"Content-Length: {len(body)}\r\n\r\n"
-        ).encode("utf-8")
+        ).encode()
         writer.write(resp_headers + body)
         await writer.drain()
 
@@ -394,10 +418,11 @@ class A2AProxyServer:
     ) -> None:
         """Forward decrypted request to upstream HTTPS endpoint."""
         url = f"https://{target_host}:{target_port}{path}"
-        
+
         # Clean headers for forwarding
         forward_headers = {
-            k: v for k, v in headers.items()
+            k: v
+            for k, v in headers.items()
             if k.lower() not in ("host", "proxy-connection", "transfer-encoding")
         }
 
@@ -411,22 +436,26 @@ class A2AProxyServer:
                 )
 
                 # Return upstream response to client
-                client_writer.write(f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}\r\n".encode())
+                client_writer.write(
+                    f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}\r\n".encode()
+                )
                 for k, v in resp.headers.items():
                     if k.lower() not in ("transfer-encoding", "content-length", "content-encoding"):
                         client_writer.write(f"{k}: {v}\r\n".encode())
-                
+
                 client_writer.write(f"Content-Length: {len(resp.content)}\r\n".encode())
                 client_writer.write(b"X-A2A-Firewall-Inspected: true\r\n\r\n")
                 client_writer.write(resp.content)
                 await client_writer.drain()
 
             except Exception as e:
-                err_body = json.dumps({"error": {"message": f"Upstream connection failed: {e}"}}).encode("utf-8")
+                err_body = json.dumps(
+                    {"error": {"message": f"Upstream connection failed: {e}"}}
+                ).encode("utf-8")
                 err_resp_headers = (
                     "HTTP/1.1 502 Bad Gateway\r\n"
                     "Content-Type: application/json\r\n"
                     f"Content-Length: {len(err_body)}\r\n\r\n"
-                ).encode("utf-8")
+                ).encode()
                 client_writer.write(err_resp_headers + err_body)
                 await client_writer.drain()
