@@ -1,8 +1,8 @@
 # A2A Firewall — Live Case Study & Validation Report
 
 **Environment**: `https://a2a-firewall1.onrender.com`  
-**Date**: `2026-08-28T15:23:00Z`  
-**Workspace**: `9429ec60-fd9e-4390-8cae-8af351d8c445`  
+**Date**: `2026-08-28T21:39:29Z`  
+**Workspace**: `36349e22-c6a4-43ab-a010-f6063adfb122`  
 **SDK Package**: `a2a-firewall-sdk` (PyPI / npm v0.2.0)
 
 > **⚠️ Methodology note (read first).** This report intentionally separates two
@@ -51,8 +51,8 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
 ## 3. Test Scenarios & Real Execution Proof
 
 > **Latency label for all figures in this section:** *full HTTP round-trip*
-> against `a2a-firewall1.onrender.com`, a Render **free-tier** instance that was
-> likely **cold-started** (dyno waking from sleep). These figures include network
+> against the live deployment, a Render **free-tier** instance that was likely
+> **cold-started** (dyno waking from sleep). These figures include network
 > transit and host startup; they are **not** the in-process inspection time shown
 > in Section 4.
 
@@ -62,9 +62,9 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
 - **Payload**: Energy transition research request followed by executive brief synthesis.
 - **Outcome**: **ALLOWED (100% Legitimate Traffic Passed)**
 - **Round-trip telemetry** *(full HTTP, cold instance)*:
-  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Round-trip Latency: `2712.47ms`)
-  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Round-trip Latency: `2390.0ms`)
-- **Cryptographic Lineage Hash**: `d9afce8ad5f6c2f9f3c5a9e3286c3404c95f0565a6653267a6aa61e3e4396ad6`
+  - Hop 1 (Planner &rarr; Researcher): Risk Score = `0.0` (Round-trip Latency: `4329.83ms`)
+  - Hop 2 (Researcher &rarr; Summarizer): Risk Score = `0.0` (Round-trip Latency: `3576.75ms`)
+- **Cryptographic Lineage Hash**: `f5685e08fb3acc99d1abc67a9db06695d5b1659c9969dbbaf384aa22d19b07ed`
 
 ---
 
@@ -85,7 +85,7 @@ Three autonomous agents were provisioned in an isolated zero-trust mesh:
   > `ACC-9921' UNION SELECT api_key_hash, password_hash, signing_key FROM workspaces--`
 - **Outcome**: **BLOCKED (Deterministic Gate)**
 - **Risk Score**: `0.95`
-- **Round-trip Detection Latency**: `2859.99ms` *(full HTTP round-trip, cold instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
+- **Round-trip Detection Latency**: `3906.75ms` *(full HTTP round-trip, cold instance; the in-process deterministic rule evaluation measured separately is sub-millisecond — see Section 4)*
 
 ---
 
