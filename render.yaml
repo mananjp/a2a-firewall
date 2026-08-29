@@ -18,7 +18,7 @@ services:
       - key: API_KEY_SALT
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://a2a-firewall-frontend.onrender.com
+        value: https://a2a-firewall.onrender.com
       - key: OTEL_SDK_DISABLED
         value: "false"
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -50,9 +50,9 @@ services:
     plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://a2a-firewall-backend.onrender.com
+        value: https://a2a-firewall1.onrender.com
       - key: API_BASE_URL
-        value: https://a2a-firewall-backend.onrender.com
+        value: https://a2a-firewall1.onrender.com
       - key: NODE_ENV
         value: production
 
