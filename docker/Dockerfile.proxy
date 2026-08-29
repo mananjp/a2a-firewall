@@ -1,0 +1,44 @@
+# ── A2A Firewall Transparent Proxy — Sidecar Image ──
+# Lightweight image for running as a Docker/K8s sidecar alongside agent containers.
+# Generates a local Root CA on first start and intercepts HTTPS traffic.
+#
+# Build:  docker build -f docker/Dockerfile.proxy -t a2a-proxy ./backend
+# Run:    docker run -p 8080:8080 -v a2a-ca:/data/ca a2a-proxy
+
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# Install only the proxy's runtime dependencies (no DB, no Alembic)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --target /deps \
+    cryptography httpx psutil pydantic pydantic-settings
+
+# Copy source
+COPY src/ ./src/
+COPY pyproject.toml ./
+
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="A2A Firewall Transparent Proxy"
+LABEL org.opencontainers.image.description="Zero-touch TLS-intercepting sidecar proxy for AI agent governance"
+LABEL org.opencontainers.image.source="https://github.com/mananjp/a2a-firewall"
+
+WORKDIR /app
+
+# Copy pre-built dependencies and source
+COPY --from=builder /deps /usr/local/lib/python3.12/site-packages
+COPY --from=builder /build/src ./src
+COPY --from=builder /build/pyproject.toml ./
+
+# CA storage directory (mount as volume for persistence)
+ENV A2A_CA_DIR=/data/ca
+ENV PYTHONPATH=/app/src
+RUN mkdir -p /data/ca
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')" || exit 1
+
+ENTRYPOINT ["python", "-m", "a2a_firewall.proxy", "start", "--host", "0.0.0.0", "--port", "8080"]

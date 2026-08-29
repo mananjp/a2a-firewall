@@ -26,12 +26,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
+import os
+import ssl
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import httpx
+
+_sdk_logger = logging.getLogger("a2a_firewall.sdk")
 
 try:
     from opentelemetry import trace
@@ -40,6 +45,28 @@ try:
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
+
+
+# ---------------------------------------------------------------------------
+# Proxy auto-detection helpers
+# ---------------------------------------------------------------------------
+
+def _detect_proxy() -> str | None:
+    """Detect transparent proxy URL from environment variables."""
+    for key in ("A2A_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        val = os.environ.get(key)
+        if val:
+            return val
+    return None
+
+
+def _detect_ca_cert() -> str | None:
+    """Detect custom CA certificate path from environment variables."""
+    for key in ("A2A_CA_CERT", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+        val = os.environ.get(key)
+        if val and os.path.exists(val):
+            return val
+    return None
 
 # ---------------------------------------------------------------------------
 # Config
@@ -158,14 +185,34 @@ class A2AFirewall:
     def __init__(self, config: FirewallConfig):
         self.config = config
         self._ctx: dict[str, Any] = {}
-        self._http = httpx.Client(
-            base_url=config.firewall_url,
-            headers={"Authorization": f"Bearer {config.agent_api_key}"},
-            timeout=config.timeout_seconds,
-        )
+
+        # ── Transparent proxy auto-detection ──
+        self._proxy_url = _detect_proxy()
+        self._ca_cert_path = _detect_ca_cert()
+
+        http_kwargs: dict[str, Any] = {
+            "base_url": config.firewall_url,
+            "headers": {"Authorization": f"Bearer {config.agent_api_key}"},
+            "timeout": config.timeout_seconds,
+        }
+
+        if self._proxy_url:
+            http_kwargs["proxy"] = self._proxy_url
+            _sdk_logger.info(f"[A2A SDK] Transparent proxy detected at {self._proxy_url}")
+
+        if self._ca_cert_path:
+            http_kwargs["verify"] = self._ca_cert_path
+            _sdk_logger.info(f"[A2A SDK] Using custom CA certificate: {self._ca_cert_path}")
+
+        self._http = httpx.Client(**http_kwargs)
         self._chain_hash: str | None = None
         self._delegation_token: dict[str, Any] | None = None
         self._delegation_chain: list[str] = []
+
+    @property
+    def proxy_detected(self) -> bool:
+        """Whether a transparent proxy was auto-detected from the environment."""
+        return self._proxy_url is not None
 
     # -- Context management --
 

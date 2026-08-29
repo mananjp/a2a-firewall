@@ -42,6 +42,8 @@ export class A2AFirewall {
   private chainHash: string | null = null;
   private delegationToken: DelegationToken | null = null;
   private delegationChain: string[] = [];
+  private _proxyUrl: string | null = null;
+  private _caCertPath: string | null = null;
 
   constructor(config: FirewallConfig) {
     this.config = {
@@ -53,6 +55,35 @@ export class A2AFirewall {
       reviewPollIntervalMs: config.reviewPollIntervalMs ?? 2000,
       reviewMaxWaitMs: config.reviewMaxWaitMs ?? 60000,
     };
+
+    // ── Transparent proxy auto-detection ──
+    if (typeof process !== 'undefined' && process.env) {
+      this._proxyUrl = process.env.A2A_PROXY_URL
+        || process.env.HTTPS_PROXY
+        || process.env.https_proxy
+        || process.env.HTTP_PROXY
+        || process.env.http_proxy
+        || null;
+
+      this._caCertPath = process.env.A2A_CA_CERT
+        || process.env.NODE_EXTRA_CA_CERTS
+        || process.env.SSL_CERT_FILE
+        || null;
+
+      if (this._proxyUrl) {
+        console.log(`[A2A SDK] Transparent proxy detected at ${this._proxyUrl}`);
+      }
+      if (this._caCertPath) {
+        console.log(`[A2A SDK] Using custom CA certificate: ${this._caCertPath}`);
+      }
+    }
+  }
+
+  /**
+   * Whether a transparent proxy was auto-detected from the environment.
+   */
+  get proxyDetected(): boolean {
+    return this._proxyUrl !== null;
   }
 
   // ---------------------------------------------------------------------------

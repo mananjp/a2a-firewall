@@ -1,0 +1,140 @@
+# ── A2A Firewall — Kubernetes Sidecar Deployment ──
+#
+# Deploys the A2A transparent proxy as a sidecar container alongside your agent
+# in the same Pod. An init container generates the Root CA into an emptyDir
+# volume shared between the proxy and the agent.
+#
+# Usage:
+#   kubectl apply -f deployment.yaml
+#   kubectl logs -f deployment/governed-agent -c a2a-proxy
+#   kubectl logs -f deployment/governed-agent -c agent
+#
+# To use your own agent image, replace the `agent` container's image and command.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governed-agent
+  labels:
+    app: governed-agent
+    a2a-firewall.io/governed: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: governed-agent
+  template:
+    metadata:
+      labels:
+        app: governed-agent
+        a2a-firewall.io/governed: "true"
+    spec:
+      # ── Init Container: Generate Root CA ──
+      # Runs once before the Pod starts. Creates the CA cert/key into the
+      # shared emptyDir volume so both the proxy and agent can access it.
+      initContainers:
+        - name: a2a-ca-init
+          image: ghcr.io/mananjp/a2a-proxy:latest  # or your registry
+          command:
+            - python
+            - -c
+            - |
+              from a2a_firewall.proxy.ca import CertificateAuthority
+              ca = CertificateAuthority(ca_dir="/data/ca")
+              print(f"CA certificate generated at: {ca.root_cert_path}")
+          env:
+            - name: A2A_CA_DIR
+              value: /data/ca
+            - name: PYTHONPATH
+              value: /app/src
+          volumeMounts:
+            - name: ca-certs
+              mountPath: /data/ca
+
+      containers:
+        # ── Sidecar: A2A Transparent Proxy ──
+        - name: a2a-proxy
+          image: ghcr.io/mananjp/a2a-proxy:latest  # or your registry
+          ports:
+            - containerPort: 8080
+              name: proxy
+              protocol: TCP
+          env:
+            - name: A2A_CA_DIR
+              value: /data/ca
+            - name: PYTHONPATH
+              value: /app/src
+          volumeMounts:
+            - name: ca-certs
+              mountPath: /data/ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+        # ── Your Agent Container ──
+        # Replace this with your actual agent image.
+        # The ONLY changes vs. an ungoverned deployment are the env vars below.
+        - name: agent
+          image: python:3.12-slim
+          command:
+            - python
+            - -c
+            - |
+              import time, os
+              print("Agent started.")
+              print(f"  HTTPS_PROXY = {os.environ.get('HTTPS_PROXY')}")
+              print(f"  SSL_CERT_FILE = {os.environ.get('SSL_CERT_FILE')}")
+              print("  All HTTPS traffic is now transparently governed.")
+              # Your agent logic here...
+              while True:
+                  time.sleep(60)
+          env:
+            # ── Proxy env vars — this is all you need ──
+            - name: HTTP_PROXY
+              value: "http://127.0.0.1:8080"
+            - name: HTTPS_PROXY
+              value: "http://127.0.0.1:8080"
+            - name: http_proxy
+              value: "http://127.0.0.1:8080"
+            - name: https_proxy
+              value: "http://127.0.0.1:8080"
+            - name: SSL_CERT_FILE
+              value: /certs/ca.crt
+            - name: REQUESTS_CA_BUNDLE
+              value: /certs/ca.crt
+            - name: NODE_EXTRA_CA_CERTS
+              value: /certs/ca.crt
+            - name: CURL_CA_BUNDLE
+              value: /certs/ca.crt
+          volumeMounts:
+            - name: ca-certs
+              mountPath: /certs
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+      volumes:
+        - name: ca-certs
+          emptyDir: {}

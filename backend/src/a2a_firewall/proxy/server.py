@@ -71,6 +71,24 @@ class A2AProxyServer:
             await self._server.wait_closed()
             logger.info("A2A Proxy stopped.")
 
+    async def _handle_health_check(self, client_writer: asyncio.StreamWriter) -> None:
+        """Respond to health/readiness probes for Docker/K8s orchestrators."""
+        body = json.dumps({
+            "status": "healthy",
+            "ca_ready": self.ca._root_cert is not None,
+            "proxy_running": self._running,
+        }).encode("utf-8")
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+            + body
+        )
+        client_writer.write(response)
+        await client_writer.drain()
+
     async def _handle_client_connection(
         self,
         client_reader: asyncio.StreamReader,
@@ -89,6 +107,11 @@ class A2AProxyServer:
                 return
 
             method, target, version = parts[0], parts[1], parts[2]
+
+            # Health check endpoint — responds directly without proxying
+            if method.upper() == "GET" and target in ("/healthz", "/health", "/readyz"):
+                await self._handle_health_check(client_writer)
+                return
 
             # Case 1: HTTPS CONNECT Tunnel
             if method.upper() == "CONNECT":
