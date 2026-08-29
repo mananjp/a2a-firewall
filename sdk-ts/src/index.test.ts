@@ -145,4 +145,43 @@ describe('A2AFirewall Client', () => {
     expect(compact).toBeDefined();
     expect(fw.getDelegationChain()).toEqual(['agent-2']);
   });
+
+  it('auto-detects proxy from environment variables', () => {
+    const origProxy = process.env.HTTPS_PROXY;
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:8080';
+
+    const fw = new A2AFirewall({
+      firewallUrl: 'http://localhost:8000',
+      agentApiKey: 'agt_key',
+    });
+
+    expect(fw.proxyDetected).toBe(true);
+
+    if (origProxy !== undefined) {
+      process.env.HTTPS_PROXY = origProxy;
+    } else {
+      delete process.env.HTTPS_PROXY;
+    }
+  });
+
+  it('reports proxyDetected as false when no proxy env is set', () => {
+    const origProxy = process.env.HTTPS_PROXY;
+    const origA2A = process.env.A2A_PROXY_URL;
+    delete process.env.HTTPS_PROXY;
+    delete process.env.A2A_PROXY_URL;
+    delete process.env.https_proxy;
+    delete process.env.HTTP_PROXY;
+    delete process.env.http_proxy;
+
+    const fw = new A2AFirewall({
+      firewallUrl: 'http://localhost:8000',
+      agentApiKey: 'agt_key',
+    });
+
+    expect(fw.proxyDetected).toBe(false);
+
+    if (origProxy) process.env.HTTPS_PROXY = origProxy;
+    if (origA2A) process.env.A2A_PROXY_URL = origA2A;
+  });
 });
+

@@ -95,6 +95,30 @@ import {
 } from '@a2a-firewall/sdk';
 ```
 
+## Transparent Proxy & Sidecar Auto-Detection (Tier A)
+
+When running inside a containerized agent mesh (Docker Compose, Kubernetes) alongside an `a2a-proxy` sidecar, the SDK **automatically detects** the proxy and custom CA certificate from standard environment variables:
+
+```typescript
+import { A2AFirewall } from 'a2a-firewall-sdk';
+
+// No proxy config needed in code!
+// Automatically detects HTTPS_PROXY and NODE_EXTRA_CA_CERTS from process.env:
+const firewall = new A2AFirewall({
+  firewallUrl: 'http://a2a-backend:8000',
+  agentApiKey: 'your_api_key',
+});
+
+if (firewall.proxyDetected) {
+  console.log('Running in governed sidecar container');
+}
+```
+
+| Variable | Purpose | Priority |
+|:---|:---|:---|
+| `A2A_PROXY_URL` / `HTTPS_PROXY` | Proxy endpoint (e.g. `http://a2a-proxy:8080`) | Auto-routed |
+| `A2A_CA_CERT` / `NODE_EXTRA_CA_CERTS` | Path to Root CA certificate | Auto-trusted |
+
 ## API Reference
 
 ### `FirewallConfig`

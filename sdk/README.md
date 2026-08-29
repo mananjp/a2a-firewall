@@ -110,6 +110,27 @@ When `opentelemetry-api` is installed, the SDK automatically creates spans for e
 pip install "a2a-firewall-sdk[otel]"
 ```
 
+## Transparent Proxy & Sidecar Auto-Detection (Tier A)
+
+When running inside a containerized agent mesh (Docker Compose, Kubernetes) alongside an `a2a-proxy` sidecar, the SDK **automatically detects** the proxy and custom CA certificate from standard environment variables:
+
+```python
+# No proxy config needed in code!
+# The SDK automatically detects HTTPS_PROXY and SSL_CERT_FILE from env:
+firewall = A2AFirewall(FirewallConfig(
+    firewall_url="http://a2a-backend:8000",
+    agent_api_key="your_api_key",
+))
+
+if firewall.proxy_detected:
+    print("Running in governed sidecar container")
+```
+
+| Variable | Purpose | Priority |
+|:---|:---|:---|
+| `A2A_PROXY_URL` / `HTTPS_PROXY` | Proxy endpoint (e.g. `http://a2a-proxy:8080`) | Auto-routed |
+| `A2A_CA_CERT` / `SSL_CERT_FILE` | Path to Root CA certificate | Auto-trusted |
+
 ## API Reference
 
 ### `FirewallConfig`

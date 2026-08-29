@@ -151,3 +151,50 @@ def test_fail_closed_mode():
         with pytest.raises(FirewallBlockedError) as exc:
             fw.send("receiver-id", "research", {"query": "test"})
     assert exc.value.reason == "firewall_unreachable"
+
+
+def test_proxy_auto_detection(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:8080")
+    fw = make_fw()
+    assert fw.proxy_detected is True
+    assert fw._proxy_url == "http://127.0.0.1:8080"
+
+
+def test_proxy_not_detected_when_no_env(monkeypatch):
+    for key in ("A2A_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        monkeypatch.delenv(key, raising=False)
+    fw = make_fw()
+    assert fw.proxy_detected is False
+    assert fw._proxy_url is None
+
+
+def test_ca_cert_auto_detection(monkeypatch, tmp_path):
+    from datetime import datetime, timezone, timedelta
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    # Generate a quick valid self-signed cert
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test CA")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+
+    cert_file = tmp_path / "ca.crt"
+    from cryptography.hazmat.primitives import serialization
+    cert_file.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+
+    monkeypatch.setenv("SSL_CERT_FILE", str(cert_file))
+    fw = make_fw()
+    assert fw._ca_cert_path == str(cert_file)
+
+
