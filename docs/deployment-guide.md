@@ -238,7 +238,37 @@ console.log(firewall.proxyDetected);  // true (when HTTPS_PROXY is set)
 
 ---
 
-## 7. Health & Monitoring
+## 7. Data Residency & In-Region Deployment
+
+**Framing (accurate, not overstated):** A2A Firewall does **not** host or store your
+customers' or agents' data in a vendor SaaS — the firewall runs *in your environment*
+as a self-hosted component (Docker sidecar, Kubernetes sidecar, Linux host, or local
+CLI). This is the natural answer for **data-residency requirements**, including India's
+**RBI** data-localization rules and **DPDP** cross-border-transfer restrictions that the
+built-in compliance packs enforce.
+
+- **The right region is the region you run it in.** Because the firewall is
+  self-hosted, in-region deployment is simply a matter of running the sidecar/host
+  pattern in that region's cloud (any ICICI/RBI-regulated workload can keep every byte
+  within India by running the Docker/Kubernetes/host instance on an Indian-region
+  provider or on-premise).
+- **The public demo instance is not the deployment story.** `a2a-firewall1.onrender.com`
+  (and the `render.yaml` backend/frontend services) is a **US-region public demo**, used
+  to reproduce the case-study numbers. It is **not** where governed production traffic
+  flows, and it is not what a BFSI customer would rely on for residency.
+- **How to deploy in-region:** use the self-hosted patterns in this guide — Docker
+  sidecar (§2), Kubernetes sidecar (§3), or Linux host (§6 Platform Support Matrix) — on
+  infrastructure you choose (Indian-region cloud VPC or on-prem). The detection
+  pipeline, RBI/DPDP packs, and multilingual gate behave identically whether hosted on
+  Render (demo) or in a customer VPC.
+- **A note for the BFSI pitch:** be precise in sales conversations — the claim is *"we
+  are deployable in-region and enforce Indian data-protection rules on your data,"* not
+  *"our SaaS stores your data in India."* The latter would be a false statement today;
+  the former is fully accurate.
+
+---
+
+## 8. Health & Monitoring
 
 ### Proxy Health Endpoint
 
@@ -259,7 +289,7 @@ The total overhead is **<5ms p50** — imperceptible vs. upstream LLM inference 
 
 ---
 
-## 8. Environment Variable Reference
+## 9. Environment Variable Reference
 
 | Variable | Default | Description |
 |:---|:---|:---|

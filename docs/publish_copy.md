@@ -84,6 +84,31 @@ in the report rather than bury it.
 - CI is fully green on `main`, including Docker + Postgres integration tests, the new
   multilingual gate tests, and the rerunnable gap harness.
 
+### For India / APAC BFSI teams specifically
+
+This is not a roadmap item for us — it is why we shipped the multilingual fix at all.
+Two things line up that no English-first guardrail vendor can claim:
+
+- **The multilingual gap was measured and closed in the same week.** Indian BFSI
+  traffic is not an English-only edge case; Hindi, and regional-language agent prompts
+  are the *normal* case. Our own case-study benchmark was English-only, so we
+  intentionally attacked it in Hindi, Arabic, Chinese, Russian and Spanish, found the
+  deterministic rules and the cheap fast-path were silently missing non-English attacks
+  (26/31), and shipped the fix that lifts coverage to **96.8% (30/31)** with a **0.0%
+  false-positive rate** on the benign set — with the one residual case (pure-ASCII
+  unaccented Spanish) stated in the report instead of buried. We are not promising to get
+  to multilingual "eventually historically" — we already measured it and found the
+  exact failure mode, before it was anyone's customer incident.
+- **Indian compliance is wired into the detection core, not bolted on.** The same
+  pipeline ships built-in **RBI** and **DPDP (India)** enforcement packs — unmasked PAN,
+  Aadhaar exposure, high-value cross-border transfers, and cross-border PII transfer
+  flags (`compliance_packs.py`, `pii_patterns.py`) — so multilingual detection and
+  Indian data-protection rules live in the same governed gate.
+
+If you run multi-agent compliance, SOC-automation, or agent-calling-agent workloads in
+India, and your regional-language traffic is real, we want to measure your languages in
+public exactly the way we published ours.
+
 The honest part remains: this repo is the **production core**. The transparent proxy
 (Tier A) provides zero-touch container/process interception, while eBPF L7 kernel-level
 gating (Tier B) is available for Linux host deployments. We will not pretend the attack
