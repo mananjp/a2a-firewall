@@ -25,6 +25,14 @@ services:
         sync: false
       - key: OTEL_EXPORTER_OTLP_HEADERS
         sync: false
+      # Error tracking (Sentry, free tier). Set the DSN in the Render dashboard
+      # secrets; the service no-ops if it is empty.
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: "production"
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
       - key: RATE_LIMIT_BACKEND
         value: "postgres"
       - key: RATE_LIMIT_ENABLED

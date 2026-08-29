@@ -8,21 +8,30 @@
 
 ## Title options
 
-1. **A2A Firewall is live: governance for multi-agent systems that actually blocks prompt injection**
-2. **The confused-deputy problem is the firewall problem: A2A Firewall 1.0**
-3. **v1.0 released: the inter-agent security layer your agent mesh is missing**
+1. **We found a real gap in our own firewall — then closed it. Here are the numbers.**
+2. **A2A Firewall v1.0: we caught the multilingual prompt-injection gap we had, and fixed it**
+3. **Your firewall is English-only and you didn't notice: how we found and closed our own blind spot**
+4. **A2A Firewall is live: multi-agent governance that holds up in Hindi, Arabic, Chinese, Russian — and even unaccented Spanish**
+
+---
+
+## The one-line story
+
+> **Your agents are probably only guarded against English attacks. So were ours —
+> until we intentionally stress-tested our own firewall in five languages, found
+> it silently missing 26 of 31 adversarial payloads, and shipped a fix. Same
+> pitch, now with proof instead of a promise.**
 
 ---
 
 ## Post body (draft)
 
-**A2A Firewall v1.0 is live.** ([GitHub](https://github.com/mananjp/a2a-firewall) · release
-[v1.0.0-core](https://github.com/mananjp/a2a-firewall/releases/tag/v1.0.0-core))
+**A2A Firewall v1.0 is live**, and the honest, repeatable story is a bug we found and closed.
 
-If you run more than two agents that talk to each other, you have already hit the
-problem this solves: one agent calls another, trusting it with a task — and trusting the
-payload it carries. That is a confused-deputy attack surface. No model-level guardrail
-fixes it, because the attack is not in one model: it spans the delegation chain.
+If you run more than two agents that talk to each other, you have already hit the problem
+this solves: one agent calls another, trusting it with a task — and trusting the payload it
+carries. That is a confused-deputy attack surface. No model-level guardrail fixes it,
+because the attack is not in one model: it spans the delegation chain.
 
 A2A Firewall is an inter-agent security mesh that sits between agents and inspects every
 message before it is acted on:
@@ -36,23 +45,55 @@ message before it is acted on:
 - **RBAC, compliance packs, spend/rate limits, retention and SOC workflows** for real
   enterprise governance, not a lab demo.
 
-What we can prove today (all reproduced against the live deployment
-`a2a-firewall1.onrender.com`):
+### The gap we found — with the numbers
 
-- **Live case study**: a clean 3-agent pipeline passes with risk **0.0**; a prompt-injection
-  attempt and a SQL-injection credential-exfiltration attempt are both **blocked**.
-- **Deterministic latency** (in-process): p50 **~0.63 ms**, p95 **~1.3 ms**, p99 **~2.3 ms**.
-- **False-positive rate: 0.0%** across a 211-fixture benign edge-case corpus.
-- CI is fully green on `main`, including Docker + Postgres integration tests.
+The [case-study report](https://github.com/mananjp/a2a-firewall/blob/main/docs/case_study_report.md)
+is honest about its own scope: the headline benchmark corpus is **English-only**. That is the
+easy, comfortable claim. So we did the uncomfortable thing — we attacked our own firewall
+in **Hindi, Spanish, Arabic, Chinese and Russian** (41 labeled fixtures, run against the
+live Layer 3 rules and the real Groq semantic layer), and published the raw results:
 
-The honest part: this repo is the **production core**. The transparent proxy (Tier A)
-provides zero-touch container/process interception, while eBPF L7 kernel-level gating
-(Tier B) is available for Linux host deployments. We will not pretend the attack corpus is
-fully blocked today when it is not; the numbers above are exactly the numbers we measured.
+| Path | Non-English attacks blocked | False positives on benign |
+| :-- | :-- | :-- |
+| Deterministic Layer 3 rules (English-only regexes) | **5 / 31** (16%) | 0 |
+| Old fast "injection-only" Groq path (pre-fix) | **20 / 31** (65%) | 0 |
+| **Shipped fix** (full semantic prompt for any non-ASCII payload) | **30 / 31** (97%) | 0 |
+
+The gap was real and architectural: the cheap fast-path (used at zero risk to save
+latency) trusted an English-optimized keyword gate for payloads the rules could never
+parse. The fix — force the full multi-language semantic prompt whenever the payload
+carries non-Latin or accented-Latin script — closed **10 of 11 previously-missed attacks in
+one change**, lifting end-to-end coverage from 67.7% to **96.8%** with a **0.0% false-positive
+rate** on the benign set. Distinct-script languages (Hindi/Devanagari, Arabic, Chinese,
+Russian) are now caught **100%**.
+
+We are not declaring victory on the final 3.2%: the single residual miss is a
+**pure-ASCII, unaccented Spanish** payload that is character-for-character
+indistinguishable from English — no character-based heuristic can catch it, and we say so
+in the report rather than bury it.
+
+### What this means for your mesh
+
+- **The live case study still holds** — clean 3-agent pipeline passes at risk **0.0**; prompt
+  injection and SQL-injection credential-exfiltration are both blocked; deterministic
+  in-process latency p50 **~0.63 ms**, p95 **~1.3 ms**, p99 **~2.3 ms**; **0.0% false-positive**
+  across a 211-fixture benign corpus.
+- **The multilingual result is now part of the same story**, because it answers the exact
+  question the case study left open — *"does it work when the attacker doesn't write in
+  English?"* — with a measured answer, not a promise.
+- CI is fully green on `main`, including Docker + Postgres integration tests, the new
+  multilingual gate tests, and the rerunnable gap harness.
+
+The honest part remains: this repo is the **production core**. The transparent proxy
+(Tier A) provides zero-touch container/process interception, while eBPF L7 kernel-level
+gating (Tier B) is available for Linux host deployments. We will not pretend the attack
+corpus is fully blocked today when it is not — and we will not let the numbers drift from
+the measured run.
 
 **We are looking for design partners and pilot deployments.** If you are running (or about
 to run) a multi-agent system in production — compliance, SOC automation, and
-agent-calling-agent patterns especially — we want your real workloads on our roadmap:
+agent-calling-agent patterns especially — we want your real workloads on our roadmap.
+Bring us a language we have not tested yet and we will measure it in public:
 
 - Find us at the repo, or reply here with the shape of your mesh.
 - Priority for pilots: API/SDK integration, deployment hardening, and the proxy/eBPF path.
@@ -60,3 +101,4 @@ agent-calling-agent patterns especially — we want your real workloads on our r
 GitHub: https://github.com/mananjp/a2a-firewall
 Release: https://github.com/mananjp/a2a-firewall/releases/tag/v1.0.0-core
 Live case-study report: https://github.com/mananjp/a2a-firewall/blob/main/docs/case_study_report.md
+Gap analysis + harness: https://github.com/mananjp/a2a-firewall/blob/main/backend/tests/multilingual_gap_analysis.py

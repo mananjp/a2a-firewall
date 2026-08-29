@@ -1,0 +1,49 @@
+# UptimeRobot Monitor Configuration — A2A Firewall (free tier)
+#
+# UptimeRobot's free plan allows up to 50 monitors. These two cover the
+# backend. Add the same UptimeRobot-style monitor for `a2a-firewall-frontend`
+# (URL monitor on the frontend origin) if the dashboard is also deployed.
+#
+# The backend endpoints these monitors hit are implemented in the codebase
+# (see docs/monitoring.md "Wired-up free tiers"): `/health` is a stable
+# liveness target; `/ready` is the readiness probe that exercises a DB
+# round-trip and returns 503 when the database is unreachable.
+#
+# To create via the UptimeRobot UI (https://uptimerobot.com):
+#   Dashboard -> Add New Monitor -> HTTP(S)
+#   Monitor Type: HTTP(S)
+#   Friendly Name: A2A Backend / Health
+#   URL (or IP): https://a2a-firewall1.onrender.com/health
+#   Monitoring Interval: 5 minutes (free tier minimum, default)
+#   HTTP Method: GET
+#   Keyword Type: Not exists / Exists
+#   Keyword: OK  (keyword monitoring so a redirect/HTML error page counts as down)
+#   Alert Contacts: your pager/email, or a slack webhook integration
+#
+# YAML below is a declarative record of the two monitors + alert contact for
+# paste-in reference. Some teams automate this via the UptimeRobot v3 API
+# (api.uptimerobot.com) using an API key; the API payload shape is included.
+
+monitor_type: HTTP
+interval_minutes: 5
+
+monitors:
+  - friendly_name: A2A Backend / Health (liveness)
+    url: https://a2a-firewall1.onrender.com/health
+    keyword_type: exists
+    keyword_value: '"status":"ok"'
+    alert_contacts: [$CONTACT_ID]
+  - friendly_name: A2A Backend / Ready (DB readiness)
+    url: https://a2a-firewall1.onrender.com/ready
+    expected_status: 200
+    keyword_type: exists
+    keyword_value: '"status":"ready"'
+    alert_contacts: [$CONTACT_ID]
+
+# Optional: API payload if you drive monitors from CI/cron.
+# POST https://api.uptimerobot.com/v2/newMonitor  (format=json)
+#   {"api_key": "$UPTIMEROBOT_API_KEY", "format": "json",
+#    "type": "1", "url": "https://a2a-firewall1.onrender.com/health",
+#    "friendly_name": "A2A Backend / Health", "interval": "300",
+#    "keyword_type": "1", "keyword_value": "ok"}
+# keyword_type 1 = exists, 2 = not exists

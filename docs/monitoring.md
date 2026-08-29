@@ -2,6 +2,33 @@
 
 This guide outlines production observability standards for **A2A Firewall**, including OpenTelemetry distributed tracing, Prometheus metric definitions, Grafana dashboard setups, and recommended alert thresholds.
 
+> ## ✅ Wired-up free tiers (implemented, not intent)
+>
+> Two observability capabilities below are **actually wired into this
+> codebase** and only need an account + a couple of env vars to go live:
+>
+> | Capability | Free tier | Status | Wiring |
+> | :-- | :-- | :-- | :-- |
+> | **Error tracking** | Sentry | ✅ live-ready | `SENTRY_DSN` env var → `backend/src/a2a_firewall/core/sentry.py:setup_sentry()` |
+> | **Uptime / status monitoring** | UptimeRobot | ✅ live-ready | `GET /health` (liveness) + `GET /ready` (DB readiness) in `backend/src/a2a_firewall/main.py` |
+>
+> - **Sentry** activates only when `SENTRY_DSN` is set; it instruments FastAPI
+>   (captures 4xx/5xx) and logging (ERROR→Event). Empty DSN ⇒ graceful no-op.
+>   Configure it in the Render dashboard (`SENTRY_DSN`,
+>   `SENTRY_ENVIRONMENT=production`, `SENTRY_TRACES_SAMPLE_RATE=0.1`) or via
+>   `backend/.env.example`.
+> - **UptimeRobot** points HTTP monitors at `/health` and `/ready`. `/ready`
+>   returns `200 {"status":"ready"}` only when a real `SELECT 1` DB round-trip
+>   succeeds, else `503` — so a silently broken connection pool trips a
+>   monitor instead of a green-but-failing service. See
+>   [`monitoring/uptimerobot.yml`](../monitoring/uptimerobot.yml) for the
+>   declarative monitor set and
+>   [`monitoring/README.md`](../monitoring/README.md) for the 2-minute setup.
+> - The Prometheus/Grafana/Jaeger/Datadog content that follows remains the
+>   **self-hosted** observability layer (additive, not required for the free
+>   tiers). A full OpenTelemetry collector + Prometheus stack is optional
+>   production hardening, not the default.
+
 ---
 
 ## 📊 Observability Architecture
@@ -85,6 +112,14 @@ Configure the following alerts in Prometheus Alertmanager or Datadog:
 
 ## 🖥️ Health & Readiness Endpoints
 
-- **Backend API Health**: `GET http://localhost:8000/health` &rarr; `200 OK` `{"status": "healthy"}`
+- **Backend API Liveness** (UptimeRobot target): `GET http://localhost:8000/health` &rarr; `200 OK` `{"status": "ok", "version": "0.2.0", "service": "a2a-firewall"}`
+- **Backend API Readiness** (UptimeRobot target): `GET http://localhost:8000/ready` &rarr; `200 OK` `{"status": "ready", "checks": {"database": "ok"}}`; `503` `{"status": "unavailable", ...}` when the DB round-trip fails.
 - **Transparent Proxy Health**: `GET http://localhost:8080/healthz` &rarr; `200 OK` `{"status": "healthy", "ca_ready": true}`
 - **OpenTelemetry Export**: `POST http://localhost:4318/v1/traces`
+- **Sentry ingestion**: POSTed by `sentry-sdk` to the DSN host; configured via `SENTRY_DSN`.
+
+> **UptimeRobot wiring**: monitor `/health` for liveness and `/ready` for
+> readiness. `/ready` fails fast (503) when `SELECT 1` cannot reach the
+> database, so a degraded-but-200 service is surfaced. See
+> [`monitoring/uptimerobot.yml`](../monitoring/uptimerobot.yml) for the exact
+> monitor definitions (with keyword checks) and alert-contact setup.

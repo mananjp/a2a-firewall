@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from a2a_firewall.api.routes import (
     agents,
@@ -41,6 +41,7 @@ from a2a_firewall.core.network_security import check_ip_allowlist, extract_clien
 from a2a_firewall.core.rate_limit import check_workspace
 from a2a_firewall.core.rate_limit import configure as configure_rate_limit
 from a2a_firewall.core.security import hash_api_key
+from a2a_firewall.core.sentry import setup_sentry
 from a2a_firewall.core.telemetry import setup_telemetry
 from a2a_firewall.db.database import AsyncSessionLocal
 from a2a_firewall.db.models import Agent, Workspace
@@ -142,6 +143,9 @@ app.add_middleware(
 
 setup_telemetry(app)
 
+# Error tracking (Sentry, free tier) — no-op unless SENTRY_DSN is configured.
+setup_sentry()
+
 # Startup status logging
 _otel_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() == "true"
 logger.info("OpenTelemetry: %s", "DISABLED" if _otel_disabled else "ACTIVE")
@@ -180,4 +184,27 @@ app.include_router(network.router, prefix="/v1/network", tags=["network"])
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.2.0", "service": "a2a-firewall"}
+
+
+@app.get("/ready")
+async def readiness() -> JSONResponse:
+    """Readiness probe: returns 200 only when the database is reachable.
+
+    UptimeRobot monitors ``/health`` for uptime (a stable liveness target);
+    this endpoint is the real readiness signal — it exercises a DB round-trip
+    so a silently broken database connection pool is surfaced instead of
+    returning 200 while requests fail downstream.
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "checks": {"database": "down"}},
+        )
+    return JSONResponse(
+        status_code=200,
+        content={"status": "ready", "checks": {"database": "ok"}},
+    )

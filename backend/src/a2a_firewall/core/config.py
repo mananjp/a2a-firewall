@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
     OTEL_SERVICE_NAME: str = "a2a-firewall"
 
+    # Error tracking (Sentry, free tier). Leave SENTRY_DSN empty to disable.
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_ENVIRONMENT: str = "development"
+
     # Identity & Delegation
     IDENTITY_CARD_TTL_SECONDS: float = 86400.0  # 24h
     DELEGATION_MAX_DEPTH: int = 3
