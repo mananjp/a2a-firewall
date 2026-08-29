@@ -29,6 +29,19 @@ VALID_INJECTION_TYPES = {
 }
 
 
+def contains_non_ascii_script(payload: Any) -> bool:
+    """Return True if the payload contains non-ASCII alphabetic script.
+
+    The deterministic Layer 3 keyword rules are English-only (a set of ASCII
+    regexes). Any payload containing non-Latin or accented-Latin alphabetic
+    characters is, by construction, outside the language the rules can cover,
+    so the fast injection-only Groq path must not be trusted for it — the full
+    (multi-language-aware) semantic prompt should be used instead.
+    """
+    text = json.dumps(payload, ensure_ascii=False)
+    return any(ord(ch) > 0x7F and ch.isalpha() for ch in text)
+
+
 def get_async_groq() -> AsyncGroq:
     global _async_client
     if _async_client is None:

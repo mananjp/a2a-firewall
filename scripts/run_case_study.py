@@ -475,6 +475,21 @@ baseline):
   this report** (prompt injection, SQL injection / credential exfiltration, and
   clean-pipeline control) behaved as expected — the two adversarial scenarios
   were blocked.
+- **Language scope (explicit):** the benchmark corpus cited above is, unless
+  otherwise stated, **English-only adversarial text**. A dedicated multilingual
+  subset (in `tests/attack_corpus_multilingual/`) extends coverage to **Hindi,
+  Spanish, Arabic, Chinese, and Russian** — 41 labeled fixtures (36 adversarial
+  / 5 benign). The deterministic Layer 3 keyword rules are English-only ASCII
+  regexes and therefore **do not** block non-English payloads; the Layer 4 Groq
+  semantic layer is the defense that covers those languages. Measured
+  end-to-end (see `tests/multilingual_gap_analysis.py`): the fast
+  injection-only path blocked 67.7% of the multilingual attack set; with the
+  non-ASCII script fix it blocks 96.8%, with the single residual miss being a
+  **pure-ASCII Latin-script (unaccented Spanish)** payload that no
+  character-based heuristic can distinguish from English. Languages using a
+  distinct script (Hindi/Devanagari, Arabic, Chinese, Russian) are now caught
+  at 100%. Do **not** read any figure in this report as claiming multi-language
+  detection coverage beyond the explicit scope above.
 - **Honest caveat on the offline corpus:** the offline benchmark harness also
   contains malicious fixtures that the current *deterministic-only* rules do not
   yet block (i.e. the reproducible corpus TPR is **not** 100%). The live scenario

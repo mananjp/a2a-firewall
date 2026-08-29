@@ -27,7 +27,7 @@ from a2a_firewall.detection.layer0_preflight import preflight
 from a2a_firewall.detection.layer1_schema import validate_schema
 from a2a_firewall.detection.layer2_permissions import check_permissions
 from a2a_firewall.detection.layer3_rules import run_rules
-from a2a_firewall.detection.layer4_groq import groq_inspect
+from a2a_firewall.detection.layer4_groq import contains_non_ascii_script, groq_inspect
 from a2a_firewall.detection.layer5_decision import make_decision
 
 
@@ -664,7 +664,14 @@ async def run_inspection(
     # 3. Intent consistency is verified on delegation-bound requests
     # 4. In injection_only mode (when risk is 0 and no delegation), uses a streamlined prompt to minimize latency
     groq_called = True
-    injection_only = risk_score == 0 and not (declared_intent and parent_caveats is not None)
+    injection_only = (
+        risk_score == 0
+        and not (declared_intent and parent_caveats is not None)
+        # Targeted exception: the English-only keyword rules cannot cover
+        # non-Latin/accented-Latin payloads, so never trust the cheap
+        # injection-only prompt for them — use the full semantic prompt.
+        and not contains_non_ascii_script(request_data.get("payload", {}))
+    )
     layer_start = time.monotonic()
     groq_result = await groq_inspect(
         request_data,
