@@ -45,10 +45,10 @@ What we can prove today (all reproduced against the live deployment
 - **False-positive rate: 0.0%** across a 211-fixture benign edge-case corpus.
 - CI is fully green on `main`, including Docker + Postgres integration tests.
 
-The honest part: this repo is the **sellable core**. The HTTP inline proxy, eBPF L7 and
-full semantic-detection path are tracked as **ongoing R&D**, not shipped claims. We will
-not pretend the attack corpus is fully blocked today when it is not; the numbers above are
-exactly the numbers we measured.
+The honest part: this repo is the **production core**. The transparent proxy (Tier A)
+provides zero-touch container/process interception, while eBPF L7 kernel-level gating
+(Tier B) is available for Linux host deployments. We will not pretend the attack corpus is
+fully blocked today when it is not; the numbers above are exactly the numbers we measured.
 
 **We are looking for design partners and pilot deployments.** If you are running (or about
 to run) a multi-agent system in production — compliance, SOC automation, and
