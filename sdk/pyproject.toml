@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a2a-firewall-sdk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Python SDK for the A2A Firewall — inter-agent governance mesh with Ed25519 identity, Macaroon delegation, and cryptographic lineage"
 readme = "README.md"
 license = "MIT"

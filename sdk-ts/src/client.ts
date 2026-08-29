@@ -184,7 +184,7 @@ export class A2AFirewall {
       declared_intent: options.declaredIntent,
       trace_id: this.ctx.trace_id,
       parent_span_id: this.ctx.span_id,
-      sdk_version: '0.2.0-ts',
+      sdk_version: '0.3.0-ts',
       depth: options.depth ?? 0,
       sender_signature: signature,
       sender_public_key: senderPublicKey,
@@ -197,7 +197,7 @@ export class A2AFirewall {
     // ── OTel (auto when @opentelemetry/api installed) ──
     let span: any;
     if (_otel) {
-      const tracer = _otel.trace.getTracer('a2a-firewall-sdk', '0.2.0');
+      const tracer = _otel.trace.getTracer('a2a-firewall-sdk', '0.3.0');
       span = tracer.startSpan('firewall.inspect', {
         kind: _otel.SpanKind.CLIENT,
         attributes: { task_type: options.taskType, receiver_agent_id: options.receiverAgentId },

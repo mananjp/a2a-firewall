@@ -1,6 +1,6 @@
 {
   "name": "a2a-firewall-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK for A2A Firewall — inter-agent governance mesh with Ed25519 identity, Macaroon delegation, and message signing",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
