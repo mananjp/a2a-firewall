@@ -107,3 +107,27 @@ async def test_proxy_connect_tunnel_and_tls_mitm_block():
 
         finally:
             await proxy.stop()
+
+
+@pytest.mark.asyncio
+async def test_proxy_health_check_endpoint():
+    """Verify that proxy responds with 200 OK on /healthz, /health, and /readyz."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ca = CertificateAuthority(ca_dir=tmpdir)
+        proxy = A2AProxyServer(host="127.0.0.1", port=0, ca=ca)
+        await proxy.start()
+
+        assert proxy._server is not None
+        port = proxy._server.sockets[0].getsockname()[1]
+
+        try:
+            async with httpx.AsyncClient() as client:
+                for path in ("/healthz", "/health", "/readyz"):
+                    resp = await client.get(f"http://127.0.0.1:{port}{path}")
+                    assert resp.status_code == 200
+                    data = resp.json()
+                    assert data["status"] == "healthy"
+                    assert data["ca_ready"] is True
+                    assert data["proxy_running"] is True
+        finally:
+            await proxy.stop()

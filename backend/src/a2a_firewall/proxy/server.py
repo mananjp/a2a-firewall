@@ -73,18 +73,19 @@ class A2AProxyServer:
 
     async def _handle_health_check(self, client_writer: asyncio.StreamWriter) -> None:
         """Respond to health/readiness probes for Docker/K8s orchestrators."""
-        body = json.dumps({
-            "status": "healthy",
-            "ca_ready": self.ca._root_cert is not None,
-            "proxy_running": self._running,
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "status": "healthy",
+                "ca_ready": self.ca._root_cert is not None,
+                "proxy_running": self._running,
+            }
+        ).encode("utf-8")
         response = (
             b"HTTP/1.1 200 OK\r\n"
             b"Content-Type: application/json\r\n"
             b"Content-Length: " + str(len(body)).encode() + b"\r\n"
             b"Connection: close\r\n"
-            b"\r\n"
-            + body
+            b"\r\n" + body
         )
         client_writer.write(response)
         await client_writer.drain()
