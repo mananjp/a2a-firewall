@@ -1,4 +1,4 @@
-name: Release SDK Packages
+name: Release Packages & GitHub Release
 
 on:
   push:
@@ -11,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   build-and-test-python:
@@ -127,7 +131,41 @@ jobs:
           if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "NPM_TOKEN secret not configured — skipping npm publish"
           elif npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
-            echo "Version $PKG_VERSION already published — skipping npm publish"
+            echo "Version $PKG_VERSION already exists on npm — skipping npm publish"
           else
-            npm publish --access public
+            echo "Publishing $PKG_NAME@$PKG_VERSION to npm..."
+            npm publish --access public || {
+              EXIT_CODE=$?
+              echo "npm publish returned exit code $EXIT_CODE; checking if version exists on registry..."
+              sleep 2
+              if npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+                echo "Version $PKG_VERSION is now present on npm — continuing successfully."
+              else
+                echo "npm publish failed and package is not on registry."
+                exit $EXIT_CODE
+              fi
+            }
           fi
+
+  github-release:
+    name: Create GitHub Release
+    needs: [build-and-test-python, build-and-test-typescript]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Python dist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*
