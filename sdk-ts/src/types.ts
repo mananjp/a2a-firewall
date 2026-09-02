@@ -25,6 +25,7 @@ export interface FirewallResponse {
   blockReason?: string;
   latencyMs: number;
   traceId?: string;
+  evidenceId?: string;
 }
 
 export interface Violation {

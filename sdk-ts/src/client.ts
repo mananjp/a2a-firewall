@@ -239,6 +239,7 @@ export class A2AFirewall {
         blockReason: data.block_reason,
         latencyMs: data.latency_ms ?? 0,
         traceId: data.trace_id,
+        evidenceId: data.evidence_id,
       };
 
       if (span) {
@@ -336,5 +337,91 @@ export class A2AFirewall {
     return this.chainHash;
   }
 
+  // ---------------------------------------------------------------------------
+  // Fabric Extensions (v0.4.0)
+  // ---------------------------------------------------------------------------
+
+  async inspectResponse(responseBody: unknown, context: string = 'tool_result', redactPii: boolean = true): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/firewall/inspect-response`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ response_body: responseBody, context, redact_pii: redactPii }),
+    });
+    if (!res.ok) throw new Error(`inspectResponse failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async inspectMemory(chunk: string, redactPii: boolean = true): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/memory/inspect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ chunk, redact_pii: redactPii }),
+    });
+    if (!res.ok) throw new Error(`inspectMemory failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async storeMemory(chunk: string, metadata: Record<string, unknown> = {}, redactPii: boolean = true, persistOnlyIfClean: boolean = true): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/memory/store`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ chunk, metadata, redact_pii: redactPii, persist_only_if_clean: persistOnlyIfClean }),
+    });
+    if (!res.ok) throw new Error(`storeMemory failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async searchMemory(query: string, topK: number = 5): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/memory/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ query, top_k: topK }),
+    });
+    if (!res.ok) throw new Error(`searchMemory failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async inspectDlp(text: string, destination: string = 'internal', purpose?: string, tokenize: boolean = false): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/dlp/inspect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ text, destination, purpose, tokenize }),
+    });
+    if (!res.ok) throw new Error(`inspectDlp failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async getEvidence(decisionId: string): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/evidence/${decisionId}`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getEvidence failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async verifyEvidence(decisionId: string): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/evidence/${decisionId}/verify`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`verifyEvidence failed with status ${res.status}`);
+    return res.json();
+  }
+
   static generateKeypair = generateEd25519Keypair;
 }
+

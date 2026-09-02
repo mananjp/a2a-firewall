@@ -101,6 +101,7 @@ class FirewallResponse:
     block_reason: Optional[str] = None
     latency_ms: int = 0
     trace_id: Optional[str] = None
+    evidence_id: Optional[str] = None
 
 
 class FirewallBlockedError(Exception):
@@ -319,7 +320,7 @@ class A2AFirewall:
             "declared_intent": declared_intent,
             "trace_id": self._ctx.get("trace_id"),
             "parent_span_id": self._ctx.get("span_id"),
-            "sdk_version": "0.3.0",
+            "sdk_version": "0.4.0",
             "depth": depth,
             "sender_signature": signature,
             "message_hash": msg_hash,
@@ -356,6 +357,7 @@ class A2AFirewall:
                 block_reason=data.get("block_reason"),
                 latency_ms=data.get("latency_ms", 0),
                 trace_id=data.get("trace_id"),
+                evidence_id=data.get("evidence_id"),
             )
             if span:
                 span.set_attribute("decision", fw.decision)
@@ -431,6 +433,87 @@ class A2AFirewall:
             chain_valid = expected_chain == self._chain_hash
 
         return {"signature_valid": sig_valid, "chain_valid": chain_valid}
+
+    # -- Fabric Extensions (v0.4.0) --
+
+    def inspect_response(
+        self,
+        response_body: Any,
+        context: str = "tool_result",
+        redact_pii: bool = True,
+    ) -> dict[str, Any]:
+        """Inspect upstream LLM response or tool execution result for indirect prompt injection or PII."""
+        resp = self._http.post(
+            "/v1/firewall/inspect-response",
+            json={"response_body": response_body, "context": context, "redact_pii": redact_pii},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def inspect_memory(self, chunk: str, redact_pii: bool = True) -> dict[str, Any]:
+        """Inspect a candidate memory write before it is stored in a vector DB or episodic store."""
+        resp = self._http.post(
+            "/v1/memory/inspect",
+            json={"chunk": chunk, "redact_pii": redact_pii},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def store_memory(
+        self,
+        chunk: str,
+        metadata: dict[str, Any] | None = None,
+        redact_pii: bool = True,
+        persist_only_if_clean: bool = True,
+    ) -> dict[str, Any]:
+        """Inspect and persist a memory chunk in the workspace memory firewall."""
+        resp = self._http.post(
+            "/v1/memory/store",
+            json={
+                "chunk": chunk,
+                "metadata": metadata or {},
+                "redact_pii": redact_pii,
+                "persist_only_if_clean": persist_only_if_clean,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def search_memory(self, query: str, top_k: int = 5) -> dict[str, Any]:
+        """Screen retrieval query and search verified memory chunks."""
+        resp = self._http.post(
+            "/v1/memory/search",
+            json={"query": query, "top_k": top_k},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def inspect_dlp(
+        self,
+        text: str,
+        destination: str = "internal",
+        purpose: str | None = None,
+        tokenize: bool = False,
+    ) -> dict[str, Any]:
+        """Evaluate text under tenant DLP policies for a target destination."""
+        resp = self._http.post(
+            "/v1/dlp/inspect",
+            json={"text": text, "destination": destination, "purpose": purpose, "tokenize": tokenize},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_evidence(self, decision_id: str) -> dict[str, Any]:
+        """Fetch signed decision evidence envelope by decision ID."""
+        resp = self._http.get(f"/v1/evidence/{decision_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def verify_evidence(self, decision_id: str) -> dict[str, Any]:
+        """Verify an evidence envelope's Ed25519 signature."""
+        resp = self._http.get(f"/v1/evidence/{decision_id}/verify")
+        resp.raise_for_status()
+        return resp.json()
 
     # -- Utility --
 

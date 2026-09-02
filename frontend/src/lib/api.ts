@@ -18,6 +18,17 @@ import type {
   DelegationToken,
   AgentIdentity,
   TaskSchema,
+  EvidenceEnvelopeSummary,
+  EvidenceVerifyResult,
+  EvidenceReplayResult,
+  MemoryEntryItem,
+  MemoryInspectionLogItem,
+  MemoryInspectResult,
+  MemorySearchResult,
+  WorkflowInstanceItem,
+  WorkflowStateDetail,
+  DlpRuleItem,
+  DlpInspectResult,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -910,6 +921,87 @@ export const complianceExtended = {
   exportBundle: (framework = "RBI") =>
     request<Record<string, unknown>>(`/v1/compliance/export-bundle?framework=${framework}`),
 };
+
+// ---------------------------------------------------------------------------
+// Agent Runtime Security Fabric (v1.2.0)
+// ---------------------------------------------------------------------------
+
+export const evidenceApi = {
+  list: (limit = 50) =>
+    request<EvidenceEnvelopeSummary[]>(`/v1/evidence?limit=${limit}`),
+  get: (decisionId: string) =>
+    request<EvidenceEnvelopeSummary>(`/v1/evidence/${decisionId}`),
+  verify: (decisionId: string) =>
+    request<EvidenceVerifyResult>(`/v1/evidence/${decisionId}/verify`),
+  replay: (decisionId: string) =>
+    request<EvidenceReplayResult>(`/v1/evidence/${decisionId}/replay`),
+};
+
+export const memoryApi = {
+  entries: (limit = 50) =>
+    request<MemoryEntryItem[]>(`/v1/memory/entries?limit=${limit}`),
+  logs: (limit = 50) =>
+    request<MemoryInspectionLogItem[]>(`/v1/memory/logs?limit=${limit}`),
+  inspect: (chunk: string, redactPii = true) =>
+    request<MemoryInspectResult>("/v1/memory/inspect", {
+      method: "POST",
+      body: JSON.stringify({ chunk, redact_pii: redactPii }),
+    }),
+  inspectQuery: (query: string) =>
+    request<{ agent_id: string; blocked: boolean; action: string; findings: Array<{ type: string; severity: string; description: string }> }>(
+      "/v1/memory/inspect-query",
+      {
+        method: "POST",
+        body: JSON.stringify({ query }),
+      }
+    ),
+  store: (chunk: string, metadata: Record<string, any> = {}, redactPii = true) =>
+    request<{ persisted: boolean; deduped?: boolean; content_hash: string; action?: string; reason?: string }>(
+      "/v1/memory/store",
+      {
+        method: "POST",
+        body: JSON.stringify({ chunk, metadata, redact_pii: redactPii }),
+      }
+    ),
+  search: (query: string, topK = 5) =>
+    request<MemorySearchResult>("/v1/memory/search", {
+      method: "POST",
+      body: JSON.stringify({ query, top_k: topK }),
+    }),
+};
+
+export const workflowsApi = {
+  list: (limit = 50) =>
+    request<WorkflowInstanceItem[]>(`/v1/workflows?limit=${limit}`),
+  get: (rootTaskId: string) =>
+    request<WorkflowStateDetail>(`/v1/workflows/${rootTaskId}`),
+  quarantine: (rootTaskId: string) =>
+    request<{ root_task_id: string; quarantined: boolean; message: string }>(
+      `/v1/workflows/${rootTaskId}/quarantine`,
+      { method: "POST" }
+    ),
+};
+
+export const dlpApi = {
+  getPolicy: () =>
+    request<DlpRuleItem[]>("/v1/dlp/policy"),
+  putPolicy: (rules: DlpRuleItem[]) =>
+    request<DlpRuleItem[]>("/v1/dlp/policy", {
+      method: "PUT",
+      body: JSON.stringify(rules),
+    }),
+  inspect: (text: string, destination = "internal", purpose?: string, tokenize = false) =>
+    request<DlpInspectResult>("/v1/dlp/inspect", {
+      method: "POST",
+      body: JSON.stringify({ text, destination, purpose, tokenize }),
+    }),
+  classify: (text: string, destination = "internal", purpose?: string) =>
+    request<DlpInspectResult>("/v1/dlp/classify", {
+      method: "POST",
+      body: JSON.stringify({ text, destination, purpose }),
+    }),
+};
+
 
 
 

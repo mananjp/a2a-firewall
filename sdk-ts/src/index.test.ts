@@ -183,5 +183,66 @@ describe('A2AFirewall Client', () => {
     if (origProxy) process.env.HTTPS_PROXY = origProxy;
     if (origA2A) process.env.A2A_PROXY_URL = origA2A;
   });
+
+  it('provides fabric extensions for response, memory, dlp, and evidence', async () => {
+    const fw = new A2AFirewall({
+      firewallUrl: 'http://localhost:8000',
+      agentApiKey: 'agt_key',
+    });
+
+    // Mock global fetch
+    const origFetch = global.fetch;
+    global.fetch = async (url: any, init: any) => {
+      const u = String(url);
+      if (u.includes('/inspect-response')) {
+        return { ok: true, json: async () => ({ decision: 'allow', allowed_to_proceed: true }) } as any;
+      }
+      if (u.includes('/memory/inspect')) {
+        return { ok: true, json: async () => ({ inspection: { action: 'allow' } }) } as any;
+      }
+      if (u.includes('/memory/store')) {
+        return { ok: true, json: async () => ({ persisted: true, content_hash: 'hash1' }) } as any;
+      }
+      if (u.includes('/memory/search')) {
+        return { ok: true, json: async () => ({ result_count: 1, results: [{ content: 'doc' }] }) } as any;
+      }
+      if (u.includes('/dlp/inspect')) {
+        return { ok: true, json: async () => ({ action: 'redact', transformed_text: 'redacted' }) } as any;
+      }
+      if (u.includes('/evidence/dec-1/verify')) {
+        return { ok: true, json: async () => ({ decision_id: 'dec-1', valid: true }) } as any;
+      }
+      if (u.includes('/evidence/dec-1')) {
+        return { ok: true, json: async () => ({ decision_id: 'dec-1', final_action: 'allow' }) } as any;
+      }
+      return { ok: false, status: 404 } as any;
+    };
+
+    try {
+      const respRes = await fw.inspectResponse('Clean tool result');
+      expect(respRes.decision).toBe('allow');
+
+      const memInspect = await fw.inspectMemory('Clean text chunk');
+      expect(memInspect.inspection.action).toBe('allow');
+
+      const memStore = await fw.storeMemory('Clean text chunk');
+      expect(memStore.persisted).toBe(true);
+
+      const memSearch = await fw.searchMemory('query');
+      expect(memSearch.result_count).toBe(1);
+
+      const dlpRes = await fw.inspectDlp('Sensitive data');
+      expect(dlpRes.action).toBe('redact');
+
+      const ev = await fw.getEvidence('dec-1');
+      expect(ev.decision_id).toBe('dec-1');
+
+      const ver = await fw.verifyEvidence('dec-1');
+      expect(ver.valid).toBe(true);
+    } finally {
+      global.fetch = origFetch;
+    }
+  });
 });
+
 

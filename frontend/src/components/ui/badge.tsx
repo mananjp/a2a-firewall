@@ -16,6 +16,7 @@ export type BadgeVariant =
 interface BadgeProps {
   children: React.ReactNode;
   variant?: BadgeVariant;
+  tone?: BadgeVariant;
   className?: string;
 }
 
@@ -33,12 +34,13 @@ const variantStyles: Record<BadgeVariant, string> = {
   warning: "bg-review/10 text-review border-review/30 font-medium",
 };
 
-export function Badge({ children, variant = "default", className }: BadgeProps) {
+export function Badge({ children, variant, tone, className }: BadgeProps) {
+  const activeVariant = tone || variant || "default";
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-mono tracking-tight",
-        variantStyles[variant],
+        variantStyles[activeVariant],
         className
       )}
     >

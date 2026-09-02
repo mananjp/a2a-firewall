@@ -198,3 +198,106 @@ def test_ca_cert_auto_detection(monkeypatch, tmp_path):
     assert fw._ca_cert_path == str(cert_file)
 
 
+def test_evidence_id_in_response():
+    fw = make_fw()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "task_id": "task-ev-1",
+        "decision": "allow",
+        "allowed_to_proceed": True,
+        "risk_score": 0.05,
+        "violations": [],
+        "latency_ms": 15,
+        "evidence_id": "decision-task-ev-1",
+    }
+    mock_resp.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_resp):
+        resp = fw.send("receiver-id", "research", {"query": "test"})
+    assert resp.evidence_id == "decision-task-ev-1"
+
+
+def test_inspect_response():
+    fw = make_fw()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "decision": "allow",
+        "allowed_to_proceed": True,
+        "findings": {},
+        "redacted_body": "Safe content",
+    }
+    mock_resp.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_resp):
+        res = fw.inspect_response("Safe content", context="tool_result")
+    assert res["decision"] == "allow"
+    assert res["allowed_to_proceed"] is True
+
+
+def test_inspect_and_store_memory():
+    fw = make_fw()
+    mock_inspect = MagicMock()
+    mock_inspect.json.return_value = {
+        "inspection": {"action": "allow", "blocked": False},
+        "store_policy": {"persist": True},
+    }
+    mock_inspect.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_inspect):
+        res = fw.inspect_memory("System user documentation chunk")
+    assert res["store_policy"]["persist"] is True
+
+    mock_store = MagicMock()
+    mock_store.json.return_value = {"persisted": True, "content_hash": "hash123"}
+    mock_store.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_store):
+        store_res = fw.store_memory("Chunk text", metadata={"source": "manual"})
+    assert store_res["persisted"] is True
+
+
+def test_search_memory():
+    fw = make_fw()
+    mock_search = MagicMock()
+    mock_search.json.return_value = {
+        "blocked": False,
+        "result_count": 1,
+        "results": [{"entry_id": "1", "content": "relevant doc", "score": 0.95}],
+    }
+    mock_search.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_search):
+        search_res = fw.search_memory("financial report", top_k=3)
+    assert search_res["result_count"] == 1
+    assert search_res["results"][0]["score"] == 0.95
+
+
+def test_inspect_dlp():
+    fw = make_fw()
+    mock_dlp = MagicMock()
+    mock_dlp.json.return_value = {
+        "action": "redact",
+        "blocked": False,
+        "transformed_text": "Account [REDACTED:credit_card]",
+        "findings": [{"pattern_type": "credit_card"}],
+    }
+    mock_dlp.raise_for_status = lambda: None
+    with patch.object(fw._http, "post", return_value=mock_dlp):
+        dlp_res = fw.inspect_dlp("Account 4111111111111111", destination="external")
+    assert dlp_res["action"] == "redact"
+    assert "REDACTED" in dlp_res["transformed_text"]
+
+
+def test_get_and_verify_evidence():
+    fw = make_fw()
+    mock_ev = MagicMock()
+    mock_ev.json.return_value = {"decision_id": "dec-1", "signature": "sig123"}
+    mock_ev.raise_for_status = lambda: None
+
+    mock_verify = MagicMock()
+    mock_verify.json.return_value = {"decision_id": "dec-1", "valid": True}
+    mock_verify.raise_for_status = lambda: None
+
+    with patch.object(fw._http, "get", side_effect=[mock_ev, mock_verify]):
+        ev = fw.get_evidence("dec-1")
+        ver = fw.verify_evidence("dec-1")
+    assert ev["decision_id"] == "dec-1"
+    assert ver["valid"] is True
+
+
+

@@ -49,6 +49,37 @@ async def _collect_workflow(
     return [node_from_task(t) for t in tasks]
 
 
+@router.get("")
+async def list_workflows(
+    limit: int = 50,
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List workflow instances for the current workspace."""
+    result = await db.execute(
+        select(WorkflowInstance)
+        .where(WorkflowInstance.workspace_id == workspace.id)
+        .order_by(WorkflowInstance.updated_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": str(r.id),
+            "root_task_id": str(r.root_task_id),
+            "node_count": r.node_count,
+            "depth": r.depth,
+            "cumulative_risk": r.cumulative_risk,
+            "cumulative_exposure": r.cumulative_exposure,
+            "distinct_agents": r.distinct_agents,
+            "anomalies": r.anomalies,
+            "quarantined": r.quarantined,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in result.scalars().all()
+    ]
+
+
 @router.get("/{root_task_id}", response_model=WorkflowStateResponse)
 async def get_workflow_state(
     root_task_id: str,

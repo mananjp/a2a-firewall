@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from a2a_firewall.api.deps import get_current_agent
+from a2a_firewall.api.deps import get_current_agent, get_current_workspace_flexible
 from a2a_firewall.core.memory_firewall import (
     MemoryIndex,
     evaluate_store_policy,
@@ -20,6 +20,7 @@ from a2a_firewall.db.models import (
     MemoryEntry,
     MemoryInspectionLog,
     MemoryRetrievalLog,
+    Workspace,
 )
 from a2a_firewall.detection.memory_scanner import MemoryScanner, hash_memory
 
@@ -261,3 +262,56 @@ async def _log_retrieval(
         )
     )
     await db.commit()
+
+
+@router.get("/entries")
+async def list_memory_entries(
+    limit: int = 50,
+    ws: Workspace = Depends(get_current_workspace_flexible),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List stored memory entries in the current workspace."""
+    result = await db.execute(
+        select(MemoryEntry)
+        .where(MemoryEntry.workspace_id == ws.id)
+        .order_by(MemoryEntry.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": str(r.id),
+            "content": r.content,
+            "content_hash": r.content_hash,
+            "source_agent_id": str(r.source_agent_id) if r.source_agent_id else None,
+            "metadata": r.metadata_,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in result.scalars().all()
+    ]
+
+
+@router.get("/logs")
+async def list_memory_logs(
+    limit: int = 50,
+    ws: Workspace = Depends(get_current_workspace_flexible),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List recent memory inspection and poisoning audit logs."""
+    result = await db.execute(
+        select(MemoryInspectionLog)
+        .where(MemoryInspectionLog.workspace_id == ws.id)
+        .order_by(MemoryInspectionLog.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": str(r.id),
+            "content_hash": r.content_hash,
+            "action": r.action,
+            "blocked": r.blocked,
+            "findings": r.findings,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in result.scalars().all()
+    ]
+

@@ -25,30 +25,68 @@ import {
   Users,
   Network,
   Database,
+  Brain,
+  FileCheck,
+  GitMerge,
+  Lock,
   UserCheck,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "SOC Dashboard", icon: Siren },
-  { href: "/dashboard/telemetry", label: "Live Inspector", icon: Activity },
-  { href: "/dashboard/spend", label: "Spend & Budgets", icon: DollarSign },
-  { href: "/dashboard/rbac", label: "Access & RBAC", icon: Users },
-  { href: "/dashboard/network", label: "Network & IP Filter", icon: Network },
-  { href: "/dashboard/compliance", label: "Compliance & Posture", icon: ScrollText },
-  { href: "/dashboard/audit", label: "Enterprise Audit Logs", icon: GitFork },
-  { href: "/dashboard/retention", label: "Data Retention", icon: Database },
-  { href: "/dashboard/scim", label: "SCIM Provisioning", icon: UserCheck },
-  { href: "/dashboard/ips", label: "IPS Signatures", icon: Shield },
-  { href: "/dashboard/identity", label: "Identity & Keys", icon: KeyRound },
-  { href: "/dashboard/agents", label: "Agent Registry", icon: Bot },
-  { href: "/dashboard/policies", label: "Firewall Policies", icon: FileText },
-  { href: "/dashboard/review", label: "Review Queue", icon: MessageSquare },
-  { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
-  { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
-  { href: "/dashboard/demo", label: "Live Attack Demo", icon: Flame },
-  { href: "/dashboard/delegation-demo", label: "Delegation Demo", icon: Link2 },
-  { href: "/dashboard/workspace", label: "Workspace", icon: Settings2 },
+interface NavSection {
+  title: string;
+  items: Array<{
+    href: string;
+    label: string;
+    icon: any;
+    badge?: string;
+  }>;
+}
+
+const SECTIONS: NavSection[] = [
+  {
+    title: "Operations",
+    items: [
+      { href: "/dashboard", label: "SOC Dashboard", icon: Siren },
+      { href: "/dashboard/telemetry", label: "Live Inspector", icon: Activity },
+      { href: "/dashboard/review", label: "Review Queue", icon: MessageSquare },
+      { href: "/dashboard/violations", label: "Violations", icon: ShieldAlert },
+    ],
+  },
+  {
+    title: "Agent Security Fabric",
+    items: [
+      { href: "/dashboard/evidence", label: "Evidence Envelopes", icon: FileCheck, badge: "v1.2" },
+      { href: "/dashboard/memory", label: "Memory / RAG Firewall", icon: Brain, badge: "v1.2" },
+      { href: "/dashboard/workflows", label: "Multi-Agent Workflows", icon: GitMerge, badge: "v1.2" },
+      { href: "/dashboard/dlp", label: "DLP & Tokenization", icon: Lock, badge: "v1.2" },
+    ],
+  },
+  {
+    title: "Governance & Control",
+    items: [
+      { href: "/dashboard/spend", label: "Spend & Budgets", icon: DollarSign },
+      { href: "/dashboard/rbac", label: "Access & RBAC", icon: Users },
+      { href: "/dashboard/network", label: "Network & IP Filter", icon: Network },
+      { href: "/dashboard/compliance", label: "Compliance & Posture", icon: ScrollText },
+      { href: "/dashboard/audit", label: "Enterprise Audit Logs", icon: GitFork },
+      { href: "/dashboard/retention", label: "Data Retention", icon: Database },
+      { href: "/dashboard/scim", label: "SCIM Provisioning", icon: UserCheck },
+      { href: "/dashboard/ips", label: "IPS Signatures", icon: Shield },
+      { href: "/dashboard/identity", label: "Identity & Keys", icon: KeyRound },
+      { href: "/dashboard/agents", label: "Agent Registry", icon: Bot },
+      { href: "/dashboard/policies", label: "Firewall Policies", icon: FileText },
+    ],
+  },
+  {
+    title: "Labs & Demos",
+    items: [
+      { href: "/dashboard/demo", label: "Live Attack Demo", icon: Flame },
+      { href: "/dashboard/delegation-demo", label: "Delegation Demo", icon: Link2 },
+      { href: "/dashboard/simulation", label: "Simulation", icon: FlaskConical },
+      { href: "/dashboard/workspace", label: "Workspace", icon: Settings2 },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -88,40 +126,51 @@ export function Sidebar() {
       </div>
 
       {/* Nav List */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="eyebrow px-2 mb-2">Operations</div>
-        <ul className="space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={clsx(
-                    "group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-140",
-                    active
-                      ? "bg-surface-elevated text-ink-primary border border-hairline-strong shadow-sm"
-                      : "text-ink-muted hover:text-ink-primary hover:bg-surface-elevated/50 border border-transparent"
-                  )}
-                >
-                  <Icon
-                    size={15}
-                    strokeWidth={active ? 2.1 : 1.7}
-                    className={clsx(
-                      "shrink-0 transition-colors",
-                      active ? "text-accent" : "text-ink-muted group-hover:text-ink-primary"
-                    )}
-                  />
-                  <span className="flex-1 truncate">{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+        {SECTIONS.map((section) => (
+          <div key={section.title}>
+            <div className="eyebrow px-2 mb-1.5 text-[10px] uppercase font-mono tracking-wider text-ink-muted/80">
+              {section.title}
+            </div>
+            <ul className="space-y-0.5">
+              {section.items.map((item) => {
+                const active =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={clsx(
+                        "group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-140",
+                        active
+                          ? "bg-surface-elevated text-ink-primary border border-hairline-strong shadow-sm"
+                          : "text-ink-muted hover:text-ink-primary hover:bg-surface-elevated/50 border border-transparent"
+                      )}
+                    >
+                      <Icon
+                        size={15}
+                        strokeWidth={active ? 2.1 : 1.7}
+                        className={clsx(
+                          "shrink-0 transition-colors",
+                          active ? "text-accent" : "text-ink-muted group-hover:text-ink-primary"
+                        )}
+                      />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {item.badge && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-accent/10 text-accent border border-accent/20">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}

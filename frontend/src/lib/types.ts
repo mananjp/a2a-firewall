@@ -507,4 +507,163 @@ export interface SCIMTokenItem {
   created_at: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Agent Runtime Security Fabric (v1.2.0)
+// ---------------------------------------------------------------------------
+
+// Evidence Envelopes
+export interface EvidenceEnvelopeSummary {
+  decision_id: string;
+  task_id: string;
+  final_action: string;
+  risk_score: number;
+  envelope_version: string;
+  signature: string;
+  signer_public_key: string;
+  envelope: Record<string, any>;
+  created_at?: string | null;
+}
+
+export interface EvidenceVerifyResult {
+  decision_id: string;
+  checks: Record<string, boolean>;
+  valid: boolean;
+}
+
+export interface EvidenceReplayResult {
+  decision_id: string;
+  replay: Record<string, boolean>;
+}
+
+// Memory / RAG Firewall
+export interface MemoryEntryItem {
+  id: string;
+  content: string;
+  content_hash: string;
+  source_agent_id?: string | null;
+  metadata?: Record<string, any>;
+  created_at?: string | null;
+}
+
+export interface MemoryInspectionLogItem {
+  id: string;
+  content_hash: string;
+  action: string;
+  blocked: boolean;
+  findings: Array<{
+    finding_type?: string;
+    type?: string;
+    severity?: string;
+    description?: string;
+  }>;
+  created_at?: string | null;
+}
+
+export interface MemoryInspectResult {
+  agent_id: string;
+  inspection: {
+    action: string;
+    blocked: boolean;
+    content_hash: string;
+    findings: Array<{
+      finding_type: string;
+      severity: string;
+      description: string;
+    }>;
+    redacted_chunk?: string;
+  };
+  store_policy: {
+    persist: boolean;
+    reason: string;
+    content_hash: string;
+  };
+}
+
+export interface MemorySearchResult {
+  blocked: boolean;
+  query_action: string;
+  result_count: number;
+  results: Array<{
+    entry_id: string;
+    content: string;
+    content_hash: string;
+    score: number;
+    metadata?: Record<string, any>;
+  }>;
+}
+
+// Multi-Agent Workflows
+export interface WorkflowAnomaly {
+  anomaly_type: string;
+  severity: string;
+  description: string;
+  agents_involved?: string[];
+}
+
+export interface WorkflowInstanceItem {
+  id: string;
+  root_task_id: string;
+  node_count: number;
+  depth: number;
+  cumulative_risk: number;
+  cumulative_exposure: number;
+  distinct_agents: number;
+  anomalies: WorkflowAnomaly[];
+  quarantined: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkflowNodeItem {
+  task_id: string;
+  parent_task_id?: string | null;
+  sender_agent_id: string;
+  receiver_agent_id: string;
+  depth: number;
+  risk_score: number;
+  decision: string;
+}
+
+export interface WorkflowStateDetail {
+  state: {
+    root_task_id: string;
+    node_count: number;
+    depth: number;
+    cumulative_risk: number;
+    cumulative_exposure: number;
+    distinct_agents: number;
+    anomalies: WorkflowAnomaly[];
+    quarantine_recommended: boolean;
+  };
+  nodes: WorkflowNodeItem[];
+}
+
+// Lineage-Aware DLP
+export interface DlpRuleItem {
+  data_class: "financial" | "identity" | "health" | "contact" | "sensitive";
+  destination: string;
+  action: "allow" | "redact" | "tokenize" | "hash" | "block";
+  allowed_purposes?: string[] | null;
+  enabled: boolean;
+}
+
+export interface DlpFindingItem {
+  pattern_type: string;
+  matched_text: string;
+  confidence: number;
+  framework_tags: string[];
+  data_class?: string;
+  span?: [number, number];
+}
+
+export interface DlpInspectResult {
+  action: string;
+  blocked: boolean;
+  transformed_text?: string | null;
+  derived: boolean;
+  source_digest?: string | null;
+  findings: DlpFindingItem[];
+}
+
+
 

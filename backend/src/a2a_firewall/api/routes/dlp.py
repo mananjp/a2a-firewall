@@ -14,10 +14,10 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from a2a_firewall.api.deps import get_current_agent
+from a2a_firewall.api.deps import get_current_workspace_flexible
 from a2a_firewall.core.dlp_engine import DLPEngine, DlpRule
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import Agent, DlpPolicy
+from a2a_firewall.db.models import DlpPolicy, Workspace
 
 VALID_ACTIONS = {"allow", "redact", "tokenize", "hash", "block"}
 VALID_CLASSES = {"financial", "identity", "health", "contact", "sensitive"}
@@ -75,10 +75,10 @@ def _to_rule(policy: DlpPolicy) -> DlpRule:
     )
 
 
-async def _load_engine(db: AsyncSession, agent: Agent) -> DLPEngine:
+async def _load_engine(db: AsyncSession, ws: Workspace) -> DLPEngine:
     result = await db.execute(
         select(DlpPolicy).where(
-            DlpPolicy.workspace_id == agent.workspace_id,
+            DlpPolicy.workspace_id == ws.id,
             DlpPolicy.enabled.is_(True),
         )
     )
@@ -89,11 +89,11 @@ async def _load_engine(db: AsyncSession, agent: Agent) -> DLPEngine:
 @router.post("/inspect", response_model=InspectResponse)
 async def inspect_payload(
     body: InspectRequest,
-    agent: Agent = Depends(get_current_agent),
+    ws: Workspace = Depends(get_current_workspace_flexible),
     db: AsyncSession = Depends(get_db),
 ) -> InspectResponse:
     """Classify and transform ``text`` for ``destination`` under tenant DLP rules."""
-    engine = await _load_engine(db, agent)
+    engine = await _load_engine(db, ws)
     decision = engine.inspect(
         body.text,
         destination=body.destination,
@@ -112,7 +112,7 @@ async def inspect_payload(
 @router.post("/classify", response_model=InspectResponse)
 async def classify_payload(
     body: InspectRequest,
-    agent: Agent = Depends(get_current_agent),
+    ws: Workspace = Depends(get_current_workspace_flexible),
     db: AsyncSession = Depends(get_db),
 ) -> InspectResponse:
     """Report how PII would be handled for a destination WITHOUT transforming.
@@ -120,7 +120,7 @@ async def classify_payload(
     Mirrors ``inspect`` but returns the would-be action and findings while
     leaving the source text untouched for safe preview/audit.
     """
-    engine = await _load_engine(db, agent)
+    engine = await _load_engine(db, ws)
     decision = engine.inspect(
         body.text,
         destination=body.destination,
@@ -138,11 +138,11 @@ async def classify_payload(
 
 @router.get("/policy", response_model=list[PolicyResponse])
 async def get_policy(
-    agent: Agent = Depends(get_current_agent),
+    ws: Workspace = Depends(get_current_workspace_flexible),
     db: AsyncSession = Depends(get_db),
 ) -> list[PolicyResponse]:
     """List the tenant's current DLP policy rules."""
-    result = await db.execute(select(DlpPolicy).where(DlpPolicy.workspace_id == agent.workspace_id))
+    result = await db.execute(select(DlpPolicy).where(DlpPolicy.workspace_id == ws.id))
     return [
         PolicyResponse(
             data_class=p.data_class,
@@ -158,7 +158,7 @@ async def get_policy(
 @router.put("/policy", response_model=list[PolicyResponse])
 async def put_policy(
     body: list[DlpRuleIn],
-    agent: Agent = Depends(get_current_agent),
+    ws: Workspace = Depends(get_current_workspace_flexible),
     db: AsyncSession = Depends(get_db),
 ) -> list[PolicyResponse]:
     """Replace the tenant's DLP policy (idempotent full-write)."""
@@ -168,11 +168,11 @@ async def put_policy(
         if rule.data_class not in VALID_CLASSES:
             raise HTTPException(status_code=422, detail=f"Invalid data class: {rule.data_class}")
 
-    await db.execute(delete(DlpPolicy).where(DlpPolicy.workspace_id == agent.workspace_id))
+    await db.execute(delete(DlpPolicy).where(DlpPolicy.workspace_id == ws.id))
     for rule in body:
         db.add(
             DlpPolicy(
-                workspace_id=agent.workspace_id,
+                workspace_id=ws.id,
                 data_class=rule.data_class,
                 destination=rule.destination,
                 action=rule.action,
@@ -182,7 +182,7 @@ async def put_policy(
         )
     await db.commit()
 
-    result = await db.execute(select(DlpPolicy).where(DlpPolicy.workspace_id == agent.workspace_id))
+    result = await db.execute(select(DlpPolicy).where(DlpPolicy.workspace_id == ws.id))
     return [
         PolicyResponse(
             data_class=p.data_class,

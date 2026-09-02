@@ -35,3 +35,31 @@ async def get_current_workspace(
     if not ws:
         raise HTTPException(status_code=401, detail="Invalid workspace key")
     return ws
+
+
+async def get_current_workspace_flexible(
+    authorization: str = Header(...), db: AsyncSession = Depends(get_db)
+) -> Workspace:
+    """Accept either a workspace API key or an agent API key, returning the Workspace."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid auth header")
+    raw_key = authorization.removeprefix("Bearer ").strip()
+    key_hash = hash_api_key(raw_key)
+
+    result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
+    ws = result.scalar_one_or_none()
+    if ws:
+        return ws
+
+    result_agent = await db.execute(select(Agent).where(Agent.api_key_hash == key_hash))
+    agent = result_agent.scalar_one_or_none()
+    if agent:
+        if agent.status == "suspended":
+            raise HTTPException(status_code=403, detail="Agent suspended")
+        ws_res = await db.execute(select(Workspace).where(Workspace.id == agent.workspace_id))
+        ws = ws_res.scalar_one_or_none()
+        if ws:
+            return ws
+
+    raise HTTPException(status_code=401, detail="Invalid workspace or agent key")
+

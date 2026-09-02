@@ -44,6 +44,36 @@ class ReplayResponse(BaseModel):
     replay: dict[str, bool]
 
 
+@router.get("", response_model=list[EvidenceResponse])
+async def list_evidence(
+    limit: int = 50,
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[EvidenceResponse]:
+    """List recent signed evidence envelopes for the current workspace."""
+    result = await db.execute(
+        select(EvidenceEnvelopeRow)
+        .where(EvidenceEnvelopeRow.workspace_id == workspace.id)
+        .order_by(EvidenceEnvelopeRow.created_at.desc())
+        .limit(limit)
+    )
+    rows = result.scalars().all()
+    return [
+        EvidenceResponse(
+            decision_id=row.decision_id,
+            task_id=str(row.task_id),
+            final_action=row.final_action,
+            risk_score=row.risk_score,
+            envelope_version=row.envelope_version,
+            signature=row.signature,
+            signer_public_key=row.signer_public_key,
+            envelope=row.envelope,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+        )
+        for row in rows
+    ]
+
+
 @router.get("/{decision_id}", response_model=EvidenceResponse)
 async def get_evidence(
     decision_id: str,
