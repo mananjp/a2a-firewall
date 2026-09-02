@@ -387,7 +387,7 @@ class A2AFirewall:
             "declared_intent": declared_intent,
             "trace_id": self._ctx.get("trace_id"),
             "parent_span_id": self._ctx.get("span_id"),
-            "sdk_version": "0.4.0",
+            "sdk_version": "0.4.1",
             "depth": depth,
             "sender_signature": signature,
             "message_hash": msg_hash,
