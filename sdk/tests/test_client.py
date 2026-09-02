@@ -3,13 +3,6 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 from a2a_firewall import A2AFirewall, FirewallConfig, FirewallBlockedError
-from a2a_firewall.client import (
-    _compute_message_hash,
-    _compute_chain_hash,
-    _mint_delegation_token,
-    _attenuate_token,
-    _token_to_compact,
-)
 
 
 def make_fw(fail_mode="closed", private_key=""):
@@ -136,6 +129,7 @@ def test_context_management():
 
 def test_fail_open_mode():
     import httpx
+
     fw = make_fw(fail_mode="open")
     with patch.object(fw._http, "post", side_effect=httpx.TimeoutException("timeout")):
         resp = fw.send("receiver-id", "research", {"query": "test"})
@@ -146,6 +140,7 @@ def test_fail_open_mode():
 
 def test_fail_closed_mode():
     import httpx
+
     fw = make_fw(fail_mode="closed")
     with patch.object(fw._http, "post", side_effect=httpx.TimeoutException("timeout")):
         with pytest.raises(FirewallBlockedError) as exc:
@@ -161,7 +156,13 @@ def test_proxy_auto_detection(monkeypatch):
 
 
 def test_proxy_not_detected_when_no_env(monkeypatch):
-    for key in ("A2A_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+    for key in (
+        "A2A_PROXY_URL",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ):
         monkeypatch.delenv(key, raising=False)
     fw = make_fw()
     assert fw.proxy_detected is False
@@ -191,6 +192,7 @@ def test_ca_cert_auto_detection(monkeypatch, tmp_path):
 
     cert_file = tmp_path / "ca.crt"
     from cryptography.hazmat.primitives import serialization
+
     cert_file.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
 
     monkeypatch.setenv("SSL_CERT_FILE", str(cert_file))
@@ -298,6 +300,3 @@ def test_get_and_verify_evidence():
         ver = fw.verify_evidence("dec-1")
     assert ev["decision_id"] == "dec-1"
     assert ver["valid"] is True
-
-
-

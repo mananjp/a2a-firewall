@@ -314,4 +314,3 @@ async def list_memory_logs(
         }
         for r in result.scalars().all()
     ]
-

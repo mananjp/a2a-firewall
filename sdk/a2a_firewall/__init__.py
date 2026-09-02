@@ -1,4 +1,5 @@
 """A2A Firewall Python SDK — full identity, delegation, and signing integration."""
+
 from a2a_firewall.client import (
     A2AFirewall,
     FirewallBlockedError,

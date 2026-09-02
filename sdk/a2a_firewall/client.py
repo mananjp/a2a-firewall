@@ -28,10 +28,9 @@ import hmac
 import json
 import logging
 import os
-import ssl
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
@@ -51,9 +50,16 @@ except ImportError:
 # Proxy auto-detection helpers
 # ---------------------------------------------------------------------------
 
+
 def _detect_proxy() -> str | None:
     """Detect transparent proxy URL from environment variables."""
-    for key in ("A2A_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+    for key in (
+        "A2A_PROXY_URL",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ):
         val = os.environ.get(key)
         if val:
             return val
@@ -68,9 +74,11 @@ def _detect_ca_cert() -> str | None:
             return val
     return None
 
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FirewallConfig:
@@ -90,6 +98,7 @@ class FirewallConfig:
 # Response & Error types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FirewallResponse:
     task_id: str
@@ -105,7 +114,13 @@ class FirewallResponse:
 
 
 class FirewallBlockedError(Exception):
-    def __init__(self, task_id: str, reason: str, risk_score: float, violations: list[dict[str, Any]]):
+    def __init__(
+        self,
+        task_id: str,
+        reason: str,
+        risk_score: float,
+        violations: list[dict[str, Any]],
+    ):
         self.task_id = task_id
         self.reason = reason
         self.risk_score = risk_score
@@ -117,14 +132,23 @@ class FirewallBlockedError(Exception):
 # Crypto helpers (self-contained, no backend dependency)
 # ---------------------------------------------------------------------------
 
+
 def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _compute_message_hash(payload: dict[str, Any], sender_id: str, receiver_id: str, timestamp: float) -> str:
+def _compute_message_hash(
+    payload: dict[str, Any], sender_id: str, receiver_id: str, timestamp: float
+) -> str:
     canonical = json.dumps(
-        {"payload": payload, "sender": sender_id, "receiver": receiver_id, "ts": timestamp},
-        sort_keys=True, separators=(",", ":"),
+        {
+            "payload": payload,
+            "sender": sender_id,
+            "receiver": receiver_id,
+            "ts": timestamp,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode()
     return _sha256_hex(canonical)
 
@@ -136,6 +160,7 @@ def _compute_chain_hash(parent_chain_hash: str | None, message_hash: str) -> str
 
 def _ed25519_sign(private_key_hex: str, message: bytes) -> str:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
     raw = bytes.fromhex(private_key_hex)
     key = Ed25519PrivateKey.from_private_bytes(raw)
     return key.sign(message).hex()
@@ -143,6 +168,7 @@ def _ed25519_sign(private_key_hex: str, message: bytes) -> str:
 
 def _ed25519_verify(public_key_hex: str, signature_hex: str, message: bytes) -> bool:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
     try:
         key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key_hex))
         key.verify(bytes.fromhex(signature_hex), message)
@@ -155,23 +181,49 @@ def _ed25519_verify(public_key_hex: str, signature_hex: str, message: bytes) -> 
 # Delegation token (compact serialization)
 # ---------------------------------------------------------------------------
 
+
 def _hmac_sha256(key: bytes, data: bytes) -> bytes:
     return hmac.new(key, data, hashlib.sha256).digest()
 
 
-def _mint_delegation_token(root_key_hex: str, location: str, agent_id: str, caveats: list[str]) -> dict[str, Any]:
-    root_key = bytes.fromhex(root_key_hex) if len(root_key_hex) == 64 else root_key_hex.encode()[:32]
+def _mint_delegation_token(
+    root_key_hex: str, location: str, agent_id: str, caveats: list[str]
+) -> dict[str, Any]:
+    root_key = (
+        bytes.fromhex(root_key_hex)
+        if len(root_key_hex) == 64
+        else root_key_hex.encode()[:32]
+    )
     msg = f"{location}\n{agent_id}\n".encode() + "\n".join(caveats).encode()
     sig = _hmac_sha256(root_key, msg).hex()
-    return {"location": location, "identifier": agent_id, "caveats": caveats, "signature": sig}
+    return {
+        "location": location,
+        "identifier": agent_id,
+        "caveats": caveats,
+        "signature": sig,
+    }
 
 
-def _attenuate_token(token: dict[str, Any], root_key_hex: str, new_caveats: list[str]) -> dict[str, Any]:
-    root_key = bytes.fromhex(root_key_hex) if len(root_key_hex) == 64 else root_key_hex.encode()[:32]
+def _attenuate_token(
+    token: dict[str, Any], root_key_hex: str, new_caveats: list[str]
+) -> dict[str, Any]:
+    root_key = (
+        bytes.fromhex(root_key_hex)
+        if len(root_key_hex) == 64
+        else root_key_hex.encode()[:32]
+    )
     all_caveats = token["caveats"] + new_caveats
-    msg = f"{token['location']}\n{token['identifier']}\n".encode() + "\n".join(all_caveats).encode()
+    msg = (
+        f"{token['location']}\n{token['identifier']}\n".encode()
+        + "\n".join(all_caveats).encode()
+    )
     sig = _hmac_sha256(root_key, msg).hex()
-    return {"location": token["location"], "identifier": token["identifier"], "caveats": all_caveats, "signature": sig}
+    return {
+        "location": token["location"],
+        "identifier": token["identifier"],
+        "caveats": all_caveats,
+        "signature": sig,
+    }
 
 
 def _token_to_compact(token: dict[str, Any]) -> str:
@@ -181,6 +233,7 @@ def _token_to_compact(token: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Main SDK class
 # ---------------------------------------------------------------------------
+
 
 class A2AFirewall:
     def __init__(self, config: FirewallConfig):
@@ -199,11 +252,15 @@ class A2AFirewall:
 
         if self._proxy_url:
             http_kwargs["proxy"] = self._proxy_url
-            _sdk_logger.info(f"[A2A SDK] Transparent proxy detected at {self._proxy_url}")
+            _sdk_logger.info(
+                f"[A2A SDK] Transparent proxy detected at {self._proxy_url}"
+            )
 
         if self._ca_cert_path:
             http_kwargs["verify"] = self._ca_cert_path
-            _sdk_logger.info(f"[A2A SDK] Using custom CA certificate: {self._ca_cert_path}")
+            _sdk_logger.info(
+                f"[A2A SDK] Using custom CA certificate: {self._ca_cert_path}"
+            )
 
         self._http = httpx.Client(**http_kwargs)
         self._chain_hash: str | None = None
@@ -240,18 +297,24 @@ class A2AFirewall:
 
     # -- Signing --
 
-    def _sign_payload(self, payload: dict[str, Any], receiver_id: str) -> tuple[str, str, str, float]:
+    def _sign_payload(
+        self, payload: dict[str, Any], receiver_id: str
+    ) -> tuple[str, str, str, float]:
         """Sign a payload and compute chain hash.
 
         Returns (message_hash, chain_hash, signature, timestamp).
         """
         now = time.time()
-        msg_hash = _compute_message_hash(payload, self.config.agent_id, receiver_id, now)
+        msg_hash = _compute_message_hash(
+            payload, self.config.agent_id, receiver_id, now
+        )
         chain_hash = _compute_chain_hash(self._chain_hash, msg_hash)
 
         signature = ""
         if self.config.agent_private_key:
-            signature = _ed25519_sign(self.config.agent_private_key, bytes.fromhex(msg_hash))
+            signature = _ed25519_sign(
+                self.config.agent_private_key, bytes.fromhex(msg_hash)
+            )
 
         self._chain_hash = chain_hash
         return msg_hash, chain_hash, signature, now
@@ -275,7 +338,9 @@ class A2AFirewall:
         if self._delegation_token:
             token = _attenuate_token(self._delegation_token, root_key_hex, caveats)
         else:
-            token = _mint_delegation_token(root_key_hex, self.config.workspace_id, self.config.agent_id, caveats)
+            token = _mint_delegation_token(
+                root_key_hex, self.config.workspace_id, self.config.agent_id, caveats
+            )
 
         self._delegation_token = token
         self._delegation_chain.append(receiver_agent_id)
@@ -304,7 +369,9 @@ class A2AFirewall:
     ) -> FirewallResponse:
         """Send a message through the firewall with automatic signing and delegation."""
         task_id = str(uuid.uuid4())
-        msg_hash, chain_hash, signature, timestamp = self._sign_payload(payload, receiver_agent_id)
+        msg_hash, chain_hash, signature, timestamp = self._sign_payload(
+            payload, receiver_agent_id
+        )
 
         body: dict[str, Any] = {
             "task_id": task_id,
@@ -335,8 +402,12 @@ class A2AFirewall:
         span = None
         if _OTEL_AVAILABLE:
             span = trace.get_tracer("a2a-firewall-sdk", "0.2.0").start_span(
-                "firewall.inspect", kind=SpanKind.CLIENT,
-                attributes={"task_type": task_type, "receiver_agent_id": receiver_agent_id},
+                "firewall.inspect",
+                kind=SpanKind.CLIENT,
+                attributes={
+                    "task_type": task_type,
+                    "receiver_agent_id": receiver_agent_id,
+                },
             )
             sc = span.get_span_context()
             if sc.is_valid:
@@ -370,12 +441,18 @@ class A2AFirewall:
             if self.config.fail_mode == "closed":
                 raise FirewallBlockedError(task_id, "firewall_unreachable", 1.0, [])
             return FirewallResponse(
-                task_id=task_id, decision="allow", allowed=True,
-                risk_score=0.0, violations=[], latency_ms=-1,
+                task_id=task_id,
+                decision="allow",
+                allowed=True,
+                risk_score=0.0,
+                violations=[],
+                latency_ms=-1,
             )
         except httpx.HTTPStatusError as e:
             if span:
-                span.set_status(Status(StatusCode.ERROR, f"HTTP {e.response.status_code}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"HTTP {e.response.status_code}")
+                )
                 span.record_exception(e)
             raise RuntimeError(f"Firewall HTTP error: {e.response.status_code}") from e
         finally:
@@ -386,7 +463,9 @@ class A2AFirewall:
             fw = self._wait_for_review(fw)
 
         if not fw.allowed and raise_on_block:
-            raise FirewallBlockedError(fw.task_id, fw.block_reason or "unknown", fw.risk_score, fw.violations)
+            raise FirewallBlockedError(
+                fw.task_id, fw.block_reason or "unknown", fw.risk_score, fw.violations
+            )
 
         return fw
 
@@ -425,11 +504,15 @@ class A2AFirewall:
         expected_parent_chain_hash: str | None = None,
     ) -> dict[str, Any]:
         """Verify an incoming message's Ed25519 signature and chain hash."""
-        sig_valid = _ed25519_verify(sender_public_key, signature, bytes.fromhex(message_hash))
+        sig_valid = _ed25519_verify(
+            sender_public_key, signature, bytes.fromhex(message_hash)
+        )
 
         chain_valid = True
         if expected_parent_chain_hash:
-            expected_chain = _compute_chain_hash(expected_parent_chain_hash, message_hash)
+            expected_chain = _compute_chain_hash(
+                expected_parent_chain_hash, message_hash
+            )
             chain_valid = expected_chain == self._chain_hash
 
         return {"signature_valid": sig_valid, "chain_valid": chain_valid}
@@ -445,7 +528,11 @@ class A2AFirewall:
         """Inspect upstream LLM response or tool execution result for indirect prompt injection or PII."""
         resp = self._http.post(
             "/v1/firewall/inspect-response",
-            json={"response_body": response_body, "context": context, "redact_pii": redact_pii},
+            json={
+                "response_body": response_body,
+                "context": context,
+                "redact_pii": redact_pii,
+            },
         )
         resp.raise_for_status()
         return resp.json()
@@ -498,7 +585,12 @@ class A2AFirewall:
         """Evaluate text under tenant DLP policies for a target destination."""
         resp = self._http.post(
             "/v1/dlp/inspect",
-            json={"text": text, "destination": destination, "purpose": purpose, "tokenize": tokenize},
+            json={
+                "text": text,
+                "destination": destination,
+                "purpose": purpose,
+                "tokenize": tokenize,
+            },
         )
         resp.raise_for_status()
         return resp.json()

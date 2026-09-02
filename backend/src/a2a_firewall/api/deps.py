@@ -62,4 +62,3 @@ async def get_current_workspace_flexible(
             return ws
 
     raise HTTPException(status_code=401, detail="Invalid workspace or agent key")
-
