@@ -34,6 +34,20 @@ export default function WorkflowsPage() {
   const [quarantineLoading, setQuarantineLoading] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  const handleSelectWorkflow = useCallback(async (rootTaskId: string) => {
+    try {
+      setSelectedRootId(rootTaskId);
+      setDetailLoading(true);
+      const detail = await workflowsApi.get(rootTaskId);
+      setSelectedWorkflow(detail);
+    } catch (err) {
+      console.error("Failed to load workflow state:", err);
+      setSelectedWorkflow(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -47,25 +61,11 @@ export default function WorkflowsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedRootId]);
+  }, [selectedRootId, handleSelectWorkflow]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const handleSelectWorkflow = async (rootTaskId: string) => {
-    try {
-      setSelectedRootId(rootTaskId);
-      setDetailLoading(true);
-      const detail = await workflowsApi.get(rootTaskId);
-      setSelectedWorkflow(detail);
-    } catch (err) {
-      console.error("Failed to load workflow state:", err);
-      setSelectedWorkflow(null);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
 
   const handleQuarantine = async (rootTaskId: string) => {
     try {
