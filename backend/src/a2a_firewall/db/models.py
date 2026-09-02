@@ -299,6 +299,119 @@ class DelegationChain(Base):
     created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), default=datetime.utcnow)  # type: ignore[assignment]
 
 
+class EvidenceEnvelopeRow(Base):
+    """Signed, replayable decision evidence bundle (see core/evidence.py)."""
+
+    __tablename__ = "evidence_envelopes"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    task_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    decision_id: Mapped[str] = Column(String, nullable=False, unique=True)  # type: ignore[assignment]
+    envelope_version: Mapped[str] = Column(String, nullable=False, default="1.0")  # type: ignore[assignment]
+    final_action: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    risk_score: Mapped[float] = Column(Float, nullable=False, default=0.0)  # type: ignore[assignment]
+    envelope: Mapped[Any] = Column(JSONB, nullable=False)  # type: ignore[assignment]
+    signature: Mapped[str] = Column(Text, nullable=False)  # type: ignore[assignment]
+    signer_public_key: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
+
+
+class WorkflowInstance(Base):
+    """Aggregate state of a whole workflow (all tasks sharing a root task id)."""
+
+    __tablename__ = "workflow_instances"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    root_task_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    node_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    depth: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    cumulative_risk: Mapped[float] = Column(Float, default=0.0, nullable=False)  # type: ignore[assignment]
+    cumulative_exposure: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    distinct_agents: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    anomalies: Mapped[Any] = Column(JSONB, default=list, nullable=False)  # type: ignore[assignment]
+    quarantined: Mapped[bool] = Column(Boolean, default=False, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class MemoryEntry(Base):
+    """A persisted (post-inspection) shared-memory / RAG chunk."""
+
+    __tablename__ = "memory_entries"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = Column(Text, nullable=False)  # type: ignore[assignment]  # stored (post-redaction) text
+    content_hash: Mapped[str] = Column(  # type: ignore[assignment]
+        String, nullable=False, index=True
+    )
+    source_agent_id: Mapped[uuid.UUID | None] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    metadata_: Mapped[Any] = Column("metadata", JSONB, default=dict)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class MemoryInspectionLog(Base):
+    """Audit trail of every memory-write inspection (allow/redact/block)."""
+
+    __tablename__ = "memory_inspection_log"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID | None] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    content_hash: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    action: Mapped[str] = Column(String, nullable=False, default="allow")  # type: ignore[assignment]
+    blocked: Mapped[bool] = Column(Boolean, default=False, nullable=False)  # type: ignore[assignment]
+    findings: Mapped[Any] = Column(JSONB, default=list, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
+
+
+class MemoryRetrievalLog(Base):
+    """Audit trail of memory/context retrievals (query → matched entries)."""
+
+    __tablename__ = "memory_retrieval_log"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID | None] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    query_hash: Mapped[str] = Column(String, nullable=False, index=True)  # type: ignore[assignment]
+    query_preview: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    matched_entry_ids: Mapped[Any] = Column(JSONB, default=list, nullable=False)  # type: ignore[assignment]
+    result_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
+
+
 class TelemetryRow(Base):
     """Structured telemetry events for the correlation engine.
 
@@ -721,3 +834,32 @@ class SCIMToken(Base):
     expires_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
     last_used_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
     created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), default=datetime.utcnow)  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# DLP policies
+# ---------------------------------------------------------------------------
+
+
+class DlpPolicy(Base):
+    """Tenant DLP rule binding a data class + destination to an action."""
+
+    __tablename__ = "dlp_policies"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    data_class: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # financial | identity | health | contact | sensitive
+    destination: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # e.g. internal | external | vendor | partner
+    action: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # allow | redact | tokenize | hash | block
+    allowed_purposes: Mapped[Any] = Column(JSONB, default=list, nullable=True)  # type: ignore[assignment]
+    enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )

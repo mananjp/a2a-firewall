@@ -24,12 +24,36 @@ from typing import Any
 
 @dataclass
 class PIIMatch:
-    """A single PII detection result."""
+    """A single PII detection result.
+
+    ``start``/``end`` are the character offsets of the match in the *source*
+    text that was scanned, enabling span-accurate redaction/tokenization by
+    downstream consumers. ``data_class`` is a coarse classification label used
+    by the DLP engine (e.g. ``financial``, ``identity``, ``contact``).
+    """
 
     pattern_type: str  # e.g. "credit_card", "aadhaar", "ssn"
     matched_text: str  # redacted form for logging
     confidence: float  # 0.0-1.0
     framework_tags: list[str]  # which compliance frameworks care about this
+    start: int = -1  # char offset of the match in the scanned source
+    end: int = -1  # char offset just past the match in the scanned source
+    data_class: str = "sensitive"  # coarse DLP classification label
+
+
+# Placeholder used when a given PII type is redacted inline.
+PII_PLACEHOLDERS: dict[str, str] = {
+    "credit_card": "[REDACTED:credit_card]",
+    "ssn": "[REDACTED:ssn]",
+    "passport": "[REDACTED:passport]",
+    "aadhaar": "[REDACTED:aadhaar]",
+    "iban": "[REDACTED:iban]",
+    "email": "[REDACTED:email]",
+    "phone": "[REDACTED:phone]",
+    "indian_pan": "[REDACTED:indian_pan]",
+    "medical_record_number": "[REDACTED:medical_record_number]",
+    "icd10_code": "[REDACTED:icd10_code]",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +149,9 @@ def detect_credit_cards(text: str) -> list[PIIMatch]:
                     matched_text=_redact(card),
                     confidence=0.95,
                     framework_tags=["PCI-DSS", "RBI"],
+                    start=m.start(),
+                    end=m.end(),
+                    data_class="financial",
                 )
             )
 
@@ -138,6 +165,9 @@ def detect_credit_cards(text: str) -> list[PIIMatch]:
                     matched_text=_redact(card),
                     confidence=0.95,
                     framework_tags=["PCI-DSS", "RBI"],
+                    start=m.start(),
+                    end=m.end(),
+                    data_class="financial",
                 )
             )
 
@@ -157,6 +187,9 @@ def detect_aadhaar(text: str) -> list[PIIMatch]:
                     matched_text=_redact(num),
                     confidence=0.85,
                     framework_tags=["DPDP"],
+                    start=m.start(),
+                    end=m.end(),
+                    data_class="identity",
                 )
             )
     return matches
@@ -170,6 +203,9 @@ def detect_ssn(text: str) -> list[PIIMatch]:
             matched_text=_redact(m.group()),
             confidence=0.90,
             framework_tags=["HIPAA", "CCPA"],
+            start=m.start(),
+            end=m.end(),
+            data_class="identity",
         )
         for m in _SSN_PATTERN.finditer(text)
     ]
@@ -183,22 +219,45 @@ def detect_email(text: str) -> list[PIIMatch]:
             matched_text=_redact(m.group()),
             confidence=0.80,
             framework_tags=["DPDP", "GDPR", "CCPA"],
+            start=m.start(),
+            end=m.end(),
+            data_class="contact",
         )
         for m in _EMAIL_PATTERN.finditer(text)
     ]
 
 
 def detect_phone(text: str) -> list[PIIMatch]:
-    """Detect phone numbers."""
-    return [
-        PIIMatch(
-            pattern_type="phone",
-            matched_text=_redact(m.group()),
-            confidence=0.70,
-            framework_tags=["DPDP", "GDPR", "CCPA"],
+    """Detect phone numbers.
+
+    Digit sequences that are Luhn-valid card/PAN numbers are excluded so a
+    credit card is never double-reported as a phone (the card detector owns
+    those spans).
+    """
+    matches: list[PIIMatch] = []
+    for m in _PHONE_PATTERN.finditer(text):
+        digits = re.sub(r"[^0-9]", "", m.group())
+        if _looks_like_card(digits):
+            continue
+        matches.append(
+            PIIMatch(
+                pattern_type="phone",
+                matched_text=_redact(m.group()),
+                confidence=0.70,
+                framework_tags=["DPDP", "GDPR", "CCPA"],
+                start=m.start(),
+                end=m.end(),
+                data_class="contact",
+            )
         )
-        for m in _PHONE_PATTERN.finditer(text)
-    ]
+    return matches
+
+
+def _looks_like_card(digits: str) -> bool:
+    """Whether a digit run appears to be a credit/PAN card (Luhn-valid, 13-19)."""
+    if not (13 <= len(digits) <= 19):
+        return False
+    return _luhn_check(digits)
 
 
 def detect_medical_records(text: str) -> list[PIIMatch]:
@@ -211,6 +270,9 @@ def detect_medical_records(text: str) -> list[PIIMatch]:
                 matched_text=_redact(m.group()),
                 confidence=0.85,
                 framework_tags=["HIPAA"],
+                start=m.start(),
+                end=m.end(),
+                data_class="health",
             )
         )
     for m in _ICD10_PATTERN.finditer(text):
@@ -220,6 +282,9 @@ def detect_medical_records(text: str) -> list[PIIMatch]:
                 matched_text=m.group(),
                 confidence=0.75,
                 framework_tags=["HIPAA"],
+                start=m.start(),
+                end=m.end(),
+                data_class="health",
             )
         )
     return matches
@@ -233,6 +298,9 @@ def detect_indian_pan(text: str) -> list[PIIMatch]:
             matched_text=_redact(m.group()),
             confidence=0.85,
             framework_tags=["RBI", "DPDP"],
+            start=m.start(),
+            end=m.end(),
+            data_class="identity",
         )
         for m in _INDIAN_PAN_PATTERN.finditer(text)
     ]
@@ -246,6 +314,9 @@ def detect_iban(text: str) -> list[PIIMatch]:
             matched_text=_redact(m.group()),
             confidence=0.80,
             framework_tags=["PCI-DSS", "GDPR"],
+            start=m.start(),
+            end=m.end(),
+            data_class="financial",
         )
         for m in _IBAN_PATTERN.finditer(text)
     ]
@@ -294,6 +365,8 @@ def pii_matches_to_violations(
                     "confidence": m.confidence,
                     "framework_tags": m.framework_tags,
                     "framework_tag": framework_tag,
+                    "data_class": m.data_class,
+                    "span": [m.start, m.end],
                 },
             }
         )

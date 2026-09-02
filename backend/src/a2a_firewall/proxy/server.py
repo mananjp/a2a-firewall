@@ -491,6 +491,24 @@ class A2AProxyServer:
                     content=body_bytes,
                 )
 
+                # ---------- Response inspection (upstream → agent) ----------
+                response_decision: dict[str, Any] | None = None
+                try:
+                    from a2a_firewall.proxy.response_scanner import scan_response_body
+
+                    response_decision = scan_response_body(resp.content)
+                except Exception:
+                    response_decision = None
+
+                if response_decision and response_decision.get("decision") == "block":
+                    # Do not forward a malicious/leaky response; return a block.
+                    await self._send_upstream_blocked_response(client_writer)
+                    return
+
+                forwarded_body = resp.content
+                if response_decision and response_decision.get("redacted_body"):
+                    forwarded_body = str(response_decision["redacted_body"]).encode("utf-8")
+
                 # Return upstream response to client
                 client_writer.write(
                     f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}\r\n".encode()
@@ -499,9 +517,9 @@ class A2AProxyServer:
                     if k.lower() not in ("transfer-encoding", "content-length", "content-encoding"):
                         client_writer.write(f"{k}: {v}\r\n".encode())
 
-                client_writer.write(f"Content-Length: {len(resp.content)}\r\n".encode())
+                client_writer.write(f"Content-Length: {len(forwarded_body)}\r\n".encode())
                 client_writer.write(b"X-A2A-Firewall-Inspected: true\r\n\r\n")
-                client_writer.write(resp.content)
+                client_writer.write(forwarded_body)
                 await client_writer.drain()
 
             except Exception as e:
@@ -515,3 +533,23 @@ class A2AProxyServer:
                 ).encode()
                 client_writer.write(err_resp_headers + err_body)
                 await client_writer.drain()
+
+    async def _send_upstream_blocked_response(self, writer: asyncio.StreamWriter) -> None:
+        """Send an HTTP 403 block for a response rejected by inspection."""
+        body = json.dumps(
+            {
+                "error": {
+                    "message": "A2A Firewall Security Block: upstream response failed inspection",
+                    "type": "a2a_firewall_blocked_response",
+                }
+            }
+        ).encode("utf-8")
+        resp = (
+            b"HTTP/1.1 403 Forbidden\r\n"
+            b"Content-Type: application/json\r\n"
+            b"X-A2A-Firewall-Inspected: true\r\n"
+            b"Connection: close\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+        writer.write(resp)
+        await writer.drain()

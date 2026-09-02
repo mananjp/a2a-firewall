@@ -61,6 +61,17 @@ class MCPHTTPGateway:
                     json=payload,
                     headers={k: v for k, v in (headers or {}).items() if k.lower() != "host"},
                 )
+                # ---- Response inspection: tool result returning to the agent ----
+                from a2a_firewall.proxy.response_scanner import scan_response_body
+
+                response_decision = scan_response_body(resp.content)
+                if response_decision.get("decision") == "block":
+                    return JSONRPCResponse.error_response(
+                        req_id=req.id,
+                        code=-32001,
+                        message="A2A Firewall Security Block: tool result failed response inspection",
+                        data=response_decision.get("findings", {}),
+                    ).to_dict()
                 return cast("dict[str, Any]", resp.json())
 
         # Clean standalone pass

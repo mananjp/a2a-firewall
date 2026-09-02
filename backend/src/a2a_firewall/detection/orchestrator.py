@@ -17,6 +17,7 @@ from a2a_firewall.core.rate_limit import check_agent
 from a2a_firewall.db.models import (
     AgentIdentity,
     DelegationChain,
+    EvidenceEnvelopeRow,
     ReviewItem,
     Task,
     TelemetryRow,
@@ -880,6 +881,9 @@ async def run_inspection(
             db=db,
         )
 
+    # ---------- Post-decision: Workflow state update & quarantine ----------
+    await _update_workflow_state(request_data, workspace, db)
+
     await _emit_telemetry(
         result,
         request_data,
@@ -1082,6 +1086,43 @@ async def _save_and_return(
             )
         )
 
+    # ---------- Decision Evidence Envelope (signed, replayable) ----------
+    evidence: EvidenceEnvelopeRow | None = None
+    try:
+        from a2a_firewall.core.evidence import (
+            build_decision_envelope,
+            workspace_root_public_key_hex,
+        )
+
+        envelope = build_decision_envelope(
+            workspace_id=str(workspace.id),
+            task_id=str(task_id),
+            decision=decision,
+            reason=reason,
+            risk_score=risk_score,
+            violations=violations,
+            input_hashes={"payload": payload_hash, "task_id": str(task_id)},
+            trace_events=trace_events,
+            delegation_chain=req.get("_parent_caveats", []) or [],
+            model_evaluator_identity=groq_model,
+        )
+        env_dict = envelope.to_dict()
+        pub = workspace_root_public_key_hex(str(workspace.id))
+        evidence = EvidenceEnvelopeRow(
+            workspace_id=workspace.id,
+            task_id=task_id,
+            decision_id=envelope.decision_id,
+            envelope_version=envelope.envelope_version,
+            final_action=envelope.final_action,
+            risk_score=envelope.risk_aggregation.get("final_risk_score", risk_score),
+            envelope=env_dict,
+            signature=envelope.signature,
+            signer_public_key=pub,
+        )
+        db.add(evidence)
+    except Exception:
+        evidence = None  # evidence failure must never break the decision path
+
     await db.commit()
     return {
         "task_id": str(task_id),
@@ -1093,7 +1134,87 @@ async def _save_and_return(
         "block_reason": reason,
         "latency_ms": total_ms,
         "trace_id": trace_id,
+        "evidence_id": f"decision-{task_id}" if evidence is not None else None,
     }
+
+
+async def _update_workflow_state(
+    request_data: dict[str, Any],
+    workspace: Any,
+    db: AsyncSession,
+) -> None:
+    """Update the aggregate state of the workflow a task belongs to.
+
+    Recomputes the workflow graph (all tasks sharing the root id), detects
+    anomalies (circular delegation, fan-out explosion, privilege accumulation),
+    and quarantines the whole workflow if a critical anomaly is found.
+    """
+    root_task_id_str = request_data.get("root_task_id") or request_data.get("task_id")
+    if not root_task_id_str:
+        return
+    try:
+        root_uuid = uuid.UUID(root_task_id_str)
+    except (TypeError, ValueError):
+        return
+
+    try:
+        from a2a_firewall.core.workflow_engine import (
+            compute_workflow_state,
+            node_from_task,
+            should_quarantine,
+        )
+        from a2a_firewall.db.models import Task as TaskModel
+        from a2a_firewall.db.models import WorkflowInstance
+
+        # Collect all task nodes in this workflow.
+        result = await db.execute(
+            select(TaskModel).where(
+                TaskModel.workspace_id == workspace.id,
+                TaskModel.root_task_id == root_uuid,
+            )
+        )
+        tasks = result.scalars().all()
+        if not tasks:
+            return
+        nodes = [node_from_task(t) for t in tasks]
+        state = compute_workflow_state(nodes)
+
+        # Upsert the workflow instance.
+        existing = await db.execute(
+            select(WorkflowInstance).where(
+                WorkflowInstance.workspace_id == workspace.id,
+                WorkflowInstance.root_task_id == root_uuid,
+            )
+        )
+        row = existing.scalar_one_or_none()
+        quarantine = should_quarantine(state)
+        anomalies = [a.to_dict() if hasattr(a, "to_dict") else a for a in state.anomalies]
+        if row is None:
+            db.add(
+                WorkflowInstance(
+                    workspace_id=workspace.id,
+                    root_task_id=root_uuid,
+                    node_count=state.node_count,
+                    depth=state.depth,
+                    cumulative_risk=state.cumulative_risk,
+                    cumulative_exposure=state.cumulative_exposure,
+                    distinct_agents=state.distinct_agents,
+                    anomalies=anomalies,
+                    quarantined=quarantine,
+                )
+            )
+        else:
+            row.node_count = state.node_count
+            row.depth = state.depth
+            row.cumulative_risk = state.cumulative_risk
+            row.cumulative_exposure = state.cumulative_exposure
+            row.distinct_agents = state.distinct_agents
+            row.anomalies = anomalies
+            if quarantine:
+                row.quarantined = True
+        await db.commit()
+    except Exception:
+        pass  # workflow update must never break the decision response
 
 
 async def _rate_limit_response(

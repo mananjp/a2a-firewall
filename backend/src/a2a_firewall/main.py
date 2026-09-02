@@ -17,9 +17,12 @@ from a2a_firewall.api.routes import (
     cve,
     delegation,
     demo,
+    dlp,
+    evidence,
     firewall,
     identity,
     ips,
+    memory,
     network,
     policies,
     rbac,
@@ -34,6 +37,7 @@ from a2a_firewall.api.routes import (
     tasks,
     telemetry,
     violations,
+    workflows,
     workspaces,
 )
 from a2a_firewall.core.config import settings
@@ -180,6 +184,10 @@ app.include_router(rbac.router, prefix="/v1/rbac", tags=["rbac"])
 app.include_router(scim.router, prefix="/scim/v2", tags=["scim"])
 app.include_router(retention.router, prefix="/v1/retention", tags=["retention"])
 app.include_router(network.router, prefix="/v1/network", tags=["network"])
+app.include_router(evidence.router, prefix="/v1/evidence", tags=["evidence"])
+app.include_router(workflows.router, prefix="/v1/workflows", tags=["workflows"])
+app.include_router(memory.router, prefix="/v1/memory", tags=["memory"])
+app.include_router(dlp.router, prefix="/v1/dlp", tags=["dlp"])
 
 
 @app.get("/health")
