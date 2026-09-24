@@ -21,7 +21,7 @@ export interface FirewallVerdict {
 	raw: IDataObject;
 }
 
-export const CLIENT_ID = 'n8n-a2a-firewall/0.1.0';
+export const CLIENT_ID = 'n8n-nodes-a2a-firewall/0.1.0';
 
 // ---------------------------------------------------------------------------
 // Canonicalization & Hashing
