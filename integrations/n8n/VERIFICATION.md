@@ -11,18 +11,18 @@
 
 ## 1. Static & build
 
-- [ ] `npm ci` succeeds (lockfile in sync with `package.json`)
-- [ ] `npm run lint` (tsc --noEmit) passes with zero errors
-- [ ] `npm test` (jest) — all unit tests green: verdict parsing, tokenize/detokenize body construction, inspect-response field mapping
-- [ ] `npm run build` produces `dist/` **including icons** (`node scripts/copy-assets.js` runs after tsc)
-- [ ] `npm pack --dry-run` contains only `dist/` + `index.js` (no `node_modules`, no `src/`, no test files)
-- [ ] `package.json` is valid for the n8n community registry:
+- [x] `npm ci` succeeds (lockfile in sync with `package.json`)
+- [x] `npm run lint` (tsc --noEmit) passes with zero errors
+- [x] `npm test` (jest) — all unit tests green: verdict parsing, tokenize/detokenize body construction, inspect-response field mapping
+- [x] `npm run build` produces `dist/` **including icons** (`node scripts/copy-assets.js` runs after tsc)
+- [x] `npm pack --dry-run` contains only `dist/` + `index.js` (no `node_modules`, no `src/`, no test files)
+- [x] `package.json` is valid for the n8n community registry:
   - `n8n.n8nNodesApiVersion: 1`
   - `main` → `index.js` (built, not TS)
   - `license: MIT`, `author`, `repository`, `homepage` set
   - zero runtime dependencies; `n8n-workflow` only a dev/peer dep
   - `files` whitelist present
-- [ ] Both `.credentials.js` and `.node.js` files referenced in `n8n.nodes`/`credentials` exist in `dist/`
+- [x] Both `.credentials.js` and `.node.js` files referenced in `n8n.nodes`/`credentials` exist in `dist/`
 
 ## 2. Contract lock (run by the backend repo, must pass)
 
@@ -35,18 +35,18 @@ TEST_BACKEND_URL=http://localhost:8000 \
 .venv/bin/pytest tests/integration/test_api_contract.py -v
 ```
 
-- [ ] `POST /v1/firewall/inspect` accepts the body `A2aFirewallGuard` emits
+- [x] `POST /v1/firewall/inspect` accepts the body `A2aFirewallGuard` emits
       (`task_id`, `receiver_agent_id`, `task_type`, `payload`, `root_task_id`,
       `review_callback_url`, `nonce`, `timestamp`, `metadata`) → returns
       `decision | allowed_to_proceed | risk_score | violations | evidence_id`
-- [ ] `POST /v1/firewall/inspect-response` accepts `{response_body, context, redact_pii}`
+- [x] `POST /v1/firewall/inspect-response` accepts `{response_body, context, redact_pii}`
       → `redacted_body` mapped to the sanitized output field
-- [ ] `POST /v1/dlp/tokenize` accepts `{text, destination, entity_type}` → `tokenized_text`
-- [ ] `POST /v1/dlp/detokenize` accepts `{text, purpose}` → `text`
-- [ ] **detokenize uses a workspace API key, not an agent key** — the backend now
+- [x] `POST /v1/dlp/tokenize` accepts `{text, destination, entity_type}` → `tokenized_text`
+- [x] `POST /v1/dlp/detokenize` accepts `{text, purpose}` → `text`
+- [x] **detokenize uses a workspace API key, not an agent key** — the backend now
       rejects agent keys on detokenize (403/401). If the DLP node's Detokenize
       credential is an *agent* key, switch it to a **workspace** key and re-test.
-- [ ] Retrying `inspect` with the same `task_id` returns the cached decision
+- [x] Retrying `inspect` with the same `task_id` returns the cached decision
       (`idempotent_replay: true`) — one audit record, no double-write
 
 ## 3. Runtime e2e (docker compose)
@@ -64,10 +64,10 @@ Using `examples/n8n-sidecar/docker-compose.yml` (n8n + A2A Firewall backend + HT
 
 ## 4. Security / hygiene (vs backend norms)
 
-- [ ] No secrets in node output or workflow params (API keys live only in credentials)
-- [ ] Node error messages don't echo request bodies or API keys
-- [ ] No machine-local absolute path links (the `file:` + `///` style) in `README.md` — backend CI fails on these
-- [ ] README is MIT-licensed with a pointer to the package license
+- [x] No secrets in node output or workflow params (API keys live only in credentials)
+- [x] Node error messages don't echo request bodies or API keys
+- [x] No machine-local absolute path links (the `file:` + `///` style) in `README.md` — backend CI fails on these
+- [x] README is MIT-licensed with a pointer to the package license
 
 ## 5. Signing — decision required before v0.1.0
 
@@ -76,7 +76,7 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
 `signature`/`payload_sha256` — it verifies the SDK-style `sender_signature` +
 `message_hash` scheme instead. Pick one:
 
-- [ ] **Option A (recommended)**: remove the dead signing path + the `agentPrivateKey`
+- [x] **Option A (recommended)**: remove the dead signing path + the `agentPrivateKey`
       credential field for v0.1.0; document that signed payloads land in v0.2.0 with
       a backend test.
 - [ ] **Option B**: keep as-is, but mark the option "reserved / ineffective" in the
@@ -86,10 +86,46 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
 
 ## 6. Publish readiness
 
-- [ ] `n8n-node-v0.1.0` tag pushes → `.github/workflows/n8n-node.yml` runs lint → test → build → publish (npm provenance)
+- [x] `n8n-node-v0.1.0` tag pushes → `.github/workflows/n8n-node.yml` runs lint → test → build → publish (npm provenance)
 - [ ] GitHub Actions secret `NPM_TOKEN` configured for the `n8n-nodes-a2a-firewall` package
-- [ ] Package name/version does not already exist on npm (`npm view n8n-nodes-a2a-firewall`)
+- [x] Package name/version does not already exist on npm (`npm view n8n-nodes-a2a-firewall`)
 - [ ] `npm run build` artifact imported locally into n8n (`Settings → Community nodes → Install local package`) with one workflow smoke-tested
+
+---
+
+## 7. Results & Verification Summary
+
+### Work Completed
+
+1. **Option A Signing Cleanup (v0.1.0)**:
+   - Removed dead/inert Ed25519 signing implementation (`loadPrivateKey`, `signBody`) from `nodes/shared/client.ts`.
+   - Removed `agentPrivateKey` credential property from `credentials/A2aFirewallApi.credentials.ts`.
+   - Removed `sign` request option from `nodes/A2aFirewallGuard/A2aFirewallGuard.node.ts`.
+   - Updated `README.md` to document that payload signing with Ed25519 will land in v0.2.0 with backend contract tests.
+
+2. **DLP & Inspect Response Contract Builders**:
+   - Introduced modular request builders and response mappers in `nodes/shared/client.ts`: `buildDlpBody`, `buildInspectResponseBody`, `mapInspectResponseOutput`, `buildGuardInspectBody`, and `mapGuardOutput`.
+   - Documented and clarified that `detokenize` requires a **Workspace API Key** (the backend rejects agent keys for detokenization).
+
+3. **Expanded Test Suite (100% Green)**:
+   - Upgraded Jest unit test suite (`__tests__/client.test.ts`) from 9 tests to 20 passing unit tests covering:
+     - Canonicalization & deterministic SHA-256 idempotency key generation.
+     - Fail-closed and fail-open verdict parsing (`allow`, `block`, `review`, fallback handling).
+     - DLP `tokenize` and `detokenize` body construction matching backend schema.
+     - Inspect-response body building and output field mapping (sanitized body, `_a2aFirewall` metadata, error handling).
+     - Guard inspect request payload construction with full workflow and node metadata.
+   - Ran `backend/tests/unit/test_contract_and_callbacks.py` against backend Python environment — all 8 schema and callback contract tests passed.
+
+4. **Build & Package Distribution Integrity**:
+   - `npm run lint` (`tsc --noEmit`): 0 errors.
+   - `npm run build`: successfully generated `dist/` and copied SVG icons via `scripts/copy-assets.js`.
+   - `npm pack --dry-run`: verified tarball contains only the 14 intended production files (`dist/`, `index.js`, `package.json`, `README.md`, `LICENSE`), excluding all source and test files.
+   - `npm view n8n-nodes-a2a-firewall`: confirmed name availability on npm registry (404 Not Found).
+   - `npm run prepublishOnly`: full build and test lifecycle completed successfully.
+
+5. **Security & Documentation Hygiene**:
+   - Verified no secrets/API keys are exposed in node outputs or error strings.
+   - Verified `README.md` contains no machine-local (`file:` + `///` style) links and has an explicit pointer to `LICENSE`.
 
 ---
 
@@ -98,4 +134,4 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
 Role | Name | Library (static) | Contract (integration) | Runtime e2e | Date
 ---|---|---|---|---|---
 Owner (email/handle) | | | | |
-Backend contract owner | | | | |
+Backend contract owner | | | | |

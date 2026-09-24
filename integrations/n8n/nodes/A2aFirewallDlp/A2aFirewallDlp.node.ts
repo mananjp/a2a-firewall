@@ -1,12 +1,11 @@
 import {
 	NodeOperationError,
-	type IDataObject,
 	type IExecuteFunctions,
 	type INodeExecutionData,
 	type INodeType,
 	type INodeTypeDescription,
 } from 'n8n-workflow';
-import { getConfig, idempotencyKey, postJson } from '../shared/client';
+import { buildDlpBody, getConfig, idempotencyKey, postJson } from '../shared/client';
 import { MAIN } from '../shared/connection';
 
 export class A2aFirewallDlp implements INodeType {
@@ -93,13 +92,16 @@ export class A2aFirewallDlp implements INodeType {
 				const outputField = this.getNodeParameter('outputField', i) as string;
 
 				// Request schema matches POST /v1/dlp/tokenize and /v1/dlp/detokenize
-				const body: IDataObject = { text };
-				if (operation === 'tokenize') {
-					body.destination = this.getNodeParameter('destination', i, '') as string;
-					body.entity_type = 'pii';
-				} else {
-					body.purpose = this.getNodeParameter('purpose', i, 'workflow_processing') as string;
-				}
+				const destination =
+					operation === 'tokenize'
+						? (this.getNodeParameter('destination', i, '') as string)
+						: undefined;
+				const purpose =
+					operation === 'detokenize'
+						? (this.getNodeParameter('purpose', i, 'workflow_processing') as string)
+						: undefined;
+
+				const body = buildDlpBody({ operation, text, destination, purpose });
 
 				const res = await postJson(
 					this,
