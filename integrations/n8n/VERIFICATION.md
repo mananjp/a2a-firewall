@@ -1,6 +1,6 @@
 # A2A Firewall n8n Node — Verification Checklist (v0.1.0)
 
-> This checklist is the acceptance gate for the `n8n-nodes-a2a-firewall` community
+> This checklist is the acceptance gate for the `n8n-a2a-firewall` community
 > node package. Work through it before tagging and publishing. The backend contract
 > it must satisfy is locked by `backend/tests/integration/test_api_contract.py` and
 > `backend/tests/unit/test_contract_and_callbacks.py`.
@@ -87,8 +87,8 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
 ## 6. Publish readiness
 
 - [x] `n8n-node-v0.1.0` tag pushes → `.github/workflows/n8n-node.yml` runs lint → test → build → publish (npm provenance)
-- [ ] GitHub Actions secret `NPM_TOKEN` configured for the `n8n-nodes-a2a-firewall` package
-- [x] Package name/version does not already exist on npm (`npm view n8n-nodes-a2a-firewall`)
+- [ ] GitHub Actions secret `NPM_TOKEN` configured for the `n8n-a2a-firewall` package
+- [x] Package name/version does not already exist on npm (`npm view n8n-a2a-firewall`)
 - [ ] `npm run build` artifact imported locally into n8n (`Settings → Community nodes → Install local package`) with one workflow smoke-tested
 
 ---
@@ -120,7 +120,7 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
    - `npm run lint` (`tsc --noEmit`): 0 errors.
    - `npm run build`: successfully generated `dist/` and copied SVG icons via `scripts/copy-assets.js`.
    - `npm pack --dry-run`: verified tarball contains only the 14 intended production files (`dist/`, `index.js`, `package.json`, `README.md`, `LICENSE`), excluding all source and test files.
-   - `npm view n8n-nodes-a2a-firewall`: confirmed name availability on npm registry (404 Not Found).
+   - `npm view n8n-a2a-firewall`: confirmed name availability on npm registry (404 Not Found).
    - `npm run prepublishOnly`: full build and test lifecycle completed successfully.
 
 5. **Security & Documentation Hygiene**:

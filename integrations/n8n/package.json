@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-a2a-firewall",
+  "name": "n8n-a2a-firewall",
   "version": "0.1.0",
   "description": "n8n nodes for A2A Firewall: inspect agent, tool and LLM traffic, sanitise tool results, and tokenize sensitive data.",
   "keywords": [

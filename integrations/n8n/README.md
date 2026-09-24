@@ -1,4 +1,4 @@
-# n8n-nodes-a2a-firewall
+# n8n-a2a-firewall
 
 Community node package for [A2A Firewall](https://github.com/mananjp/a2a-firewall) to govern, inspect, and protect AI agent workflows in n8n.
 
@@ -9,12 +9,12 @@ Community node package for [A2A Firewall](https://github.com/mananjp/a2a-firewal
 ### Self-Hosted n8n (UI)
 1. Go to **Settings** → **Community Nodes** in your n8n instance.
 2. Select **Install a community node**.
-3. Enter `n8n-nodes-a2a-firewall` and accept the risks.
+3. Enter `n8n-a2a-firewall` and accept the risks.
 
 ### Docker / Custom Build
 In your n8n Docker image or volume root:
 ```bash
-npm install n8n-nodes-a2a-firewall
+npm install n8n-a2a-firewall
 ```
 
 ---
