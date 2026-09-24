@@ -22,7 +22,7 @@ pytestmark = pytest.mark.integration
 def engine() -> sa.engine.Engine:
     if not TEST_DATABASE_URL:
         pytest.skip("TEST_DATABASE_URL not set; integration tests skipped")
-    sync_url = TEST_DATABASE_URL.replace("+asyncpg", "")
+    sync_url = TEST_DATABASE_URL.replace("+asyncpg", "+psycopg")
     return sa.create_engine(sync_url)
 
 

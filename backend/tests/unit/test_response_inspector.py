@@ -62,6 +62,25 @@ class TestResponseInspector:
         assert d["findings_count"] >= 1
 
 
+class TestScanResponseBody:
+    def test_findings_is_list_of_items(self):
+        from a2a_firewall.proxy.response_scanner import scan_response_body
+
+        decision = scan_response_body("Card number: 4111111111111111")
+        assert isinstance(decision["findings"], list)
+        assert decision["findings_count"] == len(decision["findings"])
+        assert decision["decision"] == "block"
+        assert all(isinstance(f, dict) for f in decision["findings"])
+
+    def test_clean_body_findings_empty_list(self):
+        from a2a_firewall.proxy.response_scanner import scan_response_body
+
+        decision = scan_response_body("The weather today is sunny and warm.")
+        assert decision["findings"] == []
+        assert decision["findings_count"] == 0
+        assert decision["decision"] == "allow"
+
+
 class TestHoldbackStreamScanner:
     def test_tiny_chunks_buffered_until_finish(self):
         scanner = HoldbackStreamScanner(window_size=4096)

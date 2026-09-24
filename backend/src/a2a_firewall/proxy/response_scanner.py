@@ -40,7 +40,8 @@ def scan_response_body(
             }
             for f in result.findings
         ],
-        "findings": result.to_dict(),
+        "findings": result.to_dict()["findings"],
+        "findings_count": len(result.findings),
         "redacted_body": result.redacted_text,
     }
 
