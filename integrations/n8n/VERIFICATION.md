@@ -125,7 +125,7 @@ path plus an "Agent Private Key" credential field. The backend **ignores**
 
 5. **Security & Documentation Hygiene**:
    - Verified no secrets/API keys are exposed in node outputs or error strings.
-   - Verified `README.md` contains no machine-local `file:///` links and has an explicit pointer to `LICENSE`.
+   - Verified `README.md` contains no machine-local (`file:` + `///` style) links and has an explicit pointer to `LICENSE`.
 
 ---
 
