@@ -12,7 +12,7 @@ def test_health_endpoint_ok() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["version"] == "0.2.0"
+    assert body["version"] == main_mod.__version__
 
 
 class _HealthySession:

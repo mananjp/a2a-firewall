@@ -130,5 +130,5 @@ When preparing for SOC 2 Type II, ISO 27001, RBI, DPDP, HIPAA, or PCI-DSS audits
 ## 🆘 Support & Resources
 
 - **GitHub Repository**: [github.com/mananjp/a2a-firewall](https://github.com/mananjp/a2a-firewall)
-- **Deployment Guide**: [docs/deployment-guide.md](file:///d:/git/a2a_firewall/a2a-firewall/docs/deployment-guide.md)
-- **Framework Integrations**: [LangGraph](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/langgraph.md) · [CrewAI](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/crewai.md) · [AutoGen](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/autogen.md) · [MCP](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/mcp.md)
+- **Deployment Guide**: [docs/deployment-guide.md](deployment-guide.md)
+- **Framework Integrations**: [LangGraph](integrations/langgraph.md) · [CrewAI](integrations/crewai.md) · [AutoGen](integrations/autogen.md) · [MCP](integrations/mcp.md)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from importlib.metadata import version as _pkg_version
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -52,7 +53,13 @@ from a2a_firewall.db.models import Agent, Workspace
 
 logger = logging.getLogger("a2a_firewall")
 
-app = FastAPI(title="A2A Firewall", version="0.2.0")
+# Single source of truth: version comes from pyproject.toml via importlib.metadata.
+try:
+    __version__ = _pkg_version("a2a-firewall-backend")
+except Exception:
+    __version__ = "0.0.0-dev"
+
+app = FastAPI(title="A2A Firewall", version=__version__)
 
 # Initialize rate limiters from settings BEFORE middleware setup.
 if settings.RATE_LIMIT_ENABLED:
@@ -192,7 +199,7 @@ app.include_router(dlp.router, prefix="/v1/dlp", tags=["dlp"])
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "version": "0.2.0", "service": "a2a-firewall"}
+    return {"status": "ok", "version": __version__, "service": "a2a-firewall"}
 
 
 @app.get("/ready")

@@ -1,7 +1,7 @@
-# 🛡️ A2A Firewall — Agent Runtime Security Fabric & Zero-Trust Governance (v1.2.0)
+# 🛡️ A2A Firewall — Agent Runtime Security Fabric & Zero-Trust Governance (v1.3.0)
 
 <p align="center">
-  <a href="https://github.com/mananjp/a2a-firewall/releases"><img src="https://img.shields.io/badge/Version-1.2.0--prod--fabric-blue?style=for-the-badge" alt="Version 1.2.0" /></a>
+  <a href="https://github.com/mananjp/a2a-firewall/releases"><img src="https://img.shields.io/badge/Version-1.3.0--prod--fabric-blue?style=for-the-badge" alt="Version 1.3.0" /></a>
   <a href="https://pypi.org/project/a2a-firewall-sdk/"><img src="https://img.shields.io/pypi/v/a2a-firewall-sdk?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI" alt="PyPI SDK" /></a>
   <a href="https://www.npmjs.com/package/a2a-firewall-sdk"><img src="https://img.shields.io/npm/v/a2a-firewall-sdk?style=for-the-badge&logo=npm&logoColor=white&label=npm" alt="npm SDK" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python" alt="Python 3.12" />
@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/SCIM-2.0%20(RFC%207644)-purple?style=for-the-badge" alt="SCIM 2.0" />
   <img src="https://img.shields.io/badge/Compliance-RBI%20|%20DPDP%20|%20HIPAA%20|%20PCI--DSS-green?style=for-the-badge" alt="Compliance" />
-  <img src="https://img.shields.io/badge/Tests-325%20Passed-brightgreen?style=for-the-badge" alt="Tests" />
+  <a href="https://github.com/mananjp/a2a-firewall/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/mananjp/a2a-firewall/test.yml?branch=main&style=for-the-badge&label=CI" alt="CI" /></a>
   <img src="https://img.shields.io/badge/OpenTelemetry-Enabled-orange?style=for-the-badge&logo=opentelemetry" alt="OpenTelemetry" />
 </p>
 
@@ -17,10 +17,11 @@
 
 ## 🌐 Executive Summary
 
-**A2A Firewall** is an enterprise-grade **Agent Runtime Security Fabric & Zero-Trust Governance Mesh** designed to inspect, authorize, throttle, sandbox, and cryptographically audit autonomous AI agent fleets and multi-agent systems.
+**A2A Firewall** is an open-source **Agent Runtime Security Fabric & Zero-Trust Governance Mesh** designed to inspect, authorize, throttle, sandbox, and cryptographically audit autonomous AI agent fleets and multi-agent systems.
 
-> **Cloudflare and edge proxies secure enterprise access to AI models.**  
-> **A2A Firewall secures what autonomous agents are authorized to do after access is granted.**
+> **Gateways and edge proxies control who can reach a model.**
+> **A2A Firewall controls what agents are allowed to do once they are running:**
+> **which agent may delegate what to whom, which data may leave, and which tool results may be trusted.**
 
 Whether your agents are orchestrated via **LangGraph**, **CrewAI**, **Microsoft AutoGen**, or **Model Context Protocol (MCP)**, A2A Firewall provides deep runtime guardrails deployable inside your private VPC, Kubernetes cluster, or edge boundary:
 - 🔏 **Ed25519 Cryptographic Identity & Macaroon Attenuated Delegation**
@@ -31,6 +32,45 @@ Whether your agents are orchestrated via **LangGraph**, **CrewAI**, **Microsoft 
 - 🔍 **Bidirectional Response & Tool-Result Inspection**
 - 🔌 **Unified Model Gateway Provider Adapters** (OpenAI, Anthropic, Bedrock, Vertex AI, Groq, Ollama)
 - 💰 **Spend Limits, SCIM 2.0 Provisioning, and Multi-Regulatory Compliance Frameworks**
+
+---
+
+## 📄 License
+
+**Core (backend / proxy / gateway / dashboard):** Apache-2.0 — see [LICENSE](LICENSE).
+**Python SDK** (`sdk/`): MIT.
+**TypeScript SDK** (`sdk-ts/`): MIT.
+**n8n community node** (`integrations/n8n/`): MIT.
+
+A commercial license is available for OEM, managed-SaaS, and enterprise support use cases — contact the author.
+
+---
+
+## Version Compatibility
+
+| Server | Python SDK | TypeScript SDK | n8n node |
+| :----- | :--------- | :------------- | :------- |
+| 1.3.x  | 0.4.x      | 0.4.x          | 0.1.x    |
+
+---
+
+## Feature Maturity
+
+| Capability | Status | Notes |
+| :-- | :-- | :-- |
+| Inspection pipeline (Layers 0–3), Ed25519 identity, Macaroon delegation | **GA** | Covered by CI test suite |
+| Semantic layer (Layer 4) | **Beta** | Requires an LLM endpoint (Groq by default) |
+| Decision evidence envelopes & offline verifier | **GA** | Signing keys are local by default; KMS planned |
+| Memory / RAG firewall | **Beta** | |
+| Stateful workflow security | **Beta** | |
+| DLP & token vault | **Beta** | AES-256-GCM vault with HMAC-SHA256 lookup index |
+| Transparent TLS proxy (Tier 1) | **Beta** | See proxy threat model |
+| MCP gateway (Tier 2) | **Beta** | |
+| eBPF egress guard (Tier 3) | **Experimental** | Linux-only, kernel-version dependent |
+| Provider adapters: OpenAI, Anthropic, Groq, Ollama | **Beta** | |
+| Provider adapters: Bedrock, Vertex AI | **Experimental** | Until covered by integration tests |
+| SCIM 2.0 | **GA** | |
+| n8n community node | **Beta** | |
 
 ---
 
@@ -76,13 +116,13 @@ Whether your agents are orchestrated via **LangGraph**, **CrewAI**, **Microsoft 
 
 ---
 
-## ⚡ What's New in v1.2.0
+## ⚡ What's New in v1.3.0
 
 ### 1. 📜 Decision Evidence Envelopes (`/v1/evidence`)
 Every security decision produces an immutable, cryptographically signed (Ed25519) **Decision Evidence Envelope**:
 - **Signed Audit Proof**: Captures policy version, detector fingerprints, SHA-256 input hashes, redacted evidence spans, evaluator identity, risk scores, and authorization chains.
 - **Offline Verifier**: Downstream systems, SIEMs, or auditors can verify envelope integrity offline with `GET /v1/evidence/{id}/verify` or via the CLI without trusting the central dashboard.
-- **Deterministic Policy Replay**: Rerun historical requests against frozen policy/detector versions (`POST /v1/evidence/{id}/replay`) to mathematically prove decision reproducibility.
+- **Deterministic Policy Replay**: Rerun historical requests against frozen policy/detector versions (`POST /v1/evidence/{id}/replay`). Deterministic replay against pinned policy and detector versions. LLM-based layers are recorded but not re-executed unless the model output is stored in the envelope.
 
 ### 2. 🧠 Agent Memory & RAG Firewall (`/v1/memory`)
 Autonomous agents rely on episodic memory and vector stores that can be weaponized through persistent indirect prompt injections:
@@ -100,7 +140,7 @@ Single-prompt firewalls fail when attacks occur across distributed agent steps. 
 ### 4. 🛡️ Lineage-Aware DLP & Reversible Tokenization (`/v1/dlp`)
 Enterprise Data Loss Prevention built specifically for LLM inputs and outputs:
 - **Span-Accurate Detection**: Accurately labels byte/character offsets for credit cards (Luhn-checked), Aadhaar, PAN, SSN, IBAN, MRN, ICD-10, phone, and emails without false-positive collisions.
-- **Reversible Tokenization**: Replaces sensitive data with cryptographically secure tokens before transmission to external LLM providers, with secure detokenization upon return.
+- **Reversible Tokenization**: Replaces sensitive data with cryptographically secure tokens (AES-256-GCM encrypted vault with HMAC-SHA256 deterministic lookup index) before transmission to external LLM providers, with secure detokenization upon return.
 - **Derived Data Lineage**: Derived summaries and agent outputs inherit parent classification tags, enforcing purpose limitation.
 
 ### 5. 🔍 Bidirectional Response & Tool-Result Inspection
@@ -151,7 +191,7 @@ services:
 volumes:
   ca-certs:
 ```
-*See complete examples in [`examples/docker-sidecar/`](file:///d:/git/a2a_firewall/a2a-firewall/examples/docker-sidecar/) and [`examples/kubernetes/`](file:///d:/git/a2a_firewall/a2a-firewall/examples/kubernetes/).*
+*See complete examples in [`examples/docker-sidecar/`](examples/docker-sidecar/) and [`examples/kubernetes/`](examples/kubernetes/).*
 
 ---
 
@@ -220,10 +260,10 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 
 | Framework | Documentation | Defense Architecture |
 | :--- | :--- | :--- |
-| **LangGraph** | [LangGraph Integration Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/langgraph.md) | Node-to-node Ed25519 signing, StateGraph capability attenuation, proxy sidecar |
-| **CrewAI** | [CrewAI Integration Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/crewai.md) | Hierarchical crew delegation guard, custom tool boundary protection |
-| **AutoGen (AG2)** | [AutoGen Integration Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/autogen.md) | `ConversableAgent` message filter hooks, code execution sandbox |
-| **Claude & Cursor MCP** | [MCP Governance Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/integrations/mcp.md) | `a2a_firewall.mcp wrap` stdio/SSE tool call & return result inspector |
+| **LangGraph** | [LangGraph Integration Guide](docs/integrations/langgraph.md) | Node-to-node Ed25519 signing, StateGraph capability attenuation, proxy sidecar |
+| **CrewAI** | [CrewAI Integration Guide](docs/integrations/crewai.md) | Hierarchical crew delegation guard, custom tool boundary protection |
+| **AutoGen (AG2)** | [AutoGen Integration Guide](docs/integrations/autogen.md) | `ConversableAgent` message filter hooks, code execution sandbox |
+| **Claude & Cursor MCP** | [MCP Governance Guide](docs/integrations/mcp.md) | `a2a_firewall.mcp wrap` stdio/SSE tool call & return result inspector |
 
 ---
 
@@ -236,7 +276,7 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 
 ### 2. 👥 Role-Based Access Control (RBAC) (`/dashboard/rbac`)
 - **6 Standard Roles**: `admin`, `security_admin`, `soc_analyst`, `auditor`, `developer`, `viewer`.
-- **Granular Capabilities**: `spend:manage`, `policies:write`, `audit:export`, `network:manage`, `scim:manage`, `evidence:verify`, `memory:manage`, `dlp:manage`.
+- **Granular Capabilities**: `spend:manage`, `policies:write`, `audit:export`, `network:manage`, `scim:manage`, `evidence:verify`, `memory:manage`, `dlp:manage`, `dlp:detokenize`.
 
 ### 3. 🆔 SCIM 2.0 Automated Identity Provisioning (`/dashboard/scim`)
 - **RFC 7643 & 7644 Compliant**: Push sync from **Okta**, **Microsoft Entra ID (Azure AD)**, and **OneLogin**.
@@ -262,7 +302,7 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 
 | Subsystem | Prefix | Description |
 | :--- | :--- | :--- |
-| **Firewall** | `POST /v1/firewall/inspect` | 5-layer primary inter-agent inspection pipeline |
+| **Firewall** | `POST /v1/firewall/inspect` | 6-stage (Layer 0–5) primary inter-agent inspection pipeline |
 | **Response** | `POST /v1/firewall/inspect-response` | Upstream LLM response & tool result inspection |
 | **Evidence** | `GET /v1/evidence/{id}` | Retrieve signed decision evidence envelope |
 | | `GET /v1/evidence/{id}/verify` | Offline Ed25519 signature & integrity verification |
@@ -273,9 +313,9 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 | | `DELETE /v1/memory/{id}` | Cryptographic deletion receipt generation |
 | **Workflows** | `GET /v1/workflows/{root_task_id}` | Graph execution state, depth, and cumulative risk |
 | | `POST /v1/workflows/{root_task_id}/quarantine` | Quarantine workflow graph & cascade-revoke tokens |
-| **DLP** | `POST /v1/dlp/evaluate` | Evaluate text against active DLP policies |
+| **DLP** | `POST /v1/dlp/inspect` | Classify and transform text under tenant DLP policies |
 | | `POST /v1/dlp/tokenize` | Reversibly tokenize sensitive entities |
-| | `POST /v1/dlp/detokenize` | Safely detokenize authorized data |
+| | `POST /v1/dlp/detokenize` | Safely detokenize authorized data (audited) |
 | **Identity** | `POST /v1/identity/register` | Register agent Ed25519 card and capability scope |
 | **Delegation**| `POST /v1/delegation/mint` | Issue attenuated macaroon caveat token |
 | **Auth** | `POST /v1/auth/login` | Argon2id authenticated dashboard and API sessions |
@@ -287,27 +327,19 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 
 ## 📊 Performance Benchmarks & Quality Assurance
 
-- **Test Suite**: **325 automated tests** passing across unit, integration, and security suites (including 98 newly added tests for Evidence, Memory, Workflows, DLP, Adapters, and Response Inspection).
+- **Test Suite**: Automated tests passing across unit, integration, and security suites (including tests for Evidence, Memory, Workflows, DLP, Adapters, and Response Inspection). See CI badge above.
 - **Static Security & Typing**: Clean `ruff` linting and strict `mypy` type validation.
 - **Engine Latency**:
   - Normalizer: `0.006 ms` (p50)
   - MCP Argument Policy Check: `0.682 ms` (p50)
   - Full TLS MITM Termination + Policy Gate: `4.450 ms` (p50)
-  - False Positive Rate: **0.0% FP** across 211 benign enterprise prompt fixtures.
+  - False Positives: 0 false positives on our 211-prompt internal benign corpus (95% upper bound ≈ 1.4%, rule of three). Independent benchmark results welcome — see `CONTRIBUTING.md`.
 
 ---
 
-## 📚 Strategic & Technical Documentation
+## 📚 Technical Documentation
 
-- **[Cloudflare AI Security Strategy & Moat](file:///d:/git/a2a_firewall/a2a-firewall/docs/strategy/technical_strategy_cloudflare_compete.md)**: Detailed competitive positioning and technical architecture.
-- **[Free Tier & Production Roadmap](file:///d:/git/a2a_firewall/a2a-firewall/docs/strategy/production_roadmap.md)**: Implementation status, hardening roadmap, and deployment milestones.
-- **[Cloudflare Session Notes](file:///d:/git/a2a_firewall/a2a-firewall/docs/strategy/cloudflare_session.md)**: P0/P1 feature specs for Memory, Workflows, Evidence, and DLP.
-- **[Case Study Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/case_study_guide.md)**: Step-by-step reproduction of multi-hop confused deputy attacks.
-- **[Enterprise Onboarding Guide](file:///d:/git/a2a_firewall/a2a-firewall/docs/onboarding.md)**: 5-step rollout from Monitor &rarr; Review &rarr; Enforce.
-- **[Architecture Decision Records (ADRs)](file:///d:/git/a2a_firewall/a2a-firewall/docs/)**: ADR-0001 (Non-Amplification), ADR-0002 (Intent Binding), ADR-0003 (Transparent Proxy).
-
----
-
-## 📄 License
-
-Distributed under the Apache-2.0 License.
+- **[Production Roadmap](docs/strategy/production_roadmap.md)**: Implementation status, hardening roadmap, and deployment milestones.
+- **[Case Study Guide](docs/case_study_guide.md)**: Step-by-step reproduction of multi-hop confused deputy attacks.
+- **[Enterprise Onboarding Guide](docs/onboarding.md)**: 5-step rollout from Monitor → Review → Enforce.
+- **[Architecture Decision Records (ADRs)](docs/)**: ADR-0001 (Non-Amplification), ADR-0002 (Intent Binding), ADR-0003 (Transparent Proxy).
