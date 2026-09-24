@@ -201,6 +201,7 @@ class ReviewItem(Base):
     review_token: Mapped[str] = Column(String, unique=True, nullable=False)  # type: ignore[assignment]
     status: Mapped[str | None] = Column(String, default="pending")  # type: ignore[assignment]
     reviewer_notes: Mapped[str | None] = Column(Text, nullable=True)  # type: ignore[assignment]
+    review_callback_url: Mapped[str | None] = Column(Text, nullable=True)  # type: ignore[assignment]
     decided_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
     expires_at: Mapped[datetime] = Column(DateTime(timezone=True), nullable=False)  # type: ignore[assignment]
     on_expire: Mapped[str | None] = Column(String, default="block")  # type: ignore[assignment]

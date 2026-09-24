@@ -10,6 +10,16 @@ from a2a_firewall.core.anti_pentest import check_anti_pentest
 from a2a_firewall.core.config import settings
 from a2a_firewall.db.models import Task
 
+# Nonce store for replay protection: (sender_id, nonce) -> expiry_timestamp
+#
+# In-memory module-level dict. Safe for single-process deployments
+# (uvicorn --workers 1 / Docker single replica). With multiple worker
+# processes the store is per-process, so a replay split across workers will
+# not be detected; move this to Redis (or a DB-backed store) before scaling
+# horizontally. Idempotent task_id replay above is DB-backed and therefore
+# already safe across workers.
+_SEEN_NONCES: dict[tuple[str, str], float] = {}
+
 
 async def preflight(
     request_data: dict[str, Any],
@@ -115,5 +125,64 @@ async def preflight(
     cached = existing.scalar_one_or_none()
     if cached is not None:
         return {"idempotent_replay": True, "cached_task": cached}
+
+    # Stale timestamp protection (part2 1.3.2)
+    import time
+    from datetime import datetime
+
+    now = time.time()
+    raw_ts = request_data.get("timestamp")
+    if raw_ts is not None:
+        ts_val: float | None = None
+        if isinstance(raw_ts, (int, float)):
+            ts_val = float(raw_ts) / 1000.0 if raw_ts > 1e11 else float(raw_ts)
+        elif isinstance(raw_ts, str):
+            try:
+                val = float(raw_ts)
+                ts_val = val / 1000.0 if val > 1e11 else val
+            except ValueError:
+                try:
+                    dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                    ts_val = dt.timestamp()
+                except Exception:
+                    pass
+        if ts_val is not None and abs(now - ts_val) > 300:
+            return {
+                "block": True,
+                "reason": "stale_request",
+                "risk_score": 1.0,
+                "violations": [
+                    {
+                        "layer": "rule",
+                        "violation_type": "stale_request",
+                        "severity": "high",
+                        "details": {"timestamp": raw_ts, "delta_seconds": abs(now - ts_val)},
+                    }
+                ],
+            }
+
+    # Nonce replay protection (part2 1.3.2)
+    nonce = request_data.get("nonce")
+    if nonce:
+        expired_keys = [k for k, exp in _SEEN_NONCES.items() if exp < now]
+        for k in expired_keys:
+            _SEEN_NONCES.pop(k, None)
+
+        sender_key = (sender_id_str, str(nonce))
+        if sender_key in _SEEN_NONCES:
+            return {
+                "block": True,
+                "reason": "nonce_replayed",
+                "risk_score": 1.0,
+                "violations": [
+                    {
+                        "layer": "rule",
+                        "violation_type": "nonce_replayed",
+                        "severity": "high",
+                        "details": {"nonce": str(nonce)},
+                    }
+                ],
+            }
+        _SEEN_NONCES[sender_key] = now + 600.0
 
     return None

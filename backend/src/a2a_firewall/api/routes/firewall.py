@@ -32,6 +32,10 @@ class InspectRequest(BaseModel):
     parent_span_id: str | None = None
     sdk_version: str | None = None
     depth: int = 0
+    review_callback_url: str | None = None
+    metadata: dict[str, Any] | None = None
+    nonce: str | None = None
+    timestamp: float | int | str | None = None
 
 
 class InspectResponseRequest(BaseModel):

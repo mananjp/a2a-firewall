@@ -1063,11 +1063,15 @@ async def _save_and_return(
         )
 
     if decision == "review" and review_token:
+        callback_url = req.get("review_callback_url")
+        if not callback_url and isinstance(req.get("metadata"), dict):
+            callback_url = req["metadata"].get("review_callback_url")
         db.add(
             ReviewItem(
                 workspace_id=workspace.id,
                 task_id=task_id,
                 review_token=review_token,
+                review_callback_url=callback_url,
                 expires_at=datetime.now(UTC) + timedelta(minutes=30),
             )
         )
@@ -1312,6 +1316,7 @@ async def _rate_limit_response(
         "block_reason": f"{scope}_rate_limit_exceeded",
         "latency_ms": total_ms,
         "trace_id": trace_id,
+        "evidence_id": None,
     }
 
 
@@ -1339,6 +1344,8 @@ async def _replay_response(
         "violations": [],
         "review_token": review_token,
         "block_reason": cached.decision_reason,
+        "evidence_id": f"decision-{cached.id}",
         "latency_ms": 0,
         "trace_id": trace_id,
+        "idempotent_replay": True,
     }

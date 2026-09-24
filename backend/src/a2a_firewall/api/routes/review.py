@@ -34,6 +34,7 @@ async def pending_queue(
                 "id": str(i.id),
                 "task_id": str(i.task_id),
                 "review_token": i.review_token,
+                "review_callback_url": i.review_callback_url,
                 "expires_at": str(i.expires_at),
                 "task_type": task.task_type if task else None,
                 "risk_score": task.risk_score if task else 0.6,
@@ -66,6 +67,28 @@ async def decide_review(
     item.reviewer_notes = body.notes
     item.decided_at = datetime.now(UTC)
     await db.commit()
+
+    if item.review_callback_url:
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    item.review_callback_url,
+                    json={
+                        "decision": "approve" if body.action == "approve" else "reject",
+                        "reason": body.notes,
+                        "review_token": review_token,
+                        "task_id": str(item.task_id),
+                    },
+                )
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Review callback to %s failed: %s", item.review_callback_url, exc
+            )
+
     return {"status": item.status, "decided_at": str(item.decided_at)}
 
 
