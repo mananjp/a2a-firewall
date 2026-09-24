@@ -23,10 +23,11 @@ npm install n8n-nodes-a2a-firewall
 
 Create an **A2A Firewall API** credential in n8n:
 - **Firewall URL**: Base URL of your firewall backend (e.g. `http://a2a-backend:8000` or `https://firewall.internal.example.com`).
-- **API Key**: Workspace admin API key or agent API key (`Bearer` token).
+- **API Key**: Workspace API key (required for Detokenize and administrative actions) or agent API key (`Bearer` token).
 - **Workspace ID**: The UUID of your workspace in A2A Firewall.
 - **Default Agent ID** *(optional)*: Registered agent identity representing this workflow.
-- **Agent Ed25519 Private Key** *(optional, v0.2+)*: 32-byte seed as 64 hex characters for cryptographically signed requests.
+
+> **Note on Request Signing**: Ed25519 payload signing will land in v0.2.0 once end-to-end backend signature verification tests are finalized.
 
 ---
 
@@ -77,10 +78,11 @@ Webhook ─► Inspect Response ─(Allow)─► DLP: Tokenize ─► AI Agent �
 
 - **Fail-Closed by Default**: When the firewall cannot be reached or returns an unexpected error, nodes route to **Block** unless explicitly configured to fail open.
 - **NO_PROXY Setting**: When running n8n alongside the A2A Transparent Proxy sidecar, configure `NO_PROXY=localhost,127.0.0.1,backend,a2a-proxy` to ensure node API traffic is never looped through the proxy.
-- **Detokenize Audit**: Detokenization operations require explicit `purpose` metadata and appropriate RBAC capabilities. Every detokenization is permanently logged for compliance.
+- **Detokenize Permissions**: Detokenize operations require a Workspace API key (agent API keys are rejected) and an explicit `purpose` parameter. Every detokenization is permanently logged for compliance.
 
 ---
 
 ## License
 
-MIT © 2026 Manan Jayeshkumar Panchal
+MIT © 2026 Manan Jayeshkumar Panchal. See the [LICENSE](LICENSE) file for details.
+

@@ -7,9 +7,11 @@ import {
 	type INodeTypeDescription,
 } from 'n8n-workflow';
 import {
+	buildInspectResponseBody,
 	failVerdict,
 	getConfig,
 	idempotencyKey,
+	mapInspectResponseOutput,
 	parseVerdict,
 	postJson,
 	type Decision,
@@ -127,11 +129,7 @@ export class A2aFirewallInspectResponse implements INodeType {
 			}
 
 			// Matches real InspectResponseRequest schema: { response_body, context, redact_pii }
-			const body: IDataObject = {
-				response_body: content,
-				context: sourceType,
-				redact_pii: o.redactPii !== false,
-			};
+			const body = buildInspectResponseBody(content, sourceType, o.redactPii !== false);
 
 			let verdict: FirewallVerdict;
 			let error: string | undefined;
@@ -149,20 +147,10 @@ export class A2aFirewallInspectResponse implements INodeType {
 				verdict = failVerdict((o.onError ?? 'closed') === 'closed' ? 'block' : 'allow', error);
 			}
 
-			const json: IDataObject = { ...items[i].json };
-			if (verdict.sanitized !== undefined) {
-				json[o.sanitizedField || 'sanitizedContent'] = verdict.sanitized;
-			}
-			if (o.attachVerdict !== false) {
-				json._a2aFirewall = {
-					decision: verdict.decision,
-					allowedToProceed: verdict.allowedToProceed,
-					riskScore: verdict.riskScore,
-					violations: verdict.violations,
-					evidenceId: verdict.evidenceId,
-					...(error ? { error } : {}),
-				} as IDataObject;
-			}
+			const json = mapInspectResponseOutput(items[i].json, verdict, {
+				attachVerdict: o.attachVerdict,
+				sanitizedField: o.sanitizedField,
+			}, error);
 
 			out[OUTPUT_INDEX[verdict.decision]].push({
 				json,

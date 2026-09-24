@@ -1,4 +1,4 @@
-import { createHash, createPrivateKey, sign, type KeyObject } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type { IDataObject, IExecuteFunctions, IHttpRequestOptions } from 'n8n-workflow';
 
 export type Decision = 'allow' | 'block' | 'review';
@@ -7,7 +7,6 @@ export interface FirewallConfig {
 	baseUrl: string;
 	workspaceId: string;
 	agentId: string;
-	agentPrivateKey?: string;
 	allowUnauthorizedCerts: boolean;
 }
 
@@ -25,26 +24,8 @@ export interface FirewallVerdict {
 export const CLIENT_ID = 'n8n-nodes-a2a-firewall/0.1.0';
 
 // ---------------------------------------------------------------------------
-// Signing & Key Management
+// Canonicalization & Hashing
 // ---------------------------------------------------------------------------
-
-/** PKCS#8 DER prefix for an Ed25519 private key; append the 32-byte seed. */
-const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
-
-export function loadPrivateKey(hex: string): KeyObject {
-	const clean = hex.trim().replace(/^0x/, '');
-	if (!/^[0-9a-fA-F]+$/.test(clean) || (clean.length !== 64 && clean.length !== 128)) {
-		throw new Error(
-			'Agent private key must be a 32-byte seed (64 hex chars) or a 64-byte expanded key (128 hex chars)',
-		);
-	}
-	const seed = Buffer.from(clean.slice(0, 64), 'hex');
-	return createPrivateKey({
-		key: Buffer.concat([PKCS8_ED25519_PREFIX, seed]),
-		format: 'der',
-		type: 'pkcs8',
-	});
-}
 
 /** Sorted-key, no-whitespace JSON. undefined values are dropped. */
 export function canonicalize(value: unknown): string {
@@ -64,12 +45,6 @@ export function canonicalize(value: unknown): string {
 
 export function sha256Hex(text: string): string {
 	return createHash('sha256').update(text).digest('hex');
-}
-
-export function signBody(body: IDataObject, key: KeyObject): string {
-	const unsigned: IDataObject = { ...body };
-	delete unsigned.signature;
-	return sign(null, Buffer.from(canonicalize(unsigned)), key).toString('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +102,6 @@ export async function getConfig(ctx: IExecuteFunctions): Promise<FirewallConfig>
 		baseUrl: String(c.baseUrl).replace(/\/+$/, ''),
 		workspaceId: String(c.workspaceId ?? ''),
 		agentId: String(c.agentId ?? ''),
-		agentPrivateKey: c.agentPrivateKey ? String(c.agentPrivateKey) : undefined,
 		allowUnauthorizedCerts: Boolean(c.allowUnauthorizedCerts),
 	};
 }
@@ -165,4 +139,126 @@ export function idempotencyKey(
 	payload: unknown,
 ): string {
 	return `${executionId}:${nodeName}:${itemIndex}:${sha256Hex(canonicalize(payload)).slice(0, 16)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Request body builders & response mappers
+// ---------------------------------------------------------------------------
+
+export interface DlpParams {
+	operation: 'tokenize' | 'detokenize';
+	text: string;
+	destination?: string;
+	purpose?: string;
+}
+
+export function buildDlpBody(params: DlpParams): IDataObject {
+	const body: IDataObject = { text: params.text };
+	if (params.operation === 'tokenize') {
+		body.destination = params.destination ?? '';
+		body.entity_type = 'pii';
+	} else {
+		body.purpose = params.purpose || 'workflow_processing';
+	}
+	return body;
+}
+
+export function buildInspectResponseBody(
+	content: string,
+	sourceType: string,
+	redactPii: boolean = true,
+): IDataObject {
+	return {
+		response_body: content,
+		context: sourceType,
+		redact_pii: redactPii,
+	};
+}
+
+export interface MapInspectResponseOptions {
+	attachVerdict?: boolean;
+	sanitizedField?: string;
+}
+
+export function mapInspectResponseOutput(
+	inputJson: IDataObject,
+	verdict: FirewallVerdict,
+	options: MapInspectResponseOptions = {},
+	error?: string,
+): IDataObject {
+	const json: IDataObject = { ...inputJson };
+	if (verdict.sanitized !== undefined) {
+		json[options.sanitizedField || 'sanitizedContent'] = verdict.sanitized;
+	}
+	if (options.attachVerdict !== false) {
+		json._a2aFirewall = {
+			decision: verdict.decision,
+			allowedToProceed: verdict.allowedToProceed,
+			riskScore: verdict.riskScore,
+			violations: verdict.violations,
+			evidenceId: verdict.evidenceId,
+			...(error ? { error } : {}),
+		} as IDataObject;
+	}
+	return json;
+}
+
+export interface GuardInspectParams {
+	taskId: string;
+	rootTaskId: string;
+	receiverAgentId: string;
+	taskType: string;
+	payload: unknown;
+	reviewCallbackUrl?: string;
+	workflowId?: string;
+	workflowName?: string;
+	executionId?: string;
+	nodeName?: string;
+	nonce?: string;
+	timestamp?: string;
+}
+
+export function buildGuardInspectBody(params: GuardInspectParams): IDataObject {
+	return {
+		task_id: params.taskId,
+		root_task_id: params.rootTaskId,
+		receiver_agent_id: params.receiverAgentId,
+		task_type: params.taskType,
+		payload: params.payload as IDataObject,
+		sdk_version: 'n8n-0.1.0',
+		review_callback_url: params.reviewCallbackUrl || undefined,
+		nonce: params.nonce || randomUUID(),
+		timestamp: params.timestamp || new Date().toISOString(),
+		metadata: {
+			source: 'n8n',
+			workflow_id: params.workflowId,
+			workflow_name: params.workflowName,
+			execution_id: params.executionId,
+			node_name: params.nodeName,
+			review_callback_url: params.reviewCallbackUrl || undefined,
+		},
+	};
+}
+
+export function mapGuardOutput(
+	inputJson: IDataObject,
+	verdict: FirewallVerdict,
+	attachVerdict: boolean = true,
+	error?: string,
+): IDataObject {
+	if (!attachVerdict) {
+		return inputJson;
+	}
+	return {
+		...inputJson,
+		_a2aFirewall: {
+			decision: verdict.decision,
+			allowedToProceed: verdict.allowedToProceed,
+			riskScore: verdict.riskScore,
+			violations: verdict.violations,
+			taskId: verdict.taskId,
+			evidenceId: verdict.evidenceId,
+			...(error ? { error } : {}),
+		} as IDataObject,
+	};
 }

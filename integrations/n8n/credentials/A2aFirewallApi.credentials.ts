@@ -26,6 +26,8 @@ export class A2aFirewallApi implements ICredentialType {
 			typeOptions: { password: true },
 			default: '',
 			required: true,
+			description:
+				'Workspace API key (required for Detokenize and administrative actions) or Agent API key',
 		},
 		{
 			displayName: 'Workspace ID',
@@ -42,15 +44,6 @@ export class A2aFirewallApi implements ICredentialType {
 			required: false,
 			description:
 				'Default registered agent identity this n8n instance or workflow acts as',
-		},
-		{
-			displayName: 'Agent Ed25519 Private Key (Hex)',
-			name: 'agentPrivateKey',
-			type: 'string',
-			typeOptions: { password: true },
-			default: '',
-			description:
-				'Optional (v0.2+). 32-byte seed as 64 hex chars for signed requests.',
 		},
 		{
 			displayName: 'Ignore SSL Issues (Insecure)',

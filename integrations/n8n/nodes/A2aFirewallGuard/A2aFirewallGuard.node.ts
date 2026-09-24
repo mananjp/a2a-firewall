@@ -1,22 +1,19 @@
 import { randomUUID } from 'crypto';
-import {
-	NodeOperationError,
-	type IDataObject,
-	type IExecuteFunctions,
-	type INodeExecutionData,
-	type INodeType,
-	type INodeTypeDescription,
+import type {
+	IDataObject,
+	IExecuteFunctions,
+	INodeExecutionData,
+	INodeType,
+	INodeTypeDescription,
 } from 'n8n-workflow';
 import {
-	canonicalize,
+	buildGuardInspectBody,
 	failVerdict,
 	getConfig,
 	idempotencyKey,
-	loadPrivateKey,
+	mapGuardOutput,
 	parseVerdict,
 	postJson,
-	sha256Hex,
-	signBody,
 	type Decision,
 	type FirewallVerdict,
 } from '../shared/client';
@@ -112,13 +109,6 @@ export class A2aFirewallGuard implements INodeType {
 						default: '',
 						description: 'Overrides the default agent ID from the credential (useful for per-workflow identities)',
 					},
-					{
-						displayName: 'Sign Requests',
-						name: 'sign',
-						type: 'boolean',
-						default: false,
-						description: 'Whether to sign the request with the credential\'s Ed25519 key (ignored if no key is set)',
-					},
 				],
 			},
 		],
@@ -130,13 +120,6 @@ export class A2aFirewallGuard implements INodeType {
 		const node = this.getNode();
 		const workflow = this.getWorkflow();
 		const executionId = this.getExecutionId();
-
-		let key;
-		try {
-			key = cfg.agentPrivateKey ? loadPrivateKey(cfg.agentPrivateKey) : undefined;
-		} catch (e) {
-			throw new NodeOperationError(node, (e as Error).message);
-		}
 
 		const out: INodeExecutionData[][] = [[], [], []];
 
@@ -150,36 +133,23 @@ export class A2aFirewallGuard implements INodeType {
 				reviewCallbackUrl?: string;
 				rootTaskId?: string;
 				senderAgentId?: string;
-				sign?: boolean;
 			};
 
 			const taskId = randomUUID();
 			const rootTaskId = o.rootTaskId && o.rootTaskId.trim() ? o.rootTaskId.trim() : randomUUID();
 
-			const body: IDataObject = {
-				task_id: taskId,
-				root_task_id: rootTaskId,
-				receiver_agent_id: receiver || cfg.agentId,
-				task_type: taskType,
-				payload: payload as IDataObject,
-				sdk_version: 'n8n-0.1.0',
-				review_callback_url: o.reviewCallbackUrl || undefined,
-				nonce: randomUUID(),
-				timestamp: new Date().toISOString(),
-				metadata: {
-					source: 'n8n',
-					workflow_id: workflow.id,
-					workflow_name: workflow.name,
-					execution_id: executionId,
-					node_name: node.name,
-					review_callback_url: o.reviewCallbackUrl || undefined,
-				},
-			};
-
-			if (key && o.sign === true) {
-				body.payload_sha256 = sha256Hex(canonicalize(payload));
-				body.signature = signBody(body, key);
-			}
+			const body = buildGuardInspectBody({
+				taskId,
+				rootTaskId,
+				receiverAgentId: receiver || cfg.agentId,
+				taskType,
+				payload,
+				reviewCallbackUrl: o.reviewCallbackUrl,
+				workflowId: workflow.id,
+				workflowName: workflow.name,
+				executionId,
+				nodeName: node.name,
+			});
 
 			let verdict: FirewallVerdict;
 			let error: string | undefined;
@@ -197,21 +167,7 @@ export class A2aFirewallGuard implements INodeType {
 				verdict = failVerdict((o.onError ?? 'closed') === 'closed' ? 'block' : 'allow', error);
 			}
 
-			const json =
-				o.attachVerdict === false
-					? items[i].json
-					: {
-							...items[i].json,
-							_a2aFirewall: {
-								decision: verdict.decision,
-								allowedToProceed: verdict.allowedToProceed,
-								riskScore: verdict.riskScore,
-								violations: verdict.violations,
-								taskId: verdict.taskId,
-								evidenceId: verdict.evidenceId,
-								...(error ? { error } : {}),
-							} as IDataObject,
-						};
+			const json = mapGuardOutput(items[i].json, verdict, o.attachVerdict !== false, error);
 
 			out[OUTPUT_INDEX[verdict.decision]].push({
 				json,
