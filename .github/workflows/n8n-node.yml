@@ -1,0 +1,72 @@
+name: n8n-node CI & Release
+
+on:
+  pull_request:
+    paths:
+      - "integrations/n8n/**"
+      - ".github/workflows/n8n-node.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "integrations/n8n/**"
+      - ".github/workflows/n8n-node.yml"
+    tags:
+      - "n8n-node-v*"
+
+jobs:
+  test:
+    name: Lint, Test & Build n8n Node
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/n8n
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: integrations/n8n/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck / Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+  publish:
+    name: Publish to npm
+    if: startsWith(github.ref, 'refs/tags/n8n-node-v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm provenance
+    defaults:
+      run:
+        working-directory: integrations/n8n
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install & Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
