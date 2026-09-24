@@ -14,8 +14,9 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from a2a_firewall.api.deps import get_current_workspace_flexible
+from a2a_firewall.api.deps import get_current_workspace, get_current_workspace_flexible
 from a2a_firewall.core.dlp_engine import DLPEngine, DlpRule
+from a2a_firewall.core.vault import SecureTokenVault, create_dev_vault
 from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import DlpPolicy, Workspace
 
@@ -193,3 +194,128 @@ async def put_policy(
         )
         for p in result.scalars().all()
     ]
+
+
+# ---------------------------------------------------------------------------
+# Tokenize / Detokenize endpoints (backed by SecureTokenVault)
+# ---------------------------------------------------------------------------
+
+# Module-level vault singleton (dev mode: in-memory).
+# Production deployments override via startup event or DI.
+_vault: SecureTokenVault | None = None
+
+
+def _get_vault() -> SecureTokenVault:
+    global _vault
+    if _vault is None:
+        _vault = create_dev_vault()
+    return _vault
+
+
+class TokenizeRequest(BaseModel):
+    """Request to tokenize sensitive text."""
+
+    text: str
+    destination: str | None = None
+    entity_type: str = "pii"
+
+
+class TokenizeResponse(BaseModel):
+    """Result of tokenization."""
+
+    tokenized_text: str
+
+
+class DetokenizeRequest(BaseModel):
+    """Request to detokenize previously tokenized text."""
+
+    text: str
+    purpose: str
+
+
+class DetokenizeResponse(BaseModel):
+    """Result of detokenization."""
+
+    text: str
+
+
+@router.post("/tokenize", response_model=TokenizeResponse)
+async def tokenize_text(
+    body: TokenizeRequest,
+    ws: Workspace = Depends(get_current_workspace_flexible),
+) -> TokenizeResponse:
+    """Tokenize sensitive entities in ``text``, replacing them with vault tokens.
+
+    Uses the PII scanner to find sensitive spans, then replaces each with a
+    secure vault token (AES-256-GCM encrypted, HMAC-SHA256 indexed).
+    """
+    from a2a_firewall.detection.pii_patterns import scan_all_pii
+
+    vault = _get_vault()
+    workspace_id = str(ws.id)
+    text = body.text
+
+    matches = scan_all_pii(text)
+    if not matches:
+        return TokenizeResponse(tokenized_text=text)
+
+    # Sort by start position, widest first for overlap resolution
+    matches.sort(key=lambda m: (m.start, -(m.end - m.start)))
+    kept: list[Any] = []
+    for m in matches:
+        if any(k.start < m.end and m.start < k.end for k in kept):
+            continue
+        kept.append(m)
+
+    # Replace spans from right to left to preserve offsets
+    result = text
+    for m in sorted(kept, key=lambda x: x.start, reverse=True):
+        value = text[m.start : m.end]
+        token = vault.tokenize(
+            workspace_id=workspace_id,
+            entity_type=body.entity_type or m.data_class,
+            value=value,
+            classification=m.data_class,
+            actor=f"ws:{workspace_id}",
+        )
+        result = result[: m.start] + token + result[m.end :]
+
+    return TokenizeResponse(tokenized_text=result)
+
+
+@router.post("/detokenize", response_model=DetokenizeResponse)
+async def detokenize_text(
+    body: DetokenizeRequest,
+    ws: Workspace = Depends(get_current_workspace),
+) -> DetokenizeResponse:
+    """Detokenize vault tokens in ``text`` back to their original values.
+
+    Restricted to **workspace API keys** (not agent keys): detokenization
+    reveals plaintext PII, so individual agents/n8n nodes cannot invoke it
+    directly. Requires ``purpose`` for the audit trail of each look-up.
+    """
+    import re
+
+    vault = _get_vault()
+    workspace_id = str(ws.id)
+    text = body.text
+
+    # Find all vault tokens in the text
+    token_pattern = re.compile(r"tok_[a-zA-Z0-9_]+_[A-Za-z0-9_-]{16,}")
+    result = text
+
+    for match in reversed(list(token_pattern.finditer(text))):
+        token = match.group(0)
+        try:
+            original = vault.detokenize(
+                workspace_id=workspace_id,
+                token=token,
+                actor=f"ws:{workspace_id}",
+                purpose=body.purpose,
+            )
+            result = result[: match.start()] + original + result[match.end() :]
+        except KeyError:
+            # Unknown or expired token — leave it in place
+            pass
+
+    return DetokenizeResponse(text=result)

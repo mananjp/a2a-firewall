@@ -38,6 +38,9 @@ ALL_PERMISSIONS: dict[str, str] = {
     # Team & RBAC Management
     "members:read": "View workspace team members and role assignments",
     "members:manage": "Invite, update roles, edit permissions, and remove workspace members",
+    # DLP & Tokenization Vault
+    "dlp:manage": "Manage DLP policies, inspect and tokenize data",
+    "dlp:detokenize": "Detokenize vault tokens back to plaintext (audited, rate-limited)",
 }
 
 # Standard built-in role permission matrices
@@ -67,6 +70,8 @@ STANDARD_ROLES: dict[str, dict[str, Any]] = {
             "soc:read",
             "soc:write",
             "members:read",
+            "dlp:manage",
+            "dlp:detokenize",
         ],
     },
     "soc_analyst": {
