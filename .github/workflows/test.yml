@@ -217,3 +217,42 @@ jobs:
         run: npm run build
         env:
           VITE_API_URL: http://localhost:8000
+
+  metadata:
+    name: Metadata & license consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run check_metadata.py
+        run: python scripts/check_metadata.py
+
+  docs:
+    name: Docs link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Metadata check
+        run: python scripts/check_metadata.py
+
+      - name: Link check (offline)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress --offline --include-fragments
+            --exclude-path node_modules
+            --exclude-path .venv
+            --exclude-path .git
+            './**/*.md'
+          fail: true
