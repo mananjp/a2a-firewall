@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+from collections.abc import MutableMapping
 from typing import Any
 
 from fastapi import FastAPI
@@ -18,7 +19,9 @@ try:
     import opentelemetry.instrumentation.fastapi as otel_fastapi
     from starlette.routing import Match
 
-    def patched_get_route_details(scope: dict[str, Any]) -> str | None:
+    def patched_get_route_details(
+        scope: MutableMapping[str, Any],
+    ) -> str | None:
         try:
             app = scope["app"]
             route: str | None = None
