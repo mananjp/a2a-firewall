@@ -22,6 +22,7 @@ htmlcov/
 .ruff_cache/
 .tox/
 .cache/
+uv.lock
 
 # IDE / editor
 .vscode/

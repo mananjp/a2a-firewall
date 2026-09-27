@@ -133,3 +133,44 @@ def test_soc_severity_and_mitre_mapping():
     assert get_mitre_technique("sql_injection") == "T1190"
     assert get_mitre_technique("known_vulnerable_component") == "T1195"
     assert get_mitre_technique("pii_exposure_credit_card") == "T1005"
+
+
+async def test_soc_alert_summary_single_query() -> None:
+    """Verify soc_alert_summary consolidates counts into a single SQL query (no N+1)."""
+    import uuid
+    from unittest.mock import AsyncMock, MagicMock
+
+    from a2a_firewall.api.routes.soc import soc_alert_summary
+    from a2a_firewall.db.models import Workspace
+
+    ws = Workspace(id=uuid.uuid4(), name="Test WS")
+    mock_db = AsyncMock()
+    mock_row = MagicMock(
+        total=10,
+        new_count=3,
+        p1_open=1,
+        sev_p1=2,
+        sev_p2=3,
+        sev_p3=4,
+        sev_p4=1,
+        st_new=3,
+        st_acknowledged=2,
+        st_investigating=1,
+        st_resolved=3,
+        st_false_positive=1,
+    )
+    mock_result = MagicMock()
+    mock_result.one.return_value = mock_row
+    mock_db.execute.return_value = mock_result
+
+    summary = await soc_alert_summary(ws=ws, db=mock_db)
+
+    # Exactly 1 query must be executed (no N+1 loop)
+    assert mock_db.execute.call_count == 1
+    assert summary["total"] == 10
+    assert summary["new"] == 3
+    assert summary["p1_open"] == 1
+    assert summary["by_severity"]["P1"] == 2
+    assert summary["by_severity"]["P4"] == 1
+    assert summary["by_status"]["resolved"] == 3
+    assert summary["by_status"]["false_positive"] == 1

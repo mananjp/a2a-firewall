@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
@@ -239,44 +239,44 @@ async def soc_alert_summary(
     ws: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Summary counts for the SOC dashboard header."""
-    base = select(SOCAlert).where(SOCAlert.workspace_id == ws.id)
+    """Summary counts for the SOC dashboard header, aggregated in a single query."""
+    stmt = select(
+        func.count(SOCAlert.id).label("total"),
+        func.count(case((SOCAlert.status == "new", 1))).label("new_count"),
+        func.count(case(((SOCAlert.severity == "P1") & (SOCAlert.status != "resolved"), 1))).label(
+            "p1_open"
+        ),
+        func.count(case((SOCAlert.severity == "P1", 1))).label("sev_p1"),
+        func.count(case((SOCAlert.severity == "P2", 1))).label("sev_p2"),
+        func.count(case((SOCAlert.severity == "P3", 1))).label("sev_p3"),
+        func.count(case((SOCAlert.severity == "P4", 1))).label("sev_p4"),
+        func.count(case((SOCAlert.status == "new", 1))).label("st_new"),
+        func.count(case((SOCAlert.status == "acknowledged", 1))).label("st_acknowledged"),
+        func.count(case((SOCAlert.status == "investigating", 1))).label("st_investigating"),
+        func.count(case((SOCAlert.status == "resolved", 1))).label("st_resolved"),
+        func.count(case((SOCAlert.status == "false_positive", 1))).label("st_false_positive"),
+    ).where(SOCAlert.workspace_id == ws.id)
 
-    total_result = await db.execute(select(func.count()).select_from(base.subquery()))
-    total = total_result.scalar() or 0
-
-    new_result = await db.execute(
-        select(func.count()).select_from(base.where(SOCAlert.status == "new").subquery())
-    )
-    new_count = new_result.scalar() or 0
-
-    p1_result = await db.execute(
-        select(func.count()).select_from(
-            base.where(SOCAlert.severity == "P1", SOCAlert.status != "resolved").subquery()
-        )
-    )
-    p1_open = p1_result.scalar() or 0
-
-    by_severity: dict[str, int] = {}
-    for sev in ("P1", "P2", "P3", "P4"):
-        r = await db.execute(
-            select(func.count()).select_from(base.where(SOCAlert.severity == sev).subquery())
-        )
-        by_severity[sev] = r.scalar() or 0
-
-    by_status: dict[str, int] = {}
-    for st in ("new", "acknowledged", "investigating", "resolved", "false_positive"):
-        r = await db.execute(
-            select(func.count()).select_from(base.where(SOCAlert.status == st).subquery())
-        )
-        by_status[st] = r.scalar() or 0
+    result = await db.execute(stmt)
+    row = result.one()
 
     return {
-        "total": total,
-        "new": new_count,
-        "p1_open": p1_open,
-        "by_severity": by_severity,
-        "by_status": by_status,
+        "total": row.total or 0,
+        "new": row.new_count or 0,
+        "p1_open": row.p1_open or 0,
+        "by_severity": {
+            "P1": row.sev_p1 or 0,
+            "P2": row.sev_p2 or 0,
+            "P3": row.sev_p3 or 0,
+            "P4": row.sev_p4 or 0,
+        },
+        "by_status": {
+            "new": row.st_new or 0,
+            "acknowledged": row.st_acknowledged or 0,
+            "investigating": row.st_investigating or 0,
+            "resolved": row.st_resolved or 0,
+            "false_positive": row.st_false_positive or 0,
+        },
     }
 
 
