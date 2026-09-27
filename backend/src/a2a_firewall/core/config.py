@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     # Populated automatically by the validator below.
     DATABASE_SSL_REQUIRED: bool = False
 
+    # Database connection pool settings (resilience against idle drops, serverless suspend & bouncers)
+    DATABASE_POOL_PRE_PING: bool = True
+    DATABASE_POOL_RECYCLE_SECONDS: int = 300
+    DATABASE_POOL_SIZE: int = 10
+    DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_POOL_TIMEOUT_SECONDS: int = 30
+
     @model_validator(mode="after")
     def _fix_database_url_scheme(self) -> Settings:
         """Normalise the database URL for asyncpg.

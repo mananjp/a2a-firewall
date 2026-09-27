@@ -78,12 +78,14 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
     if not (path.startswith("/v1/") or path.startswith("/scim/v2/")):
         return await call_next(request)
 
-    # Exclude open registration & dev auth from IP allowlist blocking
+    # Exclude open registration, demo bootstrap & dev auth from IP allowlist blocking
     is_public_endpoint = path in (
         "/v1/workspaces/register",
         "/v1/auth/register",
         "/v1/auth/login",
         "/v1/network/my-ip",
+        "/v1/demo/bootstrap",
+        "/v1/demo/delegation-bootstrap",
     )
 
     client_ip = extract_client_ip(request)
@@ -95,34 +97,40 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
         raw_key = auth_header.removeprefix("Bearer ").strip()
         key_hash = hash_api_key(raw_key)
         # Try workspace first (workspace key), fall back to agent, fall back to IP.
-        async with AsyncSessionLocal() as session:
-            ws = await session.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
-            ws_row = ws.scalar_one_or_none()
-            if ws_row is not None:
-                key = f"ws:{ws_row.id}"
-                ws_id = ws_row.id
-            else:
-                ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
-                ag_row = ag.scalar_one_or_none()
-                if ag_row is not None:
-                    key = f"ws:{ag_row.workspace_id}"
-                    ws_id = ag_row.workspace_id
+        try:
+            async with AsyncSessionLocal() as session:
+                ws = await session.execute(
+                    select(Workspace).where(Workspace.api_key_hash == key_hash)
+                )
+                ws_row = ws.scalar_one_or_none()
+                if ws_row is not None:
+                    key = f"ws:{ws_row.id}"
+                    ws_id = ws_row.id
+                else:
+                    ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
+                    ag_row = ag.scalar_one_or_none()
+                    if ag_row is not None:
+                        key = f"ws:{ag_row.workspace_id}"
+                        ws_id = ag_row.workspace_id
 
-            # Enforce IP Allowlist if workspace resolved and not public endpoint
-            if ws_id and not is_public_endpoint:
-                scope = "dashboard" if "dashboard" in path else "api"
-                ip_check = await check_ip_allowlist(client_ip, ws_id, scope, session)
-                if ip_check.get("enforced") and not ip_check.get("allowed"):
-                    return JSONResponse(
-                        status_code=403,
-                        content={
-                            "error": {
-                                "code": "IP_FORBIDDEN",
-                                "message": f"Access denied: client IP {client_ip} is not in the workspace allowlist",
-                                "client_ip": client_ip,
-                            }
-                        },
-                    )
+                # Enforce IP Allowlist if workspace resolved and not public endpoint
+                if ws_id and not is_public_endpoint:
+                    scope = "dashboard" if "dashboard" in path else "api"
+                    ip_check = await check_ip_allowlist(client_ip, ws_id, scope, session)
+                    if ip_check.get("enforced") and not ip_check.get("allowed"):
+                        return JSONResponse(
+                            status_code=403,
+                            content={
+                                "error": {
+                                    "code": "IP_FORBIDDEN",
+                                    "message": f"Access denied: client IP {client_ip} is not in the workspace allowlist",
+                                    "client_ip": client_ip,
+                                },
+                            },
+                        )
+        except Exception as exc:
+            logger.warning("Database error during auth rate-limit/allowlist resolution: %s", exc)
+            key = f"ip:{client_ip}"
 
     if settings.RATE_LIMIT_ENABLED:
         allowed, count = check_workspace(key if key is not None else "anon")

@@ -1,0 +1,69 @@
+name: Keep-Alive Services
+
+'on':
+  schedule:
+    # Run every 10 minutes to prevent Render free-tier services from sleeping (15m inactivity limit)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive-cron
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Ping Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Backend and Frontend Services
+        env:
+          BACKEND_URL: ${{ vars.RENDER_BACKEND_URL || secrets.RENDER_BACKEND_URL || 'https://a2a-firewall1.onrender.com' }}
+          FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL || secrets.RENDER_FRONTEND_URL || 'https://a2a-firewall.onrender.com' }}
+        run: |
+          echo "### 🌐 Service Keep-Alive Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Target URL | HTTP Status | Response Time | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+
+          ping_service() {
+            local name="$1"
+            local url="$2"
+            echo "::group::Pinging $name"
+            echo "URL: $url"
+
+            local http_code="000"
+            local total_time="0.000s"
+            local status_icon="❌ Down"
+
+            for attempt in 1 2 3; do
+              echo "Attempt $attempt of 3..."
+              response=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 45 "$url" || echo "000 0.000")
+              http_code=$(echo "$response" | awk '{print $1}')
+              total_time="$(echo "$response" | awk '{print $2}')s"
+
+              echo "Received HTTP $http_code in $total_time"
+
+              if [ "$http_code" = "200" ] || [ "$http_code" = "301" ] || [ "$http_code" = "302" ]; then
+                status_icon="✅ Active"
+                break
+              fi
+
+              if [ $attempt -lt 3 ]; then
+                echo "Waiting 5 seconds before retry (waking up container)..."
+                sleep 5
+              fi
+            done
+
+            echo "::endgroup::"
+            echo "| **$name** | \`$url\` | \`$http_code\` | $total_time | $status_icon |" >> $GITHUB_STEP_SUMMARY
+          }
+
+          # 1. Backend liveness - keeps FastAPI container awake
+          ping_service "Backend Liveness" "$BACKEND_URL/health"
+
+          # 2. Backend readiness - keeps Neon Postgres compute & connection pool awake
+          ping_service "Backend Readiness & DB" "$BACKEND_URL/ready"
+
+          # 3. Frontend Next.js app - keeps frontend container awake
+          ping_service "Frontend Dashboard" "$FRONTEND_URL"
