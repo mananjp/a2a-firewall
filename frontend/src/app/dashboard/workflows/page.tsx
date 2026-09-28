@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,15 +15,45 @@ import {
   ShieldAlert,
   AlertTriangle,
   RotateCcw,
-  CheckCircle2,
-  XCircle,
-  Network,
-  Users,
   Activity,
   ArrowRight,
-  Flame,
-  Layers,
 } from "lucide-react";
+
+/**
+ * The workflow API has changed shape across backend revisions, and TypeScript
+ * cannot catch a drifted response. Normalize once at the ingestion boundary so
+ * a missing/renamed field degrades to a default instead of throwing during
+ * render (which unmounts the whole tree and blanks the screen).
+ */
+function normalizeDetail(raw: WorkflowStateDetail): WorkflowStateDetail {
+  const state = raw?.state ?? ({} as WorkflowStateDetail["state"]);
+  return {
+    state: {
+      root_task_id: state.root_task_id ?? "",
+      node_count: state.node_count ?? 0,
+      depth: state.depth ?? 0,
+      cumulative_risk: state.cumulative_risk ?? 0,
+      cumulative_exposure: state.cumulative_exposure ?? 0,
+      distinct_agents: state.distinct_agents ?? 0,
+      distinct_tasks: state.distinct_tasks ?? 0,
+      anomalies: Array.isArray(state.anomalies) ? state.anomalies : [],
+      quarantined: Boolean(state.quarantined),
+    },
+    nodes: Array.isArray(raw?.nodes) ? raw.nodes : [],
+  };
+}
+
+function normalizeList(raw: WorkflowInstanceItem[]): WorkflowInstanceItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((wf) => ({
+    ...wf,
+    cumulative_risk: wf.cumulative_risk ?? 0,
+    node_count: wf.node_count ?? 0,
+    depth: wf.depth ?? 0,
+    anomalies: Array.isArray(wf.anomalies) ? wf.anomalies : [],
+    quarantined: Boolean(wf.quarantined),
+  }));
+}
 
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<WorkflowInstanceItem[]>([]);
@@ -34,34 +64,44 @@ export default function WorkflowsPage() {
   const [quarantineLoading, setQuarantineLoading] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  // Read by loadData so the auto-select below does not have to re-create
+  // loadData (and therefore re-fire the effect) on every selection change.
+  const selectedRootIdRef = useRef<string | null>(null);
+  // Monotonic token so a slow detail response cannot clobber a newer selection.
+  const detailRequestRef = useRef(0);
+
   const handleSelectWorkflow = useCallback(async (rootTaskId: string) => {
+    const requestId = ++detailRequestRef.current;
     try {
+      selectedRootIdRef.current = rootTaskId;
       setSelectedRootId(rootTaskId);
       setDetailLoading(true);
-      const detail = await workflowsApi.get(rootTaskId);
+      const detail = normalizeDetail(await workflowsApi.get(rootTaskId));
+      if (requestId !== detailRequestRef.current) return;
       setSelectedWorkflow(detail);
     } catch (err) {
+      if (requestId !== detailRequestRef.current) return;
       console.error("Failed to load workflow state:", err);
       setSelectedWorkflow(null);
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestRef.current) setDetailLoading(false);
     }
   }, []);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await workflowsApi.list(50);
+      const data = normalizeList(await workflowsApi.list(50));
       setWorkflows(data);
-      if (data.length > 0 && !selectedRootId) {
-        handleSelectWorkflow(data[0].root_task_id);
+      if (data.length > 0 && !selectedRootIdRef.current) {
+        await handleSelectWorkflow(data[0].root_task_id);
       }
     } catch (err) {
       console.error("Failed to load workflows:", err);
     } finally {
       setLoading(false);
     }
-  }, [selectedRootId, handleSelectWorkflow]);
+  }, [handleSelectWorkflow]);
 
   useEffect(() => {
     loadData();
@@ -72,14 +112,18 @@ export default function WorkflowsPage() {
       setQuarantineLoading(rootTaskId);
       const res = await workflowsApi.quarantine(rootTaskId);
       setStatusMessage(res.message);
-      loadData();
-      if (selectedRootId === rootTaskId) {
-        handleSelectWorkflow(rootTaskId);
-      }
     } catch (err) {
       console.error("Quarantine failed:", err);
+      setStatusMessage("Quarantine request failed. See the server logs for details.");
+      return;
     } finally {
       setQuarantineLoading(null);
+    }
+    // Refresh outside the try above so a failed reload cannot overwrite the
+    // status message of a quarantine that actually succeeded.
+    await loadData();
+    if (selectedRootIdRef.current === rootTaskId) {
+      await handleSelectWorkflow(rootTaskId);
     }
   };
 
@@ -224,7 +268,7 @@ export default function WorkflowsPage() {
                                   : "text-allow"
                               }
                             >
-                              {wf.cumulative_risk.toFixed(2)}
+                              {(wf.cumulative_risk ?? 0).toFixed(2)}
                             </span>
                           </td>
                           <td className="p-3">
@@ -286,8 +330,8 @@ export default function WorkflowsPage() {
                     {selectedWorkflow.state.root_task_id}
                   </CardTitle>
                 </div>
-                {selectedWorkflow.state.quarantine_recommended && (
-                  <Badge tone="block">Quarantine Recommended</Badge>
+                {selectedWorkflow.state.quarantined && (
+                  <Badge tone="block">QUARANTINED</Badge>
                 )}
               </CardHeader>
               <CardContent className="space-y-4 pt-1">
@@ -320,12 +364,14 @@ export default function WorkflowsPage() {
                       >
                         <div className="font-bold flex items-center gap-1.5">
                           <AlertTriangle className="w-3.5 h-3.5" />
-                          [{anomaly.severity.toUpperCase()}] {anomaly.anomaly_type.replace(/_/g, " ")}
+                          [{(anomaly.severity ?? "unknown").toUpperCase()}] {(anomaly.anomaly_type ?? "unknown anomaly").replace(/_/g, " ")}
                         </div>
                         <p className="text-[11px] text-ink-muted">{anomaly.description}</p>
-                        {anomaly.agents_involved && (
+                        {anomaly.details && Object.keys(anomaly.details).length > 0 && (
                           <div className="text-[10px] text-ink-muted">
-                            Agents involved: {anomaly.agents_involved.join(" → ")}
+                            {Object.entries(anomaly.details)
+                              .map(([k, v]) => `${k.replace(/_/g, " ")}: ${String(v)}`)
+                              .join(" • ")}
                           </div>
                         )}
                       </div>
@@ -339,13 +385,13 @@ export default function WorkflowsPage() {
                     Execution Step Lineage ({selectedWorkflow.nodes.length} nodes)
                   </div>
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {selectedWorkflow.nodes.map((node, idx) => (
+                    {selectedWorkflow.nodes.map((node) => (
                       <div
                         key={node.task_id}
                         className="p-2.5 rounded border border-hairline bg-surface/80 text-xs font-mono space-y-1.5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-ink-muted">Hop {node.depth + 1}</span>
+                          <span className="text-[10px] text-ink-muted">Hop {(node.depth ?? 0) + 1}</span>
                           <Badge
                             tone={
                               node.decision === "allow"
@@ -355,17 +401,21 @@ export default function WorkflowsPage() {
                                 : "warning"
                             }
                           >
-                            {node.decision.toUpperCase()}
+                            {(node.decision ?? "unknown").toUpperCase()}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2 text-ink-primary truncate">
-                          <span className="truncate max-w-[120px]">{node.sender_agent_id.slice(0, 8)}</span>
+                          <span className="truncate max-w-[120px]">
+                            {String(node.sender_agent_id ?? node.agent_id ?? "?").slice(0, 8)}
+                          </span>
                           <ArrowRight className="w-3 h-3 text-ink-muted shrink-0" />
-                          <span className="truncate max-w-[120px]">{node.receiver_agent_id.slice(0, 8)}</span>
+                          <span className="truncate max-w-[120px]">
+                            {String(node.receiver_agent_id ?? node.agent_id ?? "?").slice(0, 8)}
+                          </span>
                         </div>
                         <div className="flex justify-between text-[10px] text-ink-muted pt-1 border-t border-hairline">
-                          <span>Task: {node.task_id.slice(0, 8)}...</span>
-                          <span>Risk: {node.risk_score.toFixed(2)}</span>
+                          <span>Task: {String(node.task_id ?? "?").slice(0, 8)}...</span>
+                          <span>Risk: {(node.risk_score ?? 0).toFixed(2)}</span>
                         </div>
                       </div>
                     ))}

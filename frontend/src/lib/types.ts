@@ -597,7 +597,7 @@ export interface WorkflowAnomaly {
   anomaly_type: string;
   severity: string;
   description: string;
-  agents_involved?: string[];
+  details?: Record<string, unknown>;
 }
 
 export interface WorkflowInstanceItem {
@@ -617,11 +617,17 @@ export interface WorkflowInstanceItem {
 export interface WorkflowNodeItem {
   task_id: string;
   parent_task_id?: string | null;
+  /** Canonical actor for the node (the delegating agent). */
+  agent_id: string;
   sender_agent_id: string;
   receiver_agent_id: string;
   depth: number;
   risk_score: number;
-  decision: string;
+  decision: string | null;
+  resource_type?: string | null;
+  action?: string | null;
+  task_type?: string | null;
+  capabilities?: string[];
 }
 
 export interface WorkflowStateDetail {
@@ -632,8 +638,9 @@ export interface WorkflowStateDetail {
     cumulative_risk: number;
     cumulative_exposure: number;
     distinct_agents: number;
+    distinct_tasks: number;
     anomalies: WorkflowAnomaly[];
-    quarantine_recommended: boolean;
+    quarantined: boolean;
   };
   nodes: WorkflowNodeItem[];
 }

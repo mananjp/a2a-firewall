@@ -144,13 +144,13 @@ async def quarantine_workflow(
             cumulative_risk=state.cumulative_risk,
             cumulative_exposure=state.cumulative_exposure,
             distinct_agents=state.distinct_agents,
-            anomalies=[a.to_dict() if hasattr(a, "to_dict") else a for a in state.anomalies],
+            anomalies=[a.to_dict() for a in state.anomalies],
             quarantined=True,
         )
         db.add(row)
     else:
         row.quarantined = True
-        row.anomalies = [a.to_dict() if hasattr(a, "to_dict") else a for a in state.anomalies]
+        row.anomalies = [a.to_dict() for a in state.anomalies]
 
     await db.commit()
     return QuarantineResponse(

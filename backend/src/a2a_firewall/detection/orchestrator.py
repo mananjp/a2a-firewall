@@ -1192,7 +1192,7 @@ async def _update_workflow_state(
         )
         row = existing.scalar_one_or_none()
         quarantine = should_quarantine(state)
-        anomalies = [a.to_dict() if hasattr(a, "to_dict") else a for a in state.anomalies]
+        anomalies = [a.to_dict() for a in state.anomalies]
         if row is None:
             db.add(
                 WorkflowInstance(

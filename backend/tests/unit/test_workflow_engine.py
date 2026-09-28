@@ -171,3 +171,84 @@ class TestNodeFromTask:
         t.parent_task_id = uuid.uuid4()
         node = node_from_task(t)
         assert node.parent_task_id == str(t.parent_task_id)
+
+    def test_projects_sender_and_receiver(self):
+        import uuid
+
+        t = self._FakeTask()
+        t.receiver_id = uuid.uuid4()
+        node = node_from_task(t)
+        assert node.sender_agent_id == str(t.sender_id)
+        assert node.receiver_agent_id == str(t.receiver_id)
+
+    def test_receiver_absent_is_none(self):
+        # The projection must stay total for row-like objects that omit
+        # ``receiver_id`` (e.g. legacy rows, partial projections, test doubles).
+        t = self._FakeTask()
+        assert not hasattr(t, "receiver_id")
+        node = node_from_task(t)
+        assert node.receiver_agent_id is None
+
+
+class TestSerializationContract:
+    """The API/JSONB shape the frontend depends on.
+
+    These lock the response contract that ``frontend/src/lib/types.ts`` models.
+    A rename here silently breaks the dashboard, so it must fail loudly.
+    """
+
+    def test_node_dict_includes_agent_pair(self):
+        node = WorkflowNode(
+            task_id="t1",
+            agent_id="agentA",
+            parent_task_id=None,
+            sender_agent_id="agentA",
+            receiver_agent_id="agentB",
+        )
+        d = node.to_dict()
+        assert d["sender_agent_id"] == "agentA"
+        assert d["receiver_agent_id"] == "agentB"
+        assert d["agent_id"] == "agentA"
+
+    def test_node_dict_falls_back_to_agent_id(self):
+        node = WorkflowNode(task_id="t1", agent_id="agentA", parent_task_id=None)
+        d = node.to_dict()
+        assert d["sender_agent_id"] == "agentA"
+        assert d["receiver_agent_id"] == "agentA"
+
+    def test_anomaly_dict_is_json_serializable(self):
+        import json
+
+        from a2a_firewall.core.workflow_engine import WorkflowAnomaly
+
+        a = WorkflowAnomaly(
+            anomaly_type="circular_delegation",
+            severity="critical",
+            description="loop",
+            details={"task_id": "t1"},
+        )
+        d = a.to_dict()
+        # The key is ``anomaly_type`` (not ``type``) to match the dataclass
+        # field and the frontend type.
+        assert d["anomaly_type"] == "circular_delegation"
+        assert d["severity"] == "critical"
+        assert d["description"] == "loop"
+        assert d["details"] == {"task_id": "t1"}
+        # Regression: this value is assigned to a JSONB column. Before
+        # WorkflowAnomaly gained to_dict(), the raw dataclass was passed
+        # through and psycopg raised "not JSON serializable" on commit.
+        json.dumps(d)
+
+    def test_state_dict_anomalies_match_anomaly_dict(self):
+        nodes = [
+            _node("a", "agentA", "c", 0),
+            _node("b", "agentB", "a", 1),
+            _node("c", "agentC", "b", 2),
+        ]
+        state = compute_workflow_state(nodes)
+        d = state.to_dict()
+        assert d["anomalies"]
+        for serialized, original in zip(d["anomalies"], state.anomalies, strict=True):
+            assert serialized == original.to_dict()
+            assert "anomaly_type" in serialized
+        assert d["quarantined"] is False

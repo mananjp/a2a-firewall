@@ -43,6 +43,11 @@ class WorkflowNode:
     action: str | None = None
     task_type: str | None = None
     capabilities: list[str] = field(default_factory=list)
+    # The delegating/receiving agent pair for this hop. ``agent_id`` is the
+    # canonical actor field used by the anomaly rules above; these two are
+    # emitted for consumers that render the delegation edge.
+    sender_agent_id: str | None = None
+    receiver_agent_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +61,8 @@ class WorkflowNode:
             "action": self.action,
             "task_type": self.task_type,
             "capabilities": self.capabilities,
+            "sender_agent_id": self.sender_agent_id or self.agent_id,
+            "receiver_agent_id": self.receiver_agent_id or self.agent_id,
         }
 
 
@@ -67,6 +74,17 @@ class WorkflowAnomaly:
     severity: str
     description: str
     details: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        # Keyed on ``anomaly_type`` (the dataclass field name) so the persisted
+        # JSONB payload and the API response agree, and so API consumers can
+        # rely on one key rather than two aliases.
+        return {
+            "anomaly_type": self.anomaly_type,
+            "severity": self.severity,
+            "description": self.description,
+            "details": self.details,
+        }
 
 
 @dataclass
@@ -97,15 +115,7 @@ class WorkflowState:
             "distinct_agents": self.distinct_agents,
             "distinct_tasks": self.distinct_tasks,
             "quarantined": self.quarantined,
-            "anomalies": [
-                {
-                    "type": a.anomaly_type,
-                    "severity": a.severity,
-                    "description": a.description,
-                    "details": a.details,
-                }
-                for a in self.anomalies
-            ],
+            "anomalies": [a.to_dict() for a in self.anomalies],
         }
 
 
@@ -229,4 +239,10 @@ def node_from_task(task: Any) -> WorkflowNode:
         capabilities=getattr(getattr(task, "payload", None) or {}, "capabilities", [])
         if isinstance(getattr(task, "payload", None), dict)
         else [],
+        sender_agent_id=str(task.sender_id),
+        # ``receiver_id`` is a real column on Task, but getattr keeps this
+        # projection total for row-like objects that omit it.
+        receiver_agent_id=(
+            str(receiver) if (receiver := getattr(task, "receiver_id", None)) else None
+        ),
     )
