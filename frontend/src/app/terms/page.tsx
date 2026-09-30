@@ -11,6 +11,8 @@ export const metadata: Metadata = {
 
 const mailto = (email: string) => `mailto:${email}`;
 
+export const revalidate = 3600;
+
 export default function TermsPage() {
   return (
     <LegalPage

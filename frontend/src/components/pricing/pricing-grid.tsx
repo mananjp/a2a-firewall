@@ -158,7 +158,9 @@ function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
             <p className="mt-1 font-mono text-[11.5px] text-ink-muted">
               {cycle === "annual"
                 ? `Billed annually · ${formatINR(Math.round((price as number) / 12))}/mo equivalent`
-                : "Billed monthly"}
+                : plan.priceAnnual
+                  ? `Billed monthly · ${formatINR(plan.priceAnnual)}/yr if billed annually`
+                  : "Billed monthly"}
             </p>
           </>
         )}

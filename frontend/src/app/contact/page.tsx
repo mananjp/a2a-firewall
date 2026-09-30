@@ -11,6 +11,8 @@ export const metadata: Metadata = {
     "Contact A2A Firewall for support, billing, privacy and data requests, and responsible security disclosure, along with our registered address and response commitments.",
 };
 
+export const revalidate = 3600;
+
 export default function ContactPage() {
   return (
     <div className="min-h-screen flex flex-col">
