@@ -38,10 +38,6 @@ export function CtaSection() {
           </div>
         </div>
       </section>
-
-      <footer className="border-t border-hairline py-8 text-center text-[12px] font-mono text-ink-muted">
-        A2A Firewall — Zero-Trust Inter-Agent Security & Governance Mesh • Built with Ed25519, Macaroons & Groq LPU
-      </footer>
     </>
   );
 }

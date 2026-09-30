@@ -864,3 +864,171 @@ class DlpPolicy(Base):
     updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# Self-serve SaaS Accounts, API Keys & BYOK LLM Configuration
+# ---------------------------------------------------------------------------
+
+
+class Account(Base):
+    """User account representing an individual prosumer or organization member."""
+
+    __tablename__ = "accounts"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    email: Mapped[str] = Column(String, unique=True, index=True, nullable=False)  # type: ignore[assignment]
+    password_hash: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]  # Nullable for OAuth users
+    provider: Mapped[str] = Column(String, default="email", nullable=False)  # type: ignore[assignment]  # email | github | google
+    provider_user_id: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    full_name: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    avatar_url: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    tier: Mapped[str] = Column(String, default="free", nullable=False)  # type: ignore[assignment]  # free | pro | team | enterprise
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class AccountWorkspace(Base):
+    """Membership link between an Account and a Workspace."""
+
+    __tablename__ = "account_workspaces"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    account_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = Column(String, default="owner", nullable=False)  # type: ignore[assignment]  # owner | admin | member
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+
+
+class APIKeyRecord(Base):
+    """Workspace API key metadata and hash for fine-grained multi-key management."""
+
+    __tablename__ = "api_key_records"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = Column(String, default="Default Key", nullable=False)  # type: ignore[assignment]
+    key_prefix: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # e.g. "a2a_sk_abc..."
+    key_hash: Mapped[str] = Column(String, unique=True, index=True, nullable=False)  # type: ignore[assignment]
+    created_by_account_id: Mapped[uuid.UUID | None] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_used_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
+    expires_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
+    is_revoked: Mapped[bool] = Column(Boolean, default=False, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+
+
+class WorkspaceLLMConfig(Base):
+    """Per-workspace LLM provider configuration for Bring-Your-Own-Key (BYOK)."""
+
+    __tablename__ = "workspace_llm_configs"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = Column(String, default="groq", nullable=False)  # type: ignore[assignment]  # groq | openai | anthropic | local | ollama
+    model: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]  # e.g. "llama-guard-3-8b", "gpt-4o-mini"
+    base_url: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    api_key_encrypted: Mapped[str | None] = Column(Text, nullable=True)  # type: ignore[assignment]
+    llm_enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)  # type: ignore[assignment]
+    timeout_seconds: Mapped[float] = Column(Float, default=5.0, nullable=False)  # type: ignore[assignment]
+    cache_enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+# ---------------------------------------------------------------------------
+# SaaS Billing & Subscription
+# ---------------------------------------------------------------------------
+
+
+class BillingSubscription(Base):
+    """SaaS billing subscription via Razorpay."""
+
+    __tablename__ = "billing_subscriptions"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    account_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    razorpay_customer_id: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    razorpay_subscription_id: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
+    plan_id: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # e.g., "plan_ProTier"
+    status: Mapped[str] = Column(String, default="active", nullable=False)  # type: ignore[assignment]  # active | past_due | canceled
+    current_period_start: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
+    current_period_end: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
+    cancel_at_period_end: Mapped[bool] = Column(Boolean, default=False, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class UsageMeter(Base):
+    """Monthly inspection usage counter per workspace for quota enforcement."""
+
+    __tablename__ = "usage_meters"
+
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    period: Mapped[str] = Column(String, nullable=False, index=True)  # type: ignore[assignment]  # "2026-10" format
+    inspections_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    llm_inspections_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    api_calls_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    bandwidth_bytes: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
+    
+    # Tier limits (denormalized for fast enforcement)
+    inspections_limit: Mapped[int] = Column(Integer, default=10000, nullable=False)  # type: ignore[assignment]
+    llm_inspections_limit: Mapped[int | None] = Column(Integer, nullable=True)  # type: ignore[assignment]
+    
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )

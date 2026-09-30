@@ -7,8 +7,18 @@ import time
 from typing import Any, cast
 
 from groq import APIStatusError, AsyncGroq, Groq
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.byok_crypto import decrypt_api_key
 from a2a_firewall.core.config import settings
+from a2a_firewall.core.provider_adapters import (
+    DEFAULT_MODEL,
+    ProviderAdapter,
+    ProviderConfig,
+    build_adapter,
+)
+from a2a_firewall.db.models import WorkspaceLLMConfig
 
 _async_client: AsyncGroq | None = None
 _sync_client: Groq | None = None
@@ -54,6 +64,51 @@ def get_groq() -> Groq:
     if _sync_client is None:
         _sync_client = Groq(api_key=settings.GROQ_API_KEY)
     return _sync_client
+
+
+async def get_llm_client_for_workspace(
+    workspace_id: Any | None,
+    db: AsyncSession | None,
+) -> tuple[ProviderAdapter | None, str | None, WorkspaceLLMConfig | None]:
+    """Retrieve the configured LLM adapter for a workspace (BYOK).
+
+    Returns (adapter, skip_reason, config):
+    - If BYOK is configured and enabled: (adapter, None, config)
+    - If disabled by user: (None, "llm_disabled_by_user", config)
+    - If no key is configured: (None, "no_llm_key_configured", None)
+    """
+    if workspace_id is None or db is None:
+        return None, None, None
+
+    result = await db.execute(
+        select(WorkspaceLLMConfig).where(WorkspaceLLMConfig.workspace_id == workspace_id)
+    )
+    llm_config = result.scalar_one_or_none()
+
+    if not llm_config:
+        return None, "no_llm_key_configured", None
+
+    if not llm_config.llm_enabled:
+        return None, "llm_disabled_by_user", llm_config
+
+    provider = (llm_config.provider or "groq").strip().lower()
+    if not llm_config.api_key_encrypted and provider not in ("local", "ollama"):
+        return None, "no_llm_key_configured", llm_config
+
+    try:
+        raw_key = decrypt_api_key(llm_config.api_key_encrypted) if llm_config.api_key_encrypted else ""
+    except Exception:
+        return None, "llm_key_decryption_failed", llm_config
+
+    provider_config = ProviderConfig(
+        api_key=raw_key,
+        model=llm_config.model,
+        base_url=llm_config.base_url or "",
+        timeout_seconds=llm_config.timeout_seconds,
+    )
+    adapter = build_adapter(provider, provider_config)
+    return adapter, None, llm_config
+
 
 
 def _clean_json_str(raw: str) -> str:
@@ -279,16 +334,34 @@ async def groq_inspect(
     declared_intent: str | None = None,
     injection_only: bool = False,
     rules_risk_delta: float = 0.0,
+    llm_client: ProviderAdapter | None = None,
+    skip_reason: str | None = None,
+    model_override: str | None = None,
 ) -> dict[str, Any]:
-    """Inspect message payload using Groq GPT-OSS 120B for prompt injection and semantic anomalies.
+    """Inspect message payload using Groq or workspace-configured LLM (BYOK).
 
     Features:
-    - Fast async execution using AsyncGroq (non-blocking)
+    - BYOK support: routes to workspace's own LLM provider (Groq, OpenAI, Anthropic, Local)
+    - Graceful skipping: if no LLM key configured or disabled, returns safe no-op verdict
+    - Fast async execution (non-blocking)
     - Injection-only mode for zero-risk pre-screen with minimal token budget
     - In-memory caching for repeat payload hashes
     - Full response sanitization, bounds checking, and hallucination safety
     - Cross-validation with rules layer
     """
+    if skip_reason:
+        return {
+            "injection_detected": False,
+            "injection_type": "none",
+            "hallucination_flags": [],
+            "risk_score_delta": 0.0,
+            "rationale": f"LLM layer skipped: {skip_reason}. Configure your LLM API key in Settings -> LLM Provider.",
+            "called": False,
+            "skipped_reason": skip_reason,
+            "latency_ms": 0,
+            "model": None,
+        }
+
     # ── Fast Cache Check ──
     cache_key = f"{payload_hash}:{declared_intent or ''}:{injection_only}"
     now = time.monotonic()
@@ -365,16 +438,29 @@ async def groq_inspect(
 
     start = time.monotonic()
     try:
-        client = get_async_groq()
-        response = await client.chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.0,
-            timeout=settings.GROQ_TIMEOUT_SECONDS,
-        )
-        latency_ms = int((time.monotonic() - start) * 1000)
-        raw = response.choices[0].message.content or "{}"
+        if llm_client is not None:
+            chosen_model = model_override or llm_client.config.model or (
+                settings.GROQ_MODEL if getattr(llm_client, "provider_name", "") == "groq" else DEFAULT_MODEL
+            )
+            call_res = await llm_client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                model=chosen_model,
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            raw = call_res.text or "{}"
+            used_model = call_res.model or chosen_model
+        else:
+            client = get_async_groq()
+            response = await client.chat.completions.create(
+                model=model_override or settings.GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=0.0,
+                timeout=settings.GROQ_TIMEOUT_SECONDS,
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            raw = response.choices[0].message.content or "{}"
+            used_model = model_override or settings.GROQ_MODEL
 
         # Use robust repair pipeline instead of fragile direct parse
         raw_dict = _repair_json(raw)
@@ -382,7 +468,8 @@ async def groq_inspect(
         # Sanitize, validate schema, clamp deltas, and cross-validate with rules
         result = _sanitize_and_validate_response(raw_dict, rules_risk_delta=rules_risk_delta)
         result["latency_ms"] = latency_ms
-        result["model"] = settings.GROQ_MODEL
+        result["model"] = used_model
+        result["called"] = True
 
         # Cache result
         if settings.GROQ_CACHE_ENABLED:
@@ -408,6 +495,7 @@ async def groq_inspect(
     except Exception as e:  # noqa: BLE001
         latency_ms = int((time.monotonic() - start) * 1000)
         return _groq_unavailable(latency_ms, "groq_unavailable", str(e))
+
 
 
 def _groq_fallback(latency_ms: int, code: str, detail: str, workspace: Any) -> dict[str, Any]:

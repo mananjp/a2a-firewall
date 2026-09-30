@@ -32,4 +32,4 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement & Reporting
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project leaders at **`security@a2a-firewall.io`** (or `mananjp@users.noreply.github.com`). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project leaders at **`mananjpanchal11@gmail.com`**. All complaints will be reviewed and investigated promptly and fairly.

@@ -12,12 +12,14 @@ from sqlalchemy import select, text
 
 from a2a_firewall.api.routes import (
     agents,
+    api_keys,
     audit,
     auth,
     compliance,
     cve,
     delegation,
     demo,
+    billing,
     dlp,
     evidence,
     firewall,
@@ -31,6 +33,7 @@ from a2a_firewall.api.routes import (
     review,
     schemas,
     scim,
+    settings as settings_routes,
     simulation,
     soc,
     spend,
@@ -49,7 +52,8 @@ from a2a_firewall.core.security import hash_api_key
 from a2a_firewall.core.sentry import setup_sentry
 from a2a_firewall.core.telemetry import setup_telemetry
 from a2a_firewall.db.database import AsyncSessionLocal
-from a2a_firewall.db.models import Agent, Workspace
+from a2a_firewall.db.models import Agent, APIKeyRecord, Workspace
+
 
 logger = logging.getLogger("a2a_firewall")
 
@@ -83,6 +87,8 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
         "/v1/workspaces/register",
         "/v1/auth/register",
         "/v1/auth/login",
+        "/v1/auth/oauth/github/url",
+        "/v1/auth/oauth/github/callback",
         "/v1/network/my-ip",
         "/v1/demo/bootstrap",
         "/v1/demo/delegation-bootstrap",
@@ -96,7 +102,7 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
     if auth_header.startswith("Bearer "):
         raw_key = auth_header.removeprefix("Bearer ").strip()
         key_hash = hash_api_key(raw_key)
-        # Try workspace first (workspace key), fall back to agent, fall back to IP.
+        # Try workspace first (workspace key), fall back to multi-key APIKeyRecord, then agent, then IP.
         try:
             async with AsyncSessionLocal() as session:
                 ws = await session.execute(
@@ -107,11 +113,23 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
                     key = f"ws:{ws_row.id}"
                     ws_id = ws_row.id
                 else:
-                    ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
-                    ag_row = ag.scalar_one_or_none()
-                    if ag_row is not None:
-                        key = f"ws:{ag_row.workspace_id}"
-                        ws_id = ag_row.workspace_id
+                    ak = await session.execute(
+                        select(APIKeyRecord).where(
+                            APIKeyRecord.key_hash == key_hash,
+                            APIKeyRecord.is_revoked.is_(False),
+                        )
+                    )
+                    ak_row = ak.scalar_one_or_none()
+                    if ak_row is not None:
+                        key = f"ws:{ak_row.workspace_id}"
+                        ws_id = ak_row.workspace_id
+                    else:
+                        ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
+                        ag_row = ag.scalar_one_or_none()
+                        if ag_row is not None:
+                            key = f"ws:{ag_row.workspace_id}"
+                            ws_id = ag_row.workspace_id
+
 
                 # Enforce IP Allowlist if workspace resolved and not public endpoint
                 if ws_id and not is_public_endpoint:
@@ -203,6 +221,10 @@ app.include_router(evidence.router, prefix="/v1/evidence", tags=["evidence"])
 app.include_router(workflows.router, prefix="/v1/workflows", tags=["workflows"])
 app.include_router(memory.router, prefix="/v1/memory", tags=["memory"])
 app.include_router(dlp.router, prefix="/v1/dlp", tags=["dlp"])
+app.include_router(settings_routes.router, prefix="/v1/settings", tags=["settings"])
+app.include_router(api_keys.router, prefix="/v1/api-keys", tags=["api-keys"])
+app.include_router(billing.router, prefix="/v1/billing", tags=["billing"])
+
 
 
 @app.get("/health")

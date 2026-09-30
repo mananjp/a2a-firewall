@@ -13,6 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.core.config import settings
+from a2a_firewall.core.quota_manager import (
+    TIER_LIMITS,
+    check_tier_quota,
+    get_workspace_tier,
+    record_inspection_usage,
+)
 from a2a_firewall.core.rate_limit import check_agent
 from a2a_firewall.db.models import (
     AgentIdentity,
@@ -28,7 +34,11 @@ from a2a_firewall.detection.layer0_preflight import preflight
 from a2a_firewall.detection.layer1_schema import validate_schema
 from a2a_firewall.detection.layer2_permissions import check_permissions
 from a2a_firewall.detection.layer3_rules import run_rules
-from a2a_firewall.detection.layer4_groq import contains_non_ascii_script, groq_inspect
+from a2a_firewall.detection.layer4_groq import (
+    contains_non_ascii_script,
+    get_llm_client_for_workspace,
+    groq_inspect,
+)
 from a2a_firewall.detection.layer5_decision import make_decision
 
 
@@ -93,6 +103,22 @@ async def run_inspection(
     trace_id = cast(str, request_data.get("trace_id") or uuid.uuid4().hex)
     parent_span_id = cast(str, request_data.get("parent_span_id") or uuid.uuid4().hex)
     rate_event["parent_span_id"] = parent_span_id
+
+    # ---------- Tier Quota check (layer -2) ----------
+    quota_allowed, quota_info = await check_tier_quota(workspace.id, db)
+    if not quota_allowed:
+        upgrade_url = f"{settings.FRONTEND_URL.rstrip('/')}/pricing"
+        return {
+            "decision": "rate_limited",
+            "reason": (
+                f"Monthly inspection limit reached ({quota_info['used']}/{quota_info['limit']}). "
+                f"Upgrade at {upgrade_url}"
+            ),
+            "upgrade_url": upgrade_url,
+            "risk_score": 1.0,
+            "violations": [{"layer": "quota", "violation_type": "tier_limit_reached", "severity": "critical"}],
+            "task_id": request_data.get("task_id"),
+        }
 
     # ---------- Spend limit check ----------
     from a2a_firewall.core.spend_manager import (
@@ -658,13 +684,22 @@ async def run_inspection(
         except Exception:  # noqa: BLE001
             pass  # root task not found — intent-binding simply won't activate
 
-    # ---------- Layer 4: groq (semantic intent verification & injection guard) ----------
-    # Always called so that:
-    # 1. Real prompt injections that evade simple regex rules are detected (preventing 0-risk bypass)
-    # 2. Benign false-positives flagged by regex can be downgraded by LLM intent analysis
-    # 3. Intent consistency is verified on delegation-bound requests
-    # 4. In injection_only mode (when risk is 0 and no delegation), uses a streamlined prompt to minimize latency
-    groq_called = True
+    # ---------- Layer 4: LLM semantic intent verification & injection guard (BYOK) ----------
+    # Look up workspace BYOK LLM client
+    llm_client, skip_reason, _ = await get_llm_client_for_workspace(
+        getattr(workspace, "id", None), db
+    )
+    # If no BYOK config is found in the DB, but settings.GROQ_API_KEY is available (e.g. dev/test mode),
+    # fallback to platform Groq so tests without mock BYOK pass seamlessly.
+    if skip_reason == "no_llm_key_configured" and settings.GROQ_API_KEY and settings.GROQ_API_KEY != "":
+        skip_reason = None
+
+    tier = await get_workspace_tier(workspace.id, db)
+    llm_enabled = TIER_LIMITS.get(tier, TIER_LIMITS["free"])["llm_layer_enabled"]
+    if not llm_enabled:
+        skip_reason = "tier_limit"
+
+    groq_called = skip_reason is None
     injection_only = (
         risk_score == 0
         and not (declared_intent and parent_caveats is not None)
@@ -682,6 +717,8 @@ async def run_inspection(
         declared_intent=declared_intent if parent_caveats is not None else None,
         injection_only=injection_only,
         rules_risk_delta=rule_result.get("risk_delta", 0.0),
+        llm_client=llm_client,
+        skip_reason=skip_reason,
     )
     groq_model = groq_result.get("model")
     groq_ms = int((time.monotonic() - layer_start) * 1000)
@@ -692,7 +729,8 @@ async def run_inspection(
             "parent_span_id": parent_span_id,
             "duration_ms": groq_ms,
             "attributes": {
-                "called": True,
+                "called": bool(groq_result.get("called", groq_called)),
+                "skipped_reason": groq_result.get("skipped_reason"),
                 "injection_detected": bool(groq_result.get("injection_detected")),
                 "hallucination_count": len(groq_result.get("hallucination_flags") or []),
                 "hallucination_flags": groq_result.get("hallucination_flags") or [],
@@ -878,6 +916,14 @@ async def run_inspection(
             tokens=estimated_tokens,
             model_name=groq_result.get("model") if groq_result else None,
             operation="inspect",
+            db=db,
+        )
+
+        # Track usage for tier limits
+        await record_inspection_usage(
+            workspace_id=workspace.id,
+            llm_called=groq_called,
+            payload_size=payload_size,
             db=db,
         )
 

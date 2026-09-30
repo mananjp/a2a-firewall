@@ -25,7 +25,7 @@ If you discover a potential security vulnerability in A2A Firewall, **please do 
 1. **GitHub Private Vulnerability Reporting (Preferred)**:
    - Go to [Security &rarr; Advisories &rarr; Report a vulnerability](https://github.com/mananjp/a2a-firewall/security/advisories/new).
 2. **Email**:
-   - Send details to **`security@a2a-firewall.io`** (or `mananjp@users.noreply.github.com`).
+   - Send details to **`mananjpanchal11@gmail.com`**.
    - If sensitive, encrypt your email using our PGP public key (fingerprint available upon request).
 
 ### What to Include in Your Report:

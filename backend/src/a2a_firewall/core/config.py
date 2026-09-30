@@ -112,5 +112,24 @@ class Settings(BaseSettings):
     A2A_DEFAULT_DRY_RUN: bool = True  # installer commands are no-ops unless forced off
     A2A_AGENT_UID: int | None = None  # OS uid of agent processes; scopes iptables REDIRECT
 
+    # BYOK (Bring Your Own Key) & Session Authentication
+    BYOK_ENCRYPTION_KEY: str = ""  # 32-byte Fernet key; auto-derived from SECRET_KEY if empty
+    JWT_SECRET_KEY: str = ""  # HMAC secret; falls back to SECRET_KEY if empty
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+
+    # OAuth / Self-serve Settings
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # Razorpay Billing Settings
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
 
 settings = Settings()
+

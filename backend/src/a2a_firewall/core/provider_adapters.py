@@ -102,7 +102,10 @@ class ProviderAdapter(ABC):
         body = self.to_wire_request(
             messages=messages, model=model or self.config.model or DEFAULT_MODEL, stream=False
         )
-        resp = await self._client.post(self._endpoint(), json=body)
+        headers = {}
+        if self.config.api_key and "authorization" not in {k.lower() for k in (self.config.extra_headers or {})}:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        resp = await self._client.post(self._endpoint(), json=body, headers=headers if headers else None)
         resp.raise_for_status()
         return self.parse_response(resp)
 
@@ -160,7 +163,11 @@ class OpenAIAdapter(ProviderAdapter):
         )
         buffer = StreamingInspectBuffer(inspect=inspect, holdback_chars=holdback_chars)
         collected: list[str] = []
-        async with self._client.stream("POST", self._endpoint(), json=body) as resp:
+        headers = {}
+        if self.config.api_key and "authorization" not in {k.lower() for k in (self.config.extra_headers or {})}:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        async with self._client.stream("POST", self._endpoint(), json=body, headers=headers if headers else None) as resp:
+
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line:
@@ -342,6 +349,7 @@ def build_adapter(provider: str, config: ProviderConfig | None = None) -> Provid
         "anthropic": AnthropicAdapter,
         "groq": GroqAdapter,
         "local": LocalAdapter,
+        "ollama": LocalAdapter,
     }
     cls = adapters.get(key, OpenAIAdapter)
     return cls(config)
