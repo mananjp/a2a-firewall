@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getApiKey } from "@/lib/api";
 import {
   PLANS,
   formatINR,
@@ -105,9 +106,34 @@ function CycleButton({
 }
 
 function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => {
+    setIsLoggedIn(Boolean(getApiKey()));
+  }, []);
+
   const isCustom = plan.priceMonthly === null;
   const price = cycle === "annual" ? plan.priceAnnual : plan.priceMonthly;
   const isFree = plan.priceMonthly === 0;
+
+  // Compute smart destination and label
+  let targetHref = plan.cta.href;
+  let targetLabel = plan.cta.label;
+
+  if (isCustom) {
+    targetHref = "/contact";
+    targetLabel = "Contact sales";
+  } else if (isFree) {
+    targetHref = isLoggedIn ? "/dashboard" : "/login";
+    targetLabel = isLoggedIn ? "Go to Dashboard" : "Start free";
+  } else {
+    // Pro or Team
+    targetHref = isLoggedIn
+      ? `/dashboard/billing?plan=${plan.id}&cycle=${cycle}`
+      : `/login?next=${encodeURIComponent(`/dashboard/billing?plan=${plan.id}&cycle=${cycle}`)}`;
+    targetLabel = isLoggedIn
+      ? `Upgrade to ${plan.name}`
+      : `Get ${plan.name} (${formatINR(price as number)})`;
+  }
 
   return (
     <article
@@ -175,14 +201,14 @@ function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
         ))}
       </ul>
 
-      <Link href={plan.cta.href} className="mt-6 block">
+      <Link href={targetHref} className="mt-6 block">
         <Button
           variant={plan.highlight ? "primary" : "secondary"}
           size="md"
           className="w-full font-mono text-[12px]"
         >
-          {plan.cta.label}
-          {plan.cta.href === "/login" ? <ArrowRight size={13} /> : null}
+          {targetLabel}
+          <ArrowRight size={13} />
         </Button>
       </Link>
     </article>

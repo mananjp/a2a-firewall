@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { auth, workspaces, setApiKey } from "@/lib/api";
@@ -15,17 +15,20 @@ import { motion } from "framer-motion";
 type Tab = "signin" | "register" | "apikey";
 
 const DEMO_ROLES = [
-  { email: "admin@a2afirewall.dev", label: "Admin", desc: "Full permissions" },
-  { email: "auditor@a2afirewall.dev", label: "Auditor", desc: "Read-only access" },
-  { email: "trial@a2afirewall.dev", label: "Trial", desc: "Standard bounds" },
-  { email: "traffic@a2afirewall.dev", label: "Traffic", desc: "Agent gateway" },
+  { email: "admin@a2afirewall.dev", label: "Admin (Full Demo)", desc: "Enterprise • All features unlocked", isPrimary: true },
+  { email: "auditor@a2afirewall.dev", label: "Auditor", desc: "Team tier • Read-only review" },
+  { email: "trial@a2afirewall.dev", label: "Trial", desc: "Pro tier • Standard bounds" },
+  { email: "traffic@a2afirewall.dev", label: "Traffic", desc: "Gateway • Agent mesh" },
 ];
 
-export default function LoginPage() {
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get("next") || "/dashboard";
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("signin");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,14 +37,13 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await auth.login(email);
-      setApiKey(res.api_key);
+      const res = await auth.login(email, password || undefined);
       toast({
         title: "Authenticated",
-        description: `Workspace: ${res.admin_email}`,
+        description: `${res.admin_email} (${(res.account?.tier || "free").toUpperCase()} Tier)`,
         variant: "success",
       });
-      router.push("/dashboard");
+      router.push(nextUrl);
     } catch (err) {
       toast({
         title: "Authentication Failed",
@@ -60,11 +62,11 @@ export default function LoginPage() {
       const res = await workspaces.register({ name, admin_email: email });
       setApiKey(res.api_key);
       toast({
-        title: "Workspace Provisioned",
+        title: "Workspace Provisioned (Free Tier)",
         description: res.name,
         variant: "success",
       });
-      router.push("/dashboard");
+      router.push(nextUrl);
     } catch (err) {
       toast({
         title: "Registration Failed",
@@ -81,7 +83,7 @@ export default function LoginPage() {
     if (apiKeyInput.trim()) {
       setApiKey(apiKeyInput.trim());
       toast({ title: "API Key Connected", variant: "success" });
-      router.push("/dashboard");
+      router.push(nextUrl);
     }
   }
 
@@ -89,13 +91,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await auth.login(demoEmail);
-      setApiKey(res.api_key);
       toast({
-        title: "Demo Role Granted",
-        description: `${demoEmail.split("@")[0]} workspace`,
+        title: demoEmail === "admin@a2afirewall.dev" ? "Admin Access Granted" : "Demo Persona Granted",
+        description: `${res.admin_email} — ${(res.account?.tier || "Enterprise").toUpperCase()} Tier`,
         variant: "success",
       });
-      router.push("/dashboard");
+      router.push(nextUrl);
     } catch (err) {
       toast({
         title: "Demo Login Failed",
@@ -174,20 +175,30 @@ export default function LoginPage() {
             {tab === "signin" && (
               <form onSubmit={handleSignIn} className="space-y-4">
                 <Input
-                  label="Administrator Email"
+                  label="Administrator / User Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@enterprise.com"
+                  placeholder="admin@enterprise.com or you@company.com"
                   required
+                />
+                <Input
+                  label="Password (optional)"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password or leave blank for instant login"
                 />
                 <Button
                   type="submit"
                   disabled={loading || !email}
                   className="w-full font-mono text-[13px]"
                 >
-                  {loading ? "Authenticating..." : "Sign in to Dashboard"}
+                  {loading ? "Authenticating..." : "Sign In to Workspace"}
                 </Button>
+                <p className="text-[11.5px] text-center text-ink-muted">
+                  New users are automatically granted a Free Tier workspace. Upgrade anytime from Billing.
+                </p>
               </form>
             )}
 
@@ -213,7 +224,7 @@ export default function LoginPage() {
                   disabled={loading || !name || !email}
                   className="w-full font-mono text-[13px]"
                 >
-                  {loading ? "Provisioning..." : "Provision Workspace"}
+                  {loading ? "Provisioning..." : "Provision Free Tier Workspace"}
                 </Button>
               </form>
             )}
@@ -240,18 +251,32 @@ export default function LoginPage() {
 
           {/* Quick Demo Access */}
           <div className="mt-6">
-            <div className="eyebrow mb-2.5">Fast Demo Persona Access</div>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="eyebrow">Demo Persona One-Click Access</span>
+              <span className="text-[11px] font-mono text-accent font-semibold">100% UNRESTRICTED DEMO</span>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {DEMO_ROLES.map((r) => (
                 <button
                   key={r.email}
                   onClick={() => handleDemoRole(r.email)}
                   disabled={loading}
-                  className="flex items-center gap-2.5 rounded-xl border border-hairline bg-surface px-3 py-2.5 text-left text-[12px] transition-all hover:border-hairline-strong hover:bg-surface-elevated disabled:opacity-40"
+                  className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-[12px] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 ${
+                    r.isPrimary
+                      ? "border-accent/60 bg-accent/10 shadow-sm hover:border-accent hover:bg-accent/15"
+                      : "border-hairline bg-surface hover:border-hairline-strong hover:bg-surface-elevated"
+                  }`}
                 >
-                  <TestTube2 size={14} className="shrink-0 text-accent" />
+                  <TestTube2 size={16} className={r.isPrimary ? "shrink-0 text-accent font-bold" : "shrink-0 text-ink-muted"} />
                   <div className="min-w-0">
-                    <div className="font-semibold text-ink-primary">{r.label}</div>
+                    <div className="font-semibold text-ink-primary flex items-center gap-1.5">
+                      <span>{r.label}</span>
+                      {r.isPrimary && (
+                        <span className="rounded bg-accent/20 px-1 py-0.2 text-[9.5px] font-mono font-bold text-accent uppercase">
+                          Demo
+                        </span>
+                      )}
+                    </div>
                     <div className="truncate text-ink-muted text-[11px] font-mono">{r.desc}</div>
                   </div>
                 </button>
@@ -261,5 +286,19 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-bg-base flex items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        </div>
+      }
+    >
+      <LoginFormContent />
+    </Suspense>
   );
 }

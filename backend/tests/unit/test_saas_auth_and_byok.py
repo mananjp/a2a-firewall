@@ -370,3 +370,83 @@ def test_api_keys_crud():
 
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# 7. Admin Persona (Full Enterprise Demo Access) & Free Tier JWT Login
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_persona_granted_enterprise_tier():
+    mock_db = AsyncMock()
+    mock_account_result = MagicMock()
+    mock_account_result.scalar_one_or_none.return_value = None
+    mock_link_result = MagicMock()
+    mock_link_result.scalar_one_or_none.return_value = None
+
+    mock_db.execute.side_effect = [mock_account_result, mock_link_result]
+
+    ws = Workspace(
+        id=uuid.uuid4(),
+        name="Admin Demo Mesh",
+        admin_email="admin@a2afirewall.dev",
+        api_key_hash="hash",
+    )
+
+    account, token = await _ensure_account_and_link(
+        db=mock_db,
+        email="admin@a2afirewall.dev",
+        ws=ws,
+        full_name="Security Admin",
+    )
+
+    assert account.email == "admin@a2afirewall.dev"
+    assert account.tier == "enterprise"
+    decoded = decode_access_token(token)
+    assert decoded is not None
+    assert decoded["tier"] == "enterprise"
+
+
+def test_billing_config_endpoint():
+    resp = client.get("/v1/billing/config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "currency" in data
+    assert data["currency"] == "INR"
+    assert "plans" in data
+    assert "pro_monthly" in data["plans"]
+    assert "team_monthly" in data["plans"]
+    assert data["plans"]["pro_monthly"]["amount"] == 1499
+    assert data["plans"]["team_monthly"]["amount"] == 4999
+
+
+def test_billing_demo_upgrade_endpoint():
+    mock_db = AsyncMock()
+    mock_account = MagicMock(id=uuid.uuid4(), email="demo@example.com", tier="free")
+
+    async def override_get_db():
+        yield mock_db
+
+    from a2a_firewall.api.deps import get_current_account
+
+    async def override_get_current_account():
+        return mock_account
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_account] = override_get_current_account
+
+    try:
+        resp = client.post(
+            "/v1/billing/demo-upgrade",
+            headers={"Authorization": "Bearer test_token"},
+            json={"tier": "enterprise"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["tier"] == "enterprise"
+        assert mock_account.tier == "enterprise"
+    finally:
+        app.dependency_overrides.clear()
+

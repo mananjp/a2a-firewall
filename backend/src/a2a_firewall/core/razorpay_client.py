@@ -99,5 +99,17 @@ class RazorpayClient:
 
         return hmac.compare_digest(expected_signature, razorpay_signature)
 
+    def verify_subscription_payment_signature(
+        self, razorpay_payment_id: str, razorpay_subscription_id: str, razorpay_signature: str
+    ) -> bool:
+        """Verify payment signature for a subscription checkout callback."""
+        if not settings.RAZORPAY_KEY_SECRET:
+            return False
+        msg = f"{razorpay_payment_id}|{razorpay_subscription_id}"
+        expected = hmac.new(
+            settings.RAZORPAY_KEY_SECRET.encode(), msg.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, razorpay_signature)
+
 
 razorpay_client = RazorpayClient()

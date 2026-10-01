@@ -46,24 +46,60 @@ async def get_current_workspace(
 async def get_current_account(
     authorization: str = Header(...), db: AsyncSession = Depends(get_db)
 ) -> Account:
-    """Authenticate a dashboard user via JWT session token."""
+    """Authenticate a dashboard user via JWT session token, falling back to workspace API key."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid auth header")
     token = authorization.removeprefix("Bearer ").strip()
+
+    # 1. Try decoding as JWT session token
     payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired session token")
+    if payload and "sub" in payload:
+        try:
+            account_id = uuid.UUID(payload["sub"])
+            result = await db.execute(select(Account).where(Account.id == account_id))
+            account = result.scalar_one_or_none()
+            if account:
+                return account
+        except (ValueError, TypeError):
+            pass
 
-    try:
-        account_id = uuid.UUID(payload["sub"])
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="Malformed session subject") from None
+    # 2. Try looking up workspace by API key and resolving linked account
+    key_hash = hash_api_key(token)
+    ws_result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
+    ws = ws_result.scalar_one_or_none()
+    if ws:
+        # Check linked account in account_workspaces
+        link_result = await db.execute(
+            select(Account)
+            .join(AccountWorkspace, AccountWorkspace.account_id == Account.id)
+            .where(AccountWorkspace.workspace_id == ws.id)
+            .order_by(AccountWorkspace.created_at.asc())
+        )
+        account = link_result.scalars().first()
+        if account:
+            return account
 
-    result = await db.execute(select(Account).where(Account.id == account_id))
-    account = result.scalar_one_or_none()
-    if not account:
-        raise HTTPException(status_code=401, detail="Account not found")
-    return account
+        # Fall back to account by admin_email
+        acc_by_email = await db.execute(select(Account).where(Account.email == ws.admin_email))
+        account = acc_by_email.scalar_one_or_none()
+        if account:
+            return account
+
+        # Auto-create account for this workspace admin if none exists yet
+        tier = "enterprise" if ws.admin_email == "admin@a2afirewall.dev" else "free"
+        account = Account(
+            email=ws.admin_email,
+            full_name=ws.admin_email.split("@")[0],
+            tier=tier,
+        )
+        db.add(account)
+        await db.flush()
+        link = AccountWorkspace(account_id=account.id, workspace_id=ws.id, role="owner")
+        db.add(link)
+        await db.commit()
+        return account
+
+    raise HTTPException(status_code=401, detail="Invalid or expired session token")
 
 
 async def get_current_workspace_for_account(

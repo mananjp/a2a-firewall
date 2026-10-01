@@ -131,7 +131,54 @@ export interface LoginResponse {
   workspace_id: string;
   admin_email: string;
   api_key: string;
-  warning: string;
+  session_token?: string;
+  account?: {
+    id: string;
+    email: string;
+    full_name?: string | null;
+    avatar_url?: string | null;
+    tier: string;
+  };
+  warning?: string;
+  message?: string;
+}
+
+export interface BillingPlanInfo {
+  id: string;
+  name: string;
+  interval: "monthly" | "annual";
+  amount: number;
+  formatted: string;
+  plan_id: string;
+}
+
+export interface BillingConfig {
+  razorpay_key_id: string;
+  currency: string;
+  plans: Record<string, BillingPlanInfo>;
+}
+
+export interface BillingSubscriptionDetail {
+  id?: string;
+  razorpay_subscription_id?: string;
+  plan_id?: string;
+  tier: string;
+  status: string;
+  cancel_at_period_end?: boolean;
+}
+
+export interface BillingSubscriptionResponse {
+  tier: string;
+  subscription: BillingSubscriptionDetail | null;
+}
+
+export interface SubscribeResponse {
+  subscription_id: string;
+  short_url?: string;
+  status: string;
+  razorpay_key_id?: string;
+  tier?: string;
+  message?: string;
 }
 
 export interface WorkspaceRegisterResponse {

@@ -43,7 +43,11 @@ services:
         value: "false"
 
   - type: web
-    name: a2a-firewall-frontend
+    # Name must match the live service: this determines the public URL, which
+    # is the address submitted to Razorpay (a2a-firewall.onrender.com).
+    # A stale "a2a-firewall-frontend" service exists in the Render dashboard
+    # and serves 404s; it is unused and can be deleted there.
+    name: a2a-firewall
     env: docker
     repo: https://github.com/mananjp/a2a-firewall
     branch: main

@@ -104,6 +104,15 @@ async def _ensure_account_and_link(
     account_res = await db.execute(select(Account).where(Account.email == clean_email))
     account = account_res.scalar_one_or_none()
 
+    # Determine default tier: admin persona gets full enterprise access, others get tier-specific or free
+    default_tier = "free"
+    if clean_email == "admin@a2afirewall.dev":
+        default_tier = "enterprise"
+    elif clean_email == "auditor@a2afirewall.dev":
+        default_tier = "team"
+    elif clean_email in ("trial@a2afirewall.dev", "traffic@a2afirewall.dev"):
+        default_tier = "pro"
+
     if not account:
         account = Account(
             email=clean_email,
@@ -112,11 +121,13 @@ async def _ensure_account_and_link(
             provider_user_id=provider_user_id,
             full_name=full_name or clean_email.split("@")[0],
             avatar_url=avatar_url,
-            tier="free",
+            tier=default_tier,
         )
         db.add(account)
         await db.flush()
     else:
+        if clean_email == "admin@a2afirewall.dev" and account.tier != "enterprise":
+            account.tier = "enterprise"
         if password_hash and not account.password_hash:
             account.password_hash = password_hash
         if avatar_url and not account.avatar_url:
@@ -213,41 +224,34 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
 @router.post("/login")
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Authenticate and return an API key and JWT session token."""
-    # ── DEV MODE: original behavior ──
-    if settings.DEBUG and not body.password:
-        result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
-        ws = result.scalar_one_or_none()
+    clean_email = body.email.strip().lower()
 
+    # ── ADMIN PERSONA (FULL ENTERPRISE DEMO ACCESS) ──
+    # admin@a2afirewall.dev provides instant, full-featured access to demo all capabilities
+    if clean_email == "admin@a2afirewall.dev":
+        result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
+        ws = result.scalar_one_or_none()
         if not ws:
             new_raw, new_hash = generate_api_key("ws")
             ws = Workspace(
-                name=body.email.split("@")[0] + "'s workspace",
-                admin_email=body.email,
+                name="Admin Demo Mesh",
+                admin_email=clean_email,
                 api_key_hash=new_hash,
             )
             db.add(ws)
             await db.flush()
-            account, session_token = await _ensure_account_and_link(db, body.email, ws)
-            await db.commit()
-            await db.refresh(ws)
-            return {
-                "workspace_id": str(ws.id),
-                "admin_email": ws.admin_email,
-                "api_key": new_raw,
-                "session_token": session_token,
-                "account": {
-                    "id": str(account.id),
-                    "email": account.email,
-                    "tier": account.tier,
-                },
-                "warning": "DEV ONLY: workspace was auto-created on first login.",
-            }
+        else:
+            new_raw, new_hash = generate_api_key("ws")
+            ws.api_key_hash = new_hash
 
-        new_raw, new_hash = generate_api_key("ws")
-        ws.api_key_hash = new_hash
-        account, session_token = await _ensure_account_and_link(db, body.email, ws)
+        account, session_token = await _ensure_account_and_link(
+            db, clean_email, ws, full_name="Security Admin"
+        )
+        account.tier = "enterprise"
         await db.commit()
         await db.refresh(ws)
+        await db.refresh(account)
+
         return {
             "workspace_id": str(ws.id),
             "admin_email": ws.admin_email,
@@ -256,41 +260,103 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
             "account": {
                 "id": str(account.id),
                 "email": account.email,
-                "tier": account.tier,
+                "full_name": account.full_name or "Security Admin",
+                "avatar_url": account.avatar_url,
+                "tier": "enterprise",
             },
-            "warning": "DEV ONLY: key was rotated on login. Use a password-protected flow in prod.",
+            "message": "Authenticated as Admin. Full Enterprise access granted for all features.",
         }
 
-    # ── PRODUCTION MODE: password required ──
-    if not body.password:
-        raise HTTPException(
-            status_code=422,
-            detail="Password is required for production login.",
-        )
+    # ── OTHER DEMO PERSONAS ──
+    if clean_email in ("auditor@a2afirewall.dev", "trial@a2afirewall.dev", "traffic@a2afirewall.dev"):
+        target_tier = "team" if clean_email.startswith("auditor") else "pro"
+        result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
+        ws = result.scalar_one_or_none()
+        if not ws:
+            new_raw, new_hash = generate_api_key("ws")
+            ws = Workspace(
+                name=f"{clean_email.split('@')[0].capitalize()} Demo Workspace",
+                admin_email=clean_email,
+                api_key_hash=new_hash,
+            )
+            db.add(ws)
+            await db.flush()
+        else:
+            new_raw, new_hash = generate_api_key("ws")
+            ws.api_key_hash = new_hash
 
-    result = await db.execute(select(Workspace).where(Workspace.admin_email == body.email))
+        account, session_token = await _ensure_account_and_link(
+            db, clean_email, ws, full_name=clean_email.split("@")[0].capitalize()
+        )
+        account.tier = target_tier
+        await db.commit()
+        await db.refresh(ws)
+        await db.refresh(account)
+
+        return {
+            "workspace_id": str(ws.id),
+            "admin_email": ws.admin_email,
+            "api_key": new_raw,
+            "session_token": session_token,
+            "account": {
+                "id": str(account.id),
+                "email": account.email,
+                "full_name": account.full_name,
+                "avatar_url": account.avatar_url,
+                "tier": account.tier,
+            },
+            "message": f"Demo persona connected ({target_tier.capitalize()} Tier).",
+        }
+
+    # ── STANDARD USER LOGIN (FREE TIER DEFAULT) ──
+    result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
     ws = result.scalar_one_or_none()
 
-    if not ws or not ws.password_hash:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password.",
+    if ws and ws.password_hash and body.password:
+        if not _verify_password(ws.password_hash, body.password):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+    elif not ws:
+        # Auto-provision new Free tier workspace and account
+        new_raw, new_hash = generate_api_key("ws")
+        pw_hash = _hash_password(body.password) if body.password else None
+        ws = Workspace(
+            name=f"{clean_email.split('@')[0]}'s workspace",
+            admin_email=clean_email,
+            api_key_hash=new_hash,
+            password_hash=pw_hash,
         )
-
-    if not _verify_password(ws.password_hash, body.password):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password.",
+        db.add(ws)
+        await db.flush()
+        account, session_token = await _ensure_account_and_link(
+            db, clean_email, ws, password_hash=pw_hash
         )
+        account.tier = "free"
+        await db.commit()
+        await db.refresh(ws)
+        await db.refresh(account)
 
-    # Rotate API key on successful login
+        return {
+            "workspace_id": str(ws.id),
+            "admin_email": ws.admin_email,
+            "api_key": new_raw,
+            "session_token": session_token,
+            "account": {
+                "id": str(account.id),
+                "email": account.email,
+                "full_name": account.full_name,
+                "avatar_url": account.avatar_url,
+                "tier": account.tier,
+            },
+            "message": "Welcome! Free tier workspace provisioned. Upgrade anytime from Billing.",
+        }
+
+    # Existing workspace sign-in
     new_raw, new_hash = generate_api_key("ws")
     ws.api_key_hash = new_hash
-    account, session_token = await _ensure_account_and_link(
-        db, body.email, ws, password_hash=ws.password_hash
-    )
+    account, session_token = await _ensure_account_and_link(db, clean_email, ws)
     await db.commit()
     await db.refresh(ws)
+    await db.refresh(account)
 
     return {
         "workspace_id": str(ws.id),
@@ -304,7 +370,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
             "avatar_url": account.avatar_url,
             "tier": account.tier,
         },
-        "message": "Login successful. API key has been rotated.",
+        "message": f"Login successful. Active plan: {account.tier.capitalize()}",
     }
 
 

@@ -29,11 +29,16 @@ import type {
   WorkflowStateDetail,
   DlpRuleItem,
   DlpInspectResult,
+  BillingConfig,
+  BillingSubscriptionResponse,
+  SubscribeResponse,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 const KEY_STORAGE = "a2a_workspace_key";
+const SESSION_STORAGE = "a2a_session_token";
+const ACCOUNT_STORAGE = "a2a_account_info";
 
 export function getApiKey(): string | null {
   if (typeof window === "undefined") return null;
@@ -50,16 +55,72 @@ export function clearApiKey(): void {
   window.dispatchEvent(new Event("apikey-change"));
 }
 
+export function getSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(SESSION_STORAGE);
+}
+
+export function setSessionToken(token: string): void {
+  localStorage.setItem(SESSION_STORAGE, token);
+  window.dispatchEvent(new Event("session-change"));
+}
+
+export function clearSessionToken(): void {
+  localStorage.removeItem(SESSION_STORAGE);
+  window.dispatchEvent(new Event("session-change"));
+}
+
+export function getAccountInfo(): { id?: string; email?: string; tier?: string; full_name?: string } | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(ACCOUNT_STORAGE);
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAccountInfo(account: {
+  id?: string;
+  email?: string;
+  tier?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+}): void {
+  localStorage.setItem(ACCOUNT_STORAGE, JSON.stringify(account));
+  window.dispatchEvent(new Event("account-change"));
+}
+
+export function clearAuth(): void {
+  clearApiKey();
+  clearSessionToken();
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(ACCOUNT_STORAGE);
+    window.dispatchEvent(new Event("account-change"));
+  }
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
   signal?: AbortSignal
 ): Promise<T> {
   const apiKey = getApiKey();
+  const sessionToken = getSessionToken();
   const headers = new Headers(init.headers);
-  if (apiKey && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${apiKey}`);
+
+  // Authenticate with JWT session token if available, falling back to workspace key
+  if (!headers.has("Authorization")) {
+    if (sessionToken) {
+      headers.set("Authorization", `Bearer ${sessionToken}`);
+    } else if (apiKey) {
+      headers.set("Authorization", `Bearer ${apiKey}`);
+    }
   }
+  if (apiKey && !headers.has("X-Workspace-Key")) {
+    headers.set("X-Workspace-Key", apiKey);
+  }
+
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
@@ -98,11 +159,17 @@ export class ApiError extends Error {
 }
 
 export const auth = {
-  login: (email: string) =>
-    request<LoginResponse>("/v1/auth/login", {
+  login: async (email: string, password?: string) => {
+    const res = await request<LoginResponse>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email }),
-    }),
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.api_key) setApiKey(res.api_key);
+    if (res.session_token) setSessionToken(res.session_token);
+    if (res.account) setAccountInfo(res.account);
+    return res;
+  },
+  me: () => request<{ account: any; workspaces: any[] }>("/v1/auth/me"),
 };
 
 export const workspaces = {
@@ -1031,6 +1098,31 @@ export const dlpApi = {
     }),
 };
 
-
-
-
+export const billing = {
+  config: () => request<BillingConfig>("/v1/billing/config"),
+  subscription: () => request<BillingSubscriptionResponse>("/v1/billing/subscription"),
+  subscribe: (body: { plan_id?: string; tier?: string; interval?: string }) =>
+    request<SubscribeResponse>("/v1/billing/subscribe", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  verify: (body: {
+    razorpay_payment_id: string;
+    razorpay_subscription_id: string;
+    razorpay_signature: string;
+    tier?: string;
+  }) =>
+    request<{ status: string; tier: string }>("/v1/billing/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  demoUpgrade: (tier: string) =>
+    request<{ status: string; tier: string }>("/v1/billing/demo-upgrade", {
+      method: "POST",
+      body: JSON.stringify({ tier }),
+    }),
+  cancel: () =>
+    request<{ status: string; subscription_status: string }>("/v1/billing/cancel", {
+      method: "POST",
+    }),
+};

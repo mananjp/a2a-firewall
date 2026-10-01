@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_PLAN_PRO_MONTHLY: str = ""
+    RAZORPAY_PLAN_PRO_ANNUAL: str = ""
+    RAZORPAY_PLAN_TEAM_MONTHLY: str = ""
+    RAZORPAY_PLAN_TEAM_ANNUAL: str = ""
 
 
 settings = Settings()

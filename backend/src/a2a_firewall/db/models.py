@@ -992,6 +992,7 @@ class BillingSubscription(Base):
     razorpay_customer_id: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
     razorpay_subscription_id: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]
     plan_id: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # e.g., "plan_ProTier"
+    tier: Mapped[str | None] = Column(String, default="pro", nullable=True)  # type: ignore[assignment]  # free | pro | team
     status: Mapped[str] = Column(String, default="active", nullable=False)  # type: ignore[assignment]  # active | past_due | canceled
     current_period_start: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
     current_period_end: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]

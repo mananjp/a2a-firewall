@@ -253,9 +253,18 @@ built-in compliance packs enforce.
   within India by running the Docker/Kubernetes/host instance on an Indian-region
   provider or on-premise).
 - **The public demo instance is not the deployment story.** `a2a-firewall1.onrender.com`
-  (and the `render.yaml` backend/frontend services) is a **US-region public demo**, used
-  to reproduce the case-study numbers. It is **not** where governed production traffic
-  flows, and it is not what a BFSI customer would rely on for residency.
+  (backend API) and `a2a-firewall.onrender.com` (frontend site) are a **US-region public
+  demo**, used to reproduce the case-study numbers. It is **not** where governed production
+  traffic flows, and it is not what a BFSI customer would rely on for residency.
+- **Service names are load-bearing.** The `render.yaml` service name determines the public
+  URL. The frontend service is named `a2a-firewall` so its URL is
+  `a2a-firewall.onrender.com` — the address submitted to Razorpay and the one linked from
+  the Terms/Privacy/Refund/Pricing/Contact pages. Renaming it would change the URL and
+  invalidate that verification. A leftover `a2a-firewall-frontend` service exists in the
+  Render dashboard serving 404s; it is unused and safe to delete.
+- **Adding a custom domain requires re-verification.** If the site moves off
+  `a2a-firewall.onrender.com`, the new URL must be re-submitted to Razorpay; approval does
+  not transfer automatically.
 - **How to deploy in-region:** use the self-hosted patterns in this guide — Docker
   sidecar (§2), Kubernetes sidecar (§3), or Linux host (§6 Platform Support Matrix) — on
   infrastructure you choose (Indian-region cloud VPC or on-prem). The detection

@@ -31,6 +31,7 @@ import {
   Lock,
   UserCheck,
   Workflow,
+  CreditCard,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
 
@@ -67,6 +68,7 @@ const SECTIONS: NavSection[] = [
   {
     title: "Governance & Control",
     items: [
+      { href: "/dashboard/billing", label: "Billing & Plans", icon: CreditCard, badge: "Razorpay" },
       { href: "/dashboard/spend", label: "Spend & Budgets", icon: DollarSign },
       { href: "/dashboard/rbac", label: "Access & RBAC", icon: Users },
       { href: "/dashboard/network", label: "Network & IP Filter", icon: Network },
