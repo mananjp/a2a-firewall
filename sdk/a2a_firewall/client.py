@@ -387,7 +387,7 @@ class A2AFirewall:
             "declared_intent": declared_intent,
             "trace_id": self._ctx.get("trace_id"),
             "parent_span_id": self._ctx.get("span_id"),
-            "sdk_version": "0.4.1",
+            "sdk_version": "0.4.2",
             "depth": depth,
             "sender_signature": signature,
             "message_hash": msg_hash,
@@ -401,7 +401,7 @@ class A2AFirewall:
         # ── OTel (auto when opentelemetry-api installed) ──
         span = None
         if _OTEL_AVAILABLE:
-            span = trace.get_tracer("a2a-firewall-sdk", "0.2.0").start_span(
+            span = trace.get_tracer("a2a-firewall-sdk", "0.4.2").start_span(
                 "firewall.inspect",
                 kind=SpanKind.CLIENT,
                 attributes={

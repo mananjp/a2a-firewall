@@ -8,4 +8,4 @@ from a2a_firewall.client import (
 )
 
 __all__ = ["A2AFirewall", "FirewallBlockedError", "FirewallConfig", "FirewallResponse"]
-__version__ = "0.2.0"
+__version__ = "0.4.2"
