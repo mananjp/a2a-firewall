@@ -300,3 +300,23 @@ def test_get_and_verify_evidence():
         ver = fw.verify_evidence("dec-1")
     assert ev["decision_id"] == "dec-1"
     assert ver["valid"] is True
+
+
+def test_tokenize_and_detokenize():
+    fw = make_fw()
+    mock_tok = MagicMock()
+    mock_tok.json.return_value = {"tokenized_text": "Patient tok_ssn_1234"}
+    mock_tok.raise_for_status = lambda: None
+
+    mock_detok = MagicMock()
+    mock_detok.json.return_value = {"text": "Patient 999-88-7777"}
+    mock_detok.raise_for_status = lambda: None
+
+    with patch.object(fw._http, "post", side_effect=[mock_tok, mock_detok]):
+        tok_res = fw.tokenize(
+            "Patient 999-88-7777", destination="external", entity_type="pii"
+        )
+        detok_res = fw.detokenize("Patient tok_ssn_1234", purpose="medical_audit")
+
+    assert tok_res["tokenized_text"] == "Patient tok_ssn_1234"
+    assert detok_res["text"] == "Patient 999-88-7777"

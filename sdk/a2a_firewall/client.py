@@ -595,6 +595,33 @@ class A2AFirewall:
         resp.raise_for_status()
         return resp.json()
 
+    def tokenize(
+        self,
+        text: str,
+        destination: str = "external",
+        entity_type: str = "pii",
+    ) -> dict[str, Any]:
+        """Reversibly tokenize sensitive entities in text using the cryptographic vault."""
+        resp = self._http.post(
+            "/v1/dlp/tokenize",
+            json={
+                "text": text,
+                "destination": destination,
+                "entity_type": entity_type,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def detokenize(self, text: str, purpose: str) -> dict[str, Any]:
+        """Safely detokenize previously vaulted surrogate tokens (requires business purpose)."""
+        resp = self._http.post(
+            "/v1/dlp/detokenize",
+            json={"text": text, "purpose": purpose},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def get_evidence(self, decision_id: str) -> dict[str, Any]:
         """Fetch signed decision evidence envelope by decision ID."""
         resp = self._http.get(f"/v1/evidence/{decision_id}")

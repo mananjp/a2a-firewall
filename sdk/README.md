@@ -118,17 +118,32 @@ print(f"Matched safe chunks: {search_res['results']}")
 Protect sensitive data flowing to external LLM providers or third-party webhooks:
 
 ```python
-raw_prompt = "Customer John Doe with PAN ABCDE1234F requested balance check."
+raw_prompt = "Customer John Doe with PAN ABCDE1234F and email john@example.com requested balance check."
 
-# Tokenize PII using reversible HMAC vault
+# 1. Direct reversible tokenization via cryptographic vault
+vault_res = firewall.tokenize(
+    text=raw_prompt,
+    destination="external",
+    entity_type="pii",
+)
+vault_text = vault_res["tokenized_text"]
+print(f"Tokenized: {vault_text}")
+
+# 2. Safely detokenize when authorized business purpose is provided
+detokenized_res = firewall.detokenize(
+    text=vault_text,
+    purpose="customer_support_verification",
+)
+print(f"Restored: {detokenized_res['text']}")
+
+# 3. Or inspect and transform in a single DLP pipeline evaluation
 dlp_res = firewall.inspect_dlp(
     text=raw_prompt,
     destination="llm_provider",  # "llm_provider" | "external" | "partner" | "internal"
     tokenize=True,
 )
-
 print(f"Action taken: {dlp_res['action']}")                    # "tokenize" | "redact" | "block"
-print(f"Transformed: {dlp_res.get('transformed_text')}")      # "Customer John Doe with PAN [TOKEN_PAN_...]..."
+print(f"Transformed: {dlp_res.get('transformed_text')}")
 print(f"Detected entities: {dlp_res['findings']}")
 ```
 

@@ -406,6 +406,32 @@ export class A2AFirewall {
     return res.json();
   }
 
+  async tokenize(text: string, destination: string = 'external', entityType: string = 'pii'): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/dlp/tokenize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ text, destination, entity_type: entityType }),
+    });
+    if (!res.ok) throw new Error(`tokenize failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async detokenize(text: string, purpose: string): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/dlp/detokenize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ text, purpose }),
+    });
+    if (!res.ok) throw new Error(`detokenize failed with status ${res.status}`);
+    return res.json();
+  }
+
   async getEvidence(decisionId: string): Promise<any> {
     const res = await fetch(`${this.config.firewallUrl}/v1/evidence/${decisionId}`, {
       headers: { Authorization: `Bearer ${this.config.agentApiKey}` },

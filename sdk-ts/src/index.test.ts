@@ -209,6 +209,12 @@ describe('A2AFirewall Client', () => {
       if (u.includes('/dlp/inspect')) {
         return { ok: true, json: async () => ({ action: 'redact', transformed_text: 'redacted' }) } as any;
       }
+      if (u.includes('/dlp/tokenize')) {
+        return { ok: true, json: async () => ({ tokenized_text: 'Hello [VAULT:EMAIL:12345]', count: 1 }) } as any;
+      }
+      if (u.includes('/dlp/detokenize')) {
+        return { ok: true, json: async () => ({ text: 'Hello alice@example.com' }) } as any;
+      }
       if (u.includes('/evidence/dec-1/verify')) {
         return { ok: true, json: async () => ({ decision_id: 'dec-1', valid: true }) } as any;
       }
@@ -233,6 +239,12 @@ describe('A2AFirewall Client', () => {
 
       const dlpRes = await fw.inspectDlp('Sensitive data');
       expect(dlpRes.action).toBe('redact');
+
+      const tokenized = await fw.tokenize('Hello alice@example.com');
+      expect(tokenized.tokenized_text).toBe('Hello [VAULT:EMAIL:12345]');
+
+      const detokenized = await fw.detokenize('Hello [VAULT:EMAIL:12345]', 'support_resolution');
+      expect(detokenized.text).toBe('Hello alice@example.com');
 
       const ev = await fw.getEvidence('dec-1');
       expect(ev.decision_id).toBe('dec-1');

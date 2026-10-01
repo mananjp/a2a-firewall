@@ -108,9 +108,25 @@ console.log(`Matched safe chunks:`, searchRes.results);
 Protect sensitive data flowing to external LLM providers or third-party webhooks:
 
 ```typescript
-const rawPrompt = 'Customer John Doe with PAN ABCDE1234F requested balance check.';
+const rawPrompt = 'Customer John Doe with PAN ABCDE1234F and email john@example.com requested balance check.';
 
-// Tokenize PII using reversible HMAC vault
+// 1. Direct reversible tokenization via cryptographic vault
+const vaultRes = await firewall.tokenize(
+  rawPrompt,
+  'external',
+  'pii'
+);
+const vaultText = vaultRes.tokenized_text;
+console.log(`Tokenized: ${vaultText}`);
+
+// 2. Safely detokenize when authorized business purpose is provided
+const detokenizedRes = await firewall.detokenize(
+  vaultText,
+  'customer_support_verification'
+);
+console.log(`Restored: ${detokenizedRes.text}`);
+
+// 3. Or inspect and transform in a single DLP pipeline evaluation
 const dlpRes = await firewall.inspectDlp(
   rawPrompt,
   'llm_provider',  // 'llm_provider' | 'external' | 'partner' | 'internal'
@@ -119,7 +135,7 @@ const dlpRes = await firewall.inspectDlp(
 );
 
 console.log(`Action taken: ${dlpRes.action}`);                     // 'tokenize' | 'redact' | 'block'
-console.log(`Transformed: ${dlpRes.transformed_text}`);           // 'Customer John Doe with PAN [TOKEN_PAN_...]...'
+console.log(`Transformed: ${dlpRes.transformed_text}`);
 console.log(`Detected entities:`, dlpRes.findings);
 ```
 
