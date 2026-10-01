@@ -450,3 +450,27 @@ def test_billing_demo_upgrade_endpoint():
     finally:
         app.dependency_overrides.clear()
 
+
+@pytest.mark.asyncio
+async def test_get_current_workspace_with_jwt_token():
+    mock_db = AsyncMock()
+    ws_id = uuid.uuid4()
+    ws = Workspace(id=ws_id, name="JWT Workspace", admin_email="admin@a2afirewall.dev", api_key_hash="hash")
+
+    mock_ws_result = MagicMock()
+    mock_ws_result.scalar_one_or_none.return_value = ws
+    mock_db.execute.return_value = mock_ws_result
+
+    token = create_access_token({"sub": str(uuid.uuid4()), "email": "admin@a2afirewall.dev", "workspace_id": str(ws_id)})
+
+    from a2a_firewall.api.deps import get_current_workspace
+    resolved_ws = await get_current_workspace(
+        authorization=f"Bearer {token}",
+        x_workspace_key=None,
+        x_workspace_id=None,
+        db=mock_db,
+    )
+    assert resolved_ws.id == ws_id
+    assert resolved_ws.admin_email == "admin@a2afirewall.dev"
+
+

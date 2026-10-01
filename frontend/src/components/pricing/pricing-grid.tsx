@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getApiKey } from "@/lib/api";
+import { getApiKey, getSessionToken } from "@/lib/api";
 import {
   PLANS,
   formatINR,
@@ -108,7 +108,7 @@ function CycleButton({
 function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   useEffect(() => {
-    setIsLoggedIn(Boolean(getApiKey()));
+    setIsLoggedIn(Boolean(getApiKey() || getSessionToken()));
   }, []);
 
   const isCustom = plan.priceMonthly === null;

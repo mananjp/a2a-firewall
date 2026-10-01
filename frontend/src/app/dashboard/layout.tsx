@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useApiKey } from "@/hooks/use-api-key";
+import { getSessionToken } from "@/lib/api";
 import { Shell } from "@/components/layout/shell";
 
 export default function DashboardLayout({
@@ -19,13 +20,15 @@ export default function DashboardLayout({
     setMounted(true);
   }, []);
 
+  const hasAuth = Boolean(apiKey || getSessionToken());
+
   useEffect(() => {
-    if (mounted && !apiKey) {
+    if (mounted && !hasAuth) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
-  }, [mounted, apiKey, router, pathname]);
+  }, [mounted, hasAuth, router, pathname]);
 
-  if (!mounted || !apiKey) {
+  if (!mounted || !hasAuth) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />

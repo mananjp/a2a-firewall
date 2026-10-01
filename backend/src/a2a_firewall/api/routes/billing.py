@@ -19,6 +19,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _is_local_subscription_id(sub_id: str | None) -> bool:
+    """Return True if the subscription ID was generated locally (not by Razorpay).
+
+    Locally-generated fallback IDs use the format ``sub_<14-hex-chars>``
+    (e.g. ``sub_195bcfadf21b4b``).  Real Razorpay IDs use mixed alphanumeric
+    characters that are never pure hex.
+    """
+    if not sub_id or not sub_id.startswith("sub_"):
+        return False
+    suffix = sub_id[4:]
+    try:
+        int(suffix, 16)
+        return True
+    except ValueError:
+        return False
+
+
 class SubscribeRequest(BaseModel):
     plan_id: str | None = None
     tier: str = "pro"  # pro | team
@@ -114,7 +131,7 @@ async def create_subscription(
         BillingSubscription.status == "active",
     )
     result = await db.execute(stmt)
-    existing_sub = result.scalar_one_or_none()
+    existing_sub = result.scalars().first()
     if existing_sub and getattr(existing_sub, "tier", None) == req_tier:
         return {
             "subscription_id": existing_sub.razorpay_subscription_id,
@@ -127,7 +144,7 @@ async def create_subscription(
     stmt_cust = select(BillingSubscription.razorpay_customer_id).where(
         BillingSubscription.account_id == current_account.id,
         BillingSubscription.razorpay_customer_id.isnot(None),
-    )
+    ).limit(1)
     result_cust = await db.execute(stmt_cust)
     customer_id = result_cust.scalar_one_or_none()
 
@@ -258,6 +275,7 @@ async def get_subscription(
         sub
         and sub.status in ("created", "authenticated")
         and sub.razorpay_subscription_id
+        and not _is_local_subscription_id(sub.razorpay_subscription_id)
         and settings.RAZORPAY_KEY_ID
     ):
         try:
@@ -298,13 +316,13 @@ async def cancel_subscription(
         BillingSubscription.status == "active",
     )
     result = await db.execute(stmt)
-    sub = result.scalar_one_or_none()
+    sub = result.scalars().first()
 
     if not sub or not sub.razorpay_subscription_id:
         raise HTTPException(status_code=404, detail="No active subscription found.")
 
     try:
-        if settings.RAZORPAY_KEY_ID and not sub.razorpay_subscription_id.startswith("sub_demo_"):
+        if settings.RAZORPAY_KEY_ID and not _is_local_subscription_id(sub.razorpay_subscription_id):
             resp = await razorpay_client.cancel_subscription(
                 sub.razorpay_subscription_id, cancel_at_cycle_end=True
             )
