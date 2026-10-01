@@ -127,7 +127,6 @@ async def revoke_api_key(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid API key ID format") from None
 
-
     result = await db.execute(
         select(APIKeyRecord).where(
             APIKeyRecord.id == key_uuid,

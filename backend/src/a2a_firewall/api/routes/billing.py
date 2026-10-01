@@ -25,8 +25,7 @@ async def create_subscription(
     """Create a new Razorpay subscription for the user."""
     # Check if the user already has an active subscription
     stmt = select(BillingSubscription).where(
-        BillingSubscription.account_id == current_account.id,
-        BillingSubscription.status == "active"
+        BillingSubscription.account_id == current_account.id, BillingSubscription.status == "active"
     )
     result = await db.execute(stmt)
     existing_sub = result.scalar_one_or_none()
@@ -39,22 +38,20 @@ async def create_subscription(
         # We need to query if they already have a customer ID in any subscription row (even canceled)
         stmt_cust = select(BillingSubscription.razorpay_customer_id).where(
             BillingSubscription.account_id == current_account.id,
-            BillingSubscription.razorpay_customer_id.isnot(None)
+            BillingSubscription.razorpay_customer_id.isnot(None),
         )
         result_cust = await db.execute(stmt_cust)
         customer_id = result_cust.scalar_one_or_none()
 
         if not customer_id:
             customer_resp = await razorpay_client.create_customer(
-                name=current_account.full_name or current_account.email,
-                email=current_account.email
+                name=current_account.full_name or current_account.email, email=current_account.email
             )
             customer_id = customer_resp["id"]
 
         # 2. Create subscription
         sub_resp = await razorpay_client.create_subscription(
-            plan_id=plan_id,
-            customer_id=customer_id
+            plan_id=plan_id, customer_id=customer_id
         )
 
         # 3. Store in DB (status is usually 'created' initially, will be activated via webhook)
@@ -63,7 +60,7 @@ async def create_subscription(
             razorpay_customer_id=customer_id,
             razorpay_subscription_id=sub_resp["id"],
             plan_id=plan_id,
-            status=sub_resp["status"]
+            status=sub_resp["status"],
         )
         db.add(new_sub)
         await db.commit()
@@ -71,11 +68,13 @@ async def create_subscription(
         return {
             "subscription_id": sub_resp["id"],
             "short_url": sub_resp.get("short_url"),
-            "status": sub_resp["status"]
+            "status": sub_resp["status"],
         }
     except RazorpayClientError as e:
         logger.error(f"Failed to create subscription: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create Razorpay subscription.") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to create Razorpay subscription."
+        ) from e
 
 
 @router.get("/subscription")
@@ -84,9 +83,11 @@ async def get_subscription(
     current_account: Account = Depends(get_current_account),
 ) -> Any:
     """Get the current billing subscription for the user."""
-    stmt = select(BillingSubscription).where(
-        BillingSubscription.account_id == current_account.id
-    ).order_by(BillingSubscription.created_at.desc())
+    stmt = (
+        select(BillingSubscription)
+        .where(BillingSubscription.account_id == current_account.id)
+        .order_by(BillingSubscription.created_at.desc())
+    )
     result = await db.execute(stmt)
     sub = result.scalars().first()
 
@@ -109,7 +110,7 @@ async def get_subscription(
             "razorpay_subscription_id": sub.razorpay_subscription_id,
             "plan_id": sub.plan_id,
             "status": sub.status,
-            "cancel_at_period_end": sub.cancel_at_period_end
+            "cancel_at_period_end": sub.cancel_at_period_end,
         }
     }
 
@@ -121,8 +122,7 @@ async def cancel_subscription(
 ) -> Any:
     """Cancel the active subscription at the end of the billing cycle."""
     stmt = select(BillingSubscription).where(
-        BillingSubscription.account_id == current_account.id,
-        BillingSubscription.status == "active"
+        BillingSubscription.account_id == current_account.id, BillingSubscription.status == "active"
     )
     result = await db.execute(stmt)
     sub = result.scalar_one_or_none()
@@ -132,8 +132,7 @@ async def cancel_subscription(
 
     try:
         resp = await razorpay_client.cancel_subscription(
-            sub.razorpay_subscription_id,
-            cancel_at_cycle_end=True
+            sub.razorpay_subscription_id, cancel_at_cycle_end=True
         )
         sub.cancel_at_period_end = True
         # If canceled immediately by Razorpay, update status
@@ -146,7 +145,9 @@ async def cancel_subscription(
         return {"status": "success", "subscription_status": sub.status}
     except RazorpayClientError as e:
         logger.error(f"Failed to cancel subscription: {e}")
-        raise HTTPException(status_code=500, detail="Failed to cancel subscription with Razorpay.") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to cancel subscription with Razorpay."
+        ) from e
 
 
 @router.post("/webhook")
@@ -179,7 +180,9 @@ async def razorpay_webhook(
         if not rzp_sub_id:
             return Response(status_code=200)
 
-        stmt = select(BillingSubscription).where(BillingSubscription.razorpay_subscription_id == rzp_sub_id)
+        stmt = select(BillingSubscription).where(
+            BillingSubscription.razorpay_subscription_id == rzp_sub_id
+        )
         result = await db.execute(stmt)
         subscription = result.scalar_one_or_none()
 

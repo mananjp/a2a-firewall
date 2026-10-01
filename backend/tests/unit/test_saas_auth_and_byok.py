@@ -361,7 +361,9 @@ def test_api_keys_crud():
         mock_res.scalar_one_or_none.return_value = key_record
         mock_db.execute.return_value = mock_res
 
-        resp = client.delete(f"/v1/api-keys/{key_record.id}", headers={"Authorization": "Bearer ws_key"})
+        resp = client.delete(
+            f"/v1/api-keys/{key_record.id}", headers={"Authorization": "Bearer ws_key"}
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "revoked"
         assert key_record.is_revoked is True

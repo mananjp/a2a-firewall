@@ -76,7 +76,9 @@ async def get_current_workspace_for_account(
         try:
             ws_uuid = uuid.UUID(x_workspace_id)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid X-Workspace-Id header format") from None
+            raise HTTPException(
+                status_code=400, detail="Invalid X-Workspace-Id header format"
+            ) from None
 
         membership = await db.execute(
             select(AccountWorkspace).where(

@@ -1021,11 +1021,11 @@ class UsageMeter(Base):
     llm_inspections_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
     api_calls_count: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
     bandwidth_bytes: Mapped[int] = Column(Integer, default=0, nullable=False)  # type: ignore[assignment]
-    
+
     # Tier limits (denormalized for fast enforcement)
     inspections_limit: Mapped[int] = Column(Integer, default=10000, nullable=False)  # type: ignore[assignment]
     llm_inspections_limit: Mapped[int | None] = Column(Integer, nullable=True)  # type: ignore[assignment]
-    
+
     created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
         DateTime(timezone=True), default=datetime.utcnow
     )

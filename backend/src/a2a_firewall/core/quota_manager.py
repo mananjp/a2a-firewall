@@ -75,9 +75,10 @@ TIER_LIMITS: dict[str, TierLimits] = {
 async def get_workspace_tier(workspace_id: uuid.UUID, db: AsyncSession) -> str:
     """Resolve the tier of the workspace owner."""
     # Find the owner of this workspace
-    stmt = select(Account).join(AccountWorkspace).where(
-        AccountWorkspace.workspace_id == workspace_id,
-        AccountWorkspace.role == "owner"
+    stmt = (
+        select(Account)
+        .join(AccountWorkspace)
+        .where(AccountWorkspace.workspace_id == workspace_id, AccountWorkspace.role == "owner")
     )
     res = await db.execute(stmt)
     owner = res.scalar_one_or_none()
@@ -91,8 +92,7 @@ async def get_or_create_usage_meter(workspace_id: uuid.UUID, db: AsyncSession) -
     period = datetime.now(UTC).strftime("%Y-%m")
 
     stmt = select(UsageMeter).where(
-        UsageMeter.workspace_id == workspace_id,
-        UsageMeter.period == period
+        UsageMeter.workspace_id == workspace_id, UsageMeter.period == period
     )
     res = await db.execute(stmt)
     meter = res.scalar_one_or_none()
@@ -105,7 +105,9 @@ async def get_or_create_usage_meter(workspace_id: uuid.UUID, db: AsyncSession) -
             workspace_id=workspace_id,
             period=period,
             inspections_limit=limits["inspections_per_month"] or 999999999,
-            llm_inspections_limit=limits["inspections_per_month"] if limits["llm_layer_enabled"] else 0,
+            llm_inspections_limit=limits["inspections_per_month"]
+            if limits["llm_layer_enabled"]
+            else 0,
         )
         db.add(meter)
         await db.commit()
@@ -114,7 +116,9 @@ async def get_or_create_usage_meter(workspace_id: uuid.UUID, db: AsyncSession) -
     return meter
 
 
-async def check_tier_quota(workspace_id: uuid.UUID, db: AsyncSession) -> tuple[bool, dict[str, Any]]:
+async def check_tier_quota(
+    workspace_id: uuid.UUID, db: AsyncSession
+) -> tuple[bool, dict[str, Any]]:
     """Check if the workspace has remaining inspections for the month."""
     meter = await get_or_create_usage_meter(workspace_id, db)
 
@@ -122,22 +126,13 @@ async def check_tier_quota(workspace_id: uuid.UUID, db: AsyncSession) -> tuple[b
     # For enterprise, inspections_limit could be logically infinite or high
     used = meter.inspections_count or 0
     if meter.inspections_limit and used >= meter.inspections_limit:
-        return False, {
-            "used": meter.inspections_count,
-            "limit": meter.inspections_limit
-        }
+        return False, {"used": meter.inspections_count, "limit": meter.inspections_limit}
 
-    return True, {
-        "used": meter.inspections_count,
-        "limit": meter.inspections_limit
-    }
+    return True, {"used": meter.inspections_count, "limit": meter.inspections_limit}
 
 
 async def record_inspection_usage(
-    workspace_id: uuid.UUID,
-    llm_called: bool,
-    payload_size: int,
-    db: AsyncSession
+    workspace_id: uuid.UUID, llm_called: bool, payload_size: int, db: AsyncSession
 ) -> None:
     """Increment the usage counters after an inspection."""
     meter = await get_or_create_usage_meter(workspace_id, db)

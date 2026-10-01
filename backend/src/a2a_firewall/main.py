@@ -15,11 +15,11 @@ from a2a_firewall.api.routes import (
     api_keys,
     audit,
     auth,
+    billing,
     compliance,
     cve,
     delegation,
     demo,
-    billing,
     dlp,
     evidence,
     firewall,
@@ -33,7 +33,6 @@ from a2a_firewall.api.routes import (
     review,
     schemas,
     scim,
-    settings as settings_routes,
     simulation,
     soc,
     spend,
@@ -44,6 +43,9 @@ from a2a_firewall.api.routes import (
     workflows,
     workspaces,
 )
+from a2a_firewall.api.routes import (
+    settings as settings_routes,
+)
 from a2a_firewall.core.config import settings
 from a2a_firewall.core.network_security import check_ip_allowlist, extract_client_ip
 from a2a_firewall.core.rate_limit import check_workspace
@@ -53,7 +55,6 @@ from a2a_firewall.core.sentry import setup_sentry
 from a2a_firewall.core.telemetry import setup_telemetry
 from a2a_firewall.db.database import AsyncSessionLocal
 from a2a_firewall.db.models import Agent, APIKeyRecord, Workspace
-
 
 logger = logging.getLogger("a2a_firewall")
 
@@ -124,12 +125,13 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
                         key = f"ws:{ak_row.workspace_id}"
                         ws_id = ak_row.workspace_id
                     else:
-                        ag = await session.execute(select(Agent).where(Agent.api_key_hash == key_hash))
+                        ag = await session.execute(
+                            select(Agent).where(Agent.api_key_hash == key_hash)
+                        )
                         ag_row = ag.scalar_one_or_none()
                         if ag_row is not None:
                             key = f"ws:{ag_row.workspace_id}"
                             ws_id = ag_row.workspace_id
-
 
                 # Enforce IP Allowlist if workspace resolved and not public endpoint
                 if ws_id and not is_public_endpoint:
@@ -224,7 +226,6 @@ app.include_router(dlp.router, prefix="/v1/dlp", tags=["dlp"])
 app.include_router(settings_routes.router, prefix="/v1/settings", tags=["settings"])
 app.include_router(api_keys.router, prefix="/v1/api-keys", tags=["api-keys"])
 app.include_router(billing.router, prefix="/v1/billing", tags=["billing"])
-
 
 
 @app.get("/health")

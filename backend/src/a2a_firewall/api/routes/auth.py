@@ -415,7 +415,9 @@ async def github_oauth_callback(
                     email = item.get("email")
                     break
         if not email:
-            raise HTTPException(status_code=400, detail="No verified email found on GitHub account.")
+            raise HTTPException(
+                status_code=400, detail="No verified email found on GitHub account."
+            )
 
     clean_email = email.strip().lower()
 

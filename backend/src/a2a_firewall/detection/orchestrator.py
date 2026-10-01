@@ -116,7 +116,9 @@ async def run_inspection(
             ),
             "upgrade_url": upgrade_url,
             "risk_score": 1.0,
-            "violations": [{"layer": "quota", "violation_type": "tier_limit_reached", "severity": "critical"}],
+            "violations": [
+                {"layer": "quota", "violation_type": "tier_limit_reached", "severity": "critical"}
+            ],
             "task_id": request_data.get("task_id"),
         }
 
@@ -691,7 +693,11 @@ async def run_inspection(
     )
     # If no BYOK config is found in the DB, but settings.GROQ_API_KEY is available (e.g. dev/test mode),
     # fallback to platform Groq so tests without mock BYOK pass seamlessly.
-    if skip_reason == "no_llm_key_configured" and settings.GROQ_API_KEY and settings.GROQ_API_KEY != "":
+    if (
+        skip_reason == "no_llm_key_configured"
+        and settings.GROQ_API_KEY
+        and settings.GROQ_API_KEY != ""
+    ):
         skip_reason = None
 
     tier = await get_workspace_tier(workspace.id, db)

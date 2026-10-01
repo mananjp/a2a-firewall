@@ -103,9 +103,13 @@ class ProviderAdapter(ABC):
             messages=messages, model=model or self.config.model or DEFAULT_MODEL, stream=False
         )
         headers = {}
-        if self.config.api_key and "authorization" not in {k.lower() for k in (self.config.extra_headers or {})}:
+        if self.config.api_key and "authorization" not in {
+            k.lower() for k in (self.config.extra_headers or {})
+        }:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        resp = await self._client.post(self._endpoint(), json=body, headers=headers if headers else None)
+        resp = await self._client.post(
+            self._endpoint(), json=body, headers=headers if headers else None
+        )
         resp.raise_for_status()
         return self.parse_response(resp)
 
@@ -164,10 +168,13 @@ class OpenAIAdapter(ProviderAdapter):
         buffer = StreamingInspectBuffer(inspect=inspect, holdback_chars=holdback_chars)
         collected: list[str] = []
         headers = {}
-        if self.config.api_key and "authorization" not in {k.lower() for k in (self.config.extra_headers or {})}:
+        if self.config.api_key and "authorization" not in {
+            k.lower() for k in (self.config.extra_headers or {})
+        }:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        async with self._client.stream("POST", self._endpoint(), json=body, headers=headers if headers else None) as resp:
-
+        async with self._client.stream(
+            "POST", self._endpoint(), json=body, headers=headers if headers else None
+        ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line:

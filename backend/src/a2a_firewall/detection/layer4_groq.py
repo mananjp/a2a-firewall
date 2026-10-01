@@ -96,7 +96,9 @@ async def get_llm_client_for_workspace(
         return None, "no_llm_key_configured", llm_config
 
     try:
-        raw_key = decrypt_api_key(llm_config.api_key_encrypted) if llm_config.api_key_encrypted else ""
+        raw_key = (
+            decrypt_api_key(llm_config.api_key_encrypted) if llm_config.api_key_encrypted else ""
+        )
     except Exception:
         return None, "llm_key_decryption_failed", llm_config
 
@@ -108,7 +110,6 @@ async def get_llm_client_for_workspace(
     )
     adapter = build_adapter(provider, provider_config)
     return adapter, None, llm_config
-
 
 
 def _clean_json_str(raw: str) -> str:
@@ -439,8 +440,14 @@ async def groq_inspect(
     start = time.monotonic()
     try:
         if llm_client is not None:
-            chosen_model = model_override or llm_client.config.model or (
-                settings.GROQ_MODEL if getattr(llm_client, "provider_name", "") == "groq" else DEFAULT_MODEL
+            chosen_model = (
+                model_override
+                or llm_client.config.model
+                or (
+                    settings.GROQ_MODEL
+                    if getattr(llm_client, "provider_name", "") == "groq"
+                    else DEFAULT_MODEL
+                )
             )
             call_res = await llm_client.chat(
                 messages=[{"role": "user", "content": prompt}],
@@ -495,7 +502,6 @@ async def groq_inspect(
     except Exception as e:  # noqa: BLE001
         latency_ms = int((time.monotonic() - start) * 1000)
         return _groq_unavailable(latency_ms, "groq_unavailable", str(e))
-
 
 
 def _groq_fallback(latency_ms: int, code: str, detail: str, workspace: Any) -> dict[str, Any]:

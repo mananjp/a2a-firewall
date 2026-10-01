@@ -60,12 +60,12 @@ mypy_path = "src"
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["groq.*", "opentelemetry.*", "jsonschema.*"]
+module = ["groq.*", "opentelemetry.*", "jsonschema.*", "jose.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["a2a_firewall.db.migrations.versions.*"]
-disallow_untyped_calls = false
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

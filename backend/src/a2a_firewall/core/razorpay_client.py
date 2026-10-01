@@ -9,6 +9,7 @@ from a2a_firewall.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class RazorpayClientError(Exception):
     pass
 
@@ -33,18 +34,16 @@ class RazorpayClient:
             except httpx.HTTPStatusError as e:
                 err_body = e.response.text
                 logger.error(f"Razorpay API Error {e.response.status_code}: {err_body}")
-                raise RazorpayClientError(f"Razorpay API request failed: {e.response.status_code}") from e
+                raise RazorpayClientError(
+                    f"Razorpay API request failed: {e.response.status_code}"
+                ) from e
             except Exception as e:
                 logger.error(f"Razorpay API Request Failed: {e}")
                 raise RazorpayClientError(f"Razorpay API request failed: {e}") from e
 
     async def create_customer(self, name: str, email: str, contact: str | None = None) -> Any:
         """Create a new customer in Razorpay."""
-        payload: dict[str, Any] = {
-            "name": name,
-            "email": email,
-            "fail_existing": 0
-        }
+        payload: dict[str, Any] = {"name": name, "email": email, "fail_existing": 0}
         if contact:
             payload["contact"] = contact
 
@@ -82,11 +81,11 @@ class RazorpayClient:
         """Fetch an existing subscription from Razorpay."""
         return await self._request("GET", f"/subscriptions/{subscription_id}")
 
-    async def cancel_subscription(self, subscription_id: str, cancel_at_cycle_end: bool = False) -> Any:
+    async def cancel_subscription(
+        self, subscription_id: str, cancel_at_cycle_end: bool = False
+    ) -> Any:
         """Cancel an active subscription."""
-        payload = {
-            "cancel_at_cycle_end": 1 if cancel_at_cycle_end else 0
-        }
+        payload = {"cancel_at_cycle_end": 1 if cancel_at_cycle_end else 0}
         return await self._request("POST", f"/subscriptions/{subscription_id}/cancel", json=payload)
 
     def verify_webhook_signature(self, payload_body: str, razorpay_signature: str) -> bool:
@@ -95,9 +94,7 @@ class RazorpayClient:
             return False
 
         expected_signature = hmac.new(
-            settings.RAZORPAY_WEBHOOK_SECRET.encode(),
-            payload_body.encode(),
-            hashlib.sha256
+            settings.RAZORPAY_WEBHOOK_SECRET.encode(), payload_body.encode(), hashlib.sha256
         ).hexdigest()
 
         return hmac.compare_digest(expected_signature, razorpay_signature)

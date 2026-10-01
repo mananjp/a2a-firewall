@@ -40,7 +40,9 @@ class LLMConfigResponse(BaseModel):
 
 class UpdateLLMConfigRequest(BaseModel):
     provider: str = Field("groq", description="groq | openai | anthropic | local | ollama")
-    model: str | None = Field(None, description="Model identifier e.g. llama-guard-3-8b, gpt-4o-mini")
+    model: str | None = Field(
+        None, description="Model identifier e.g. llama-guard-3-8b, gpt-4o-mini"
+    )
     base_url: str | None = Field(None, description="Custom base URL for local/custom endpoints")
     api_key: str | None = Field(None, description="Raw API key (will be encrypted at rest)")
     llm_enabled: bool = Field(True, description="Enable or disable Layer 4 semantic inspection")
@@ -172,13 +174,19 @@ async def test_llm_connection(
 
     # Determine connection parameters (payload takes precedence over saved config)
     provider = (
-        (body and body.provider)
-        or (saved_cfg and saved_cfg.provider)
-        or "groq"
-    ).strip().lower()
+        ((body and body.provider) or (saved_cfg and saved_cfg.provider) or "groq").strip().lower()
+    )
 
-    base_url = (body and body.base_url) or (saved_cfg and saved_cfg.base_url) or ""
-    model = (body and body.model) or (saved_cfg and saved_cfg.model)
+    base_url: str = (
+        body.base_url
+        if body and body.base_url
+        else (saved_cfg.base_url if saved_cfg and saved_cfg.base_url else "")
+    )
+    model: str | None = (
+        body.model
+        if body and body.model
+        else (saved_cfg.model if saved_cfg and saved_cfg.model else None)
+    )
 
     raw_key = ""
     if body and body.api_key:
@@ -187,8 +195,9 @@ async def test_llm_connection(
         try:
             raw_key = decrypt_api_key(saved_cfg.api_key_encrypted)
         except Exception:
-            raise HTTPException(status_code=400, detail="Failed to decrypt stored API key.") from None
-
+            raise HTTPException(
+                status_code=400, detail="Failed to decrypt stored API key."
+            ) from None
 
     if not raw_key and provider not in ("local", "ollama"):
         raise HTTPException(
