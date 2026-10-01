@@ -7,9 +7,10 @@ for dashboard user sessions using python-jose.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 
 from a2a_firewall.core.config import settings
 
@@ -32,7 +33,7 @@ def create_access_token(
         expire = now + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"iat": now, "exp": expire})
-    return cast(str, jwt.encode(to_encode, _get_signing_key(), algorithm=settings.JWT_ALGORITHM))
+    return jwt.encode(to_encode, _get_signing_key(), algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
@@ -46,6 +47,6 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
             _get_signing_key(),
             algorithms=[settings.JWT_ALGORITHM],
         )
-        return cast(dict[str, Any], payload)
-    except JWTError:
+        return payload
+    except (PyJWTError, Exception):
         return None

@@ -60,7 +60,7 @@ mypy_path = "src"
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["groq.*", "opentelemetry.*", "jsonschema.*", "jose.*"]
+module = ["groq.*", "opentelemetry.*", "jsonschema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
