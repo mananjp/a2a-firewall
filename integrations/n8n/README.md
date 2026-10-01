@@ -11,11 +11,25 @@ Community node package for [A2A Firewall](https://github.com/mananjp/a2a-firewal
 2. Select **Install a community node**.
 3. Enter `n8n-nodes-a2a-firewall` and accept the risks.
 
+### n8n Cloud Configuration (Managed n8n Cloud)
+For managed **n8n Cloud** (`https://*.app.n8n.cloud`):
+- **Method 1 (Community Node)**: If your n8n Cloud plan supports community nodes, install `n8n-nodes-a2a-firewall` via Settings.
+- **Method 2 (Native HTTP Request Node - Zero-Install)**: Import our ready-to-use template [`templates/a2a-firewall-cloud-http.json`](./templates/a2a-firewall-cloud-http.json). It uses standard n8n HTTP Request nodes calling the live backend at `https://a2a-firewall1.onrender.com/v1/firewall/inspect` and `/v1/firewall/inspect-response`.
+
 ### Docker / Custom Build
 In your n8n Docker image or volume root:
 ```bash
 npm install n8n-nodes-a2a-firewall
 ```
+
+---
+
+## Ready-to-Import Workflow Templates
+
+Pre-built workflow JSON definitions ready to import via **Workflows** → **Import from File**:
+- [`templates/a2a-firewall-guard-demo.json`](./templates/a2a-firewall-guard-demo.json) — Pre-execution guard with prompt injection detection and automatic branching.
+- [`templates/a2a-firewall-cloud-http.json`](./templates/a2a-firewall-cloud-http.json) — Zero-install HTTP request workflow for n8n Cloud instances.
+- [`templates/a2a-firewall-dlp-pipeline.json`](./templates/a2a-firewall-dlp-pipeline.json) — Complete DLP tokenization and detokenization pipeline.
 
 ---
 

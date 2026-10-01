@@ -236,11 +236,30 @@ export const policies = {
 
 export const stats = {
   overview: () => request<StatsOverview>("/v1/stats/overview"),
+  health: () => request<{ status: string; version: string }>("/health"),
 };
 
 export const firewall = {
   inspect: (body: Record<string, unknown>) =>
     request<FirewallResponse>("/v1/firewall/inspect", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  inspectResponse: (body: { response_body: unknown; context?: string; redact_pii?: boolean }) =>
+    request<{
+      agent_id: string;
+      context?: string;
+      decision: "allow" | "block" | "review";
+      allowed_to_proceed: boolean;
+      findings: Array<{
+        type?: string;
+        detector?: string;
+        severity?: string;
+        description?: string;
+        span?: string;
+      }>;
+      redacted_body: unknown;
+    }>("/v1/firewall/inspect-response", {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -999,6 +1018,16 @@ export const dlpApi = {
     request<DlpInspectResult>("/v1/dlp/classify", {
       method: "POST",
       body: JSON.stringify({ text, destination, purpose }),
+    }),
+  tokenize: (text: string, destination = "external", entity_type = "pii") =>
+    request<{ tokenized_text: string }>("/v1/dlp/tokenize", {
+      method: "POST",
+      body: JSON.stringify({ text, destination, entity_type }),
+    }),
+  detokenize: (text: string, purpose: string) =>
+    request<{ text: string }>("/v1/dlp/detokenize", {
+      method: "POST",
+      body: JSON.stringify({ text, purpose }),
     }),
 };
 

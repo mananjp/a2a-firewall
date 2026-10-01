@@ -1,0 +1,236 @@
+{
+  "name": "A2A Firewall — n8n Cloud Native HTTP Guard & Response Sanitizer",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-cloud-1",
+      "name": "When clicking ‘Execute Workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prompt-input",
+              "name": "prompt",
+              "value": "Summarize user financial activity and assess account status.",
+              "type": "string"
+            },
+            {
+              "id": "workspace-id",
+              "name": "workspace_id",
+              "value": "d45a269f-5c4c-4e90-8ad7-af0d267b6862",
+              "type": "string"
+            },
+            {
+              "id": "agent-id",
+              "name": "agent_id",
+              "value": "424e447e-77eb-42a8-8a8f-eb1caefa2459",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-cloud-inputs",
+      "name": "Define Agent Inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://a2a-firewall1.onrender.com/v1/firewall/inspect",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.A2A_API_KEY || 'YOUR_A2A_API_KEY' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"task_id\": \"{{ $execution.id }}-{{ $itemIndex }}\",\n  \"receiver_agent_id\": \"{{ $json.agent_id }}\",\n  \"task_type\": \"llm_call\",\n  \"schema_version\": \"v1\",\n  \"payload\": {\n    \"prompt\": \"{{ $json.prompt }}\"\n  },\n  \"metadata\": {\n    \"source\": \"n8n-cloud\",\n    \"execution_id\": \"{{ $execution.id }}\"\n  }\n}"
+      },
+      "id": "http-guard-inspect",
+      "name": "A2A Firewall Pre-Execution Guard (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-allow",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "allow",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-decision-allow",
+      "name": "Is Decision ALLOW?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "simulated-result",
+              "name": "tool_output",
+              "value": "Customer query result: User Alice Smith, SSN: 123-45-6789, Email: alice@example.com, Phone: 555-0199.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "mock-tool-run",
+      "name": "Simulated Tool / LLM Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://a2a-firewall1.onrender.com/v1/firewall/inspect-response",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.A2A_API_KEY || 'YOUR_A2A_API_KEY' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"response_body\": \"{{ $json.tool_output }}\",\n  \"context\": \"tool_result\",\n  \"redact_pii\": true\n}"
+      },
+      "id": "http-sanitize-response",
+      "name": "A2A Post-Execution Response Sanitizer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "incident-state",
+              "name": "incident",
+              "value": "ATTACK_BLOCKED",
+              "type": "string"
+            },
+            {
+              "id": "incident-details",
+              "name": "details",
+              "value": "Threat intercepted by A2A Firewall. Evidence: {{ $json.evidence_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "threat-blocked-node",
+      "name": "Quarantine / Threat Intercepted",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1140, 420]
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute Workflow’": {
+      "main": [
+        [
+          {
+            "node": "Define Agent Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Agent Inputs": {
+      "main": [
+        [
+          {
+            "node": "A2A Firewall Pre-Execution Guard (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2A Firewall Pre-Execution Guard (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Is Decision ALLOW?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Decision ALLOW?": {
+      "main": [
+        [
+          {
+            "node": "Simulated Tool / LLM Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quarantine / Threat Intercepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulated Tool / LLM Output": {
+      "main": [
+        [
+          {
+            "node": "A2A Post-Execution Response Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

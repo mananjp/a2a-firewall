@@ -1,0 +1,144 @@
+{
+  "name": "A2A Firewall — DLP Tokenization & Detokenization Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "dlp-trigger-1",
+      "name": "When clicking ‘Execute Workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "patient-record",
+              "name": "rawCustomerRecord",
+              "value": "Confidential patient: Alice Smith, SSN: 999-88-7777, Email: alice@medicare.org, Phone: 555-0199.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "dlp-raw-input",
+      "name": "Sensitive Patient / Customer Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "operation": "tokenize",
+        "text": "={{ $json.rawCustomerRecord }}",
+        "destination": "external_llm",
+        "options": {
+          "entityType": "pii"
+        }
+      },
+      "id": "dlp-tokenize-node",
+      "name": "A2A Firewall DLP (Tokenize)",
+      "type": "n8n-nodes-a2a-firewall.a2aFirewallDlp",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "credentials": {
+        "a2aFirewallApi": {
+          "id": "a2a-creds-1",
+          "name": "A2A Firewall Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "external-llm-input",
+              "name": "llmProcessedText",
+              "value": "=Analysis complete. Patient token summary: {{ $json.tokenizedText }}",
+              "type": "string"
+            },
+            {
+              "id": "privacy-flag",
+              "name": "zero_pii_exposed_to_cloud",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "id": "dlp-llm-step",
+      "name": "External LLM / Cloud Agent Processing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "detokenize",
+        "text": "={{ $json.llmProcessedText }}",
+        "purpose": "Medical audit report generation",
+        "options": {}
+      },
+      "id": "dlp-detokenize-node",
+      "name": "A2A Firewall DLP (Detokenize)",
+      "type": "n8n-nodes-a2a-firewall.a2aFirewallDlp",
+      "typeVersion": 1,
+      "position": [1140, 300],
+      "credentials": {
+        "a2aFirewallApi": {
+          "id": "a2a-creds-1",
+          "name": "A2A Firewall Production"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute Workflow’": {
+      "main": [
+        [
+          {
+            "node": "Sensitive Patient / Customer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sensitive Patient / Customer Data": {
+      "main": [
+        [
+          {
+            "node": "A2A Firewall DLP (Tokenize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2A Firewall DLP (Tokenize)": {
+      "main": [
+        [
+          {
+            "node": "External LLM / Cloud Agent Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "External LLM / Cloud Agent Processing": {
+      "main": [
+        [
+          {
+            "node": "A2A Firewall DLP (Detokenize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

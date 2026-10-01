@@ -70,7 +70,7 @@ A commercial license is available for OEM, managed-SaaS, and enterprise support 
 | Provider adapters: OpenAI, Anthropic, Groq, Ollama | **Beta** | |
 | Provider adapters: Bedrock, Vertex AI | **Experimental** | Until covered by integration tests |
 | SCIM 2.0 | **GA** | |
-| n8n community node | **Beta** | |
+| n8n (Cloud & Community Node) | **GA** | Verified against live production backend with end-to-end test suite |
 
 ---
 
@@ -264,6 +264,7 @@ console.log(`Decision: ${response.decision} (Risk: ${response.riskScore})`);
 | **CrewAI** | [CrewAI Integration Guide](docs/integrations/crewai.md) | Hierarchical crew delegation guard, custom tool boundary protection |
 | **AutoGen (AG2)** | [AutoGen Integration Guide](docs/integrations/autogen.md) | `ConversableAgent` message filter hooks, code execution sandbox |
 | **Claude & Cursor MCP** | [MCP Governance Guide](docs/integrations/mcp.md) | `a2a_firewall.mcp wrap` stdio/SSE tool call & return result inspector |
+| **n8n (Cloud & Self-Hosted)** | [n8n Integration Guide](docs/integrations/n8n.md) | Community node (`n8n-nodes-a2a-firewall`), n8n Cloud native HTTP guard, DLP vault, sidecar proxy |
 
 ---
 

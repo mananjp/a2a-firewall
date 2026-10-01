@@ -1,0 +1,159 @@
+{
+  "name": "A2A Firewall — Pre-Execution Guard & Jailbreak Defense",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "When clicking ‘Execute Workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-prompt",
+              "name": "prompt",
+              "value": "Summarize the Q3 revenue growth and compare key business metrics.",
+              "type": "string"
+            },
+            {
+              "id": "assign-role",
+              "name": "system_role",
+              "value": "Financial analyst assistant",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-prompt-2",
+      "name": "Prepare Agent Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "taskType": "llm_call",
+        "receiverAgentId": "openai:gpt-4o",
+        "payloadJson": "={\n  \"prompt\": \"{{ $json.prompt }}\",\n  \"role\": \"{{ $json.system_role }}\"\n}",
+        "options": {
+          "failMode": "closed",
+          "declaredIntent": "Analyze and summarize Q3 corporate financials"
+        }
+      },
+      "id": "a2a-guard-3",
+      "name": "A2A Firewall Guard",
+      "type": "n8n-nodes-a2a-firewall.a2aFirewallGuard",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "credentials": {
+        "a2aFirewallApi": {
+          "id": "a2a-creds-1",
+          "name": "A2A Firewall Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status-allow",
+              "name": "status",
+              "value": "PROMPT_ALLOWED",
+              "type": "string"
+            },
+            {
+              "id": "safe-dispatch",
+              "name": "message",
+              "value": "Prompt verified safe by A2A Firewall (Risk: {{ $json._a2aFirewall.riskScore }}). Forwarding to LLM provider.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "allow-branch-4",
+      "name": "Safe LLM Execution",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status-block",
+              "name": "status",
+              "value": "PROMPT_BLOCKED",
+              "type": "string"
+            },
+            {
+              "id": "block-reason",
+              "name": "reason",
+              "value": "Threat intercepted by A2A Firewall. Violations: {{ $json._a2aFirewall.violations }}",
+              "type": "string"
+            },
+            {
+              "id": "evidence-id",
+              "name": "evidence_id",
+              "value": "={{ $json._a2aFirewall.evidenceId }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "block-branch-5",
+      "name": "Threat Intercepted & SOC Logged",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 400]
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute Workflow’": {
+      "main": [
+        [
+          {
+            "node": "Prepare Agent Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Agent Prompt": {
+      "main": [
+        [
+          {
+            "node": "A2A Firewall Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A2A Firewall Guard": {
+      "main": [
+        [
+          {
+            "node": "Safe LLM Execution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Threat Intercepted & SOC Logged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}
