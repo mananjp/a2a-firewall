@@ -474,3 +474,86 @@ async def test_get_current_workspace_with_jwt_token():
     assert resolved_ws.admin_email == "admin@a2afirewall.dev"
 
 
+def test_billing_subscribe_simulation_fallback():
+    mock_db = AsyncMock()
+    mock_account = MagicMock(id=uuid.uuid4(), email="tester@example.com", tier="free", full_name="Tester")
+
+    # Mock execute for existing active subscription check (returns None) and customer lookup (returns None)
+    mock_sub_res = MagicMock()
+    mock_sub_res.scalars.return_value.first.return_value = None
+    mock_cust_res = MagicMock()
+    mock_cust_res.scalar_one_or_none.return_value = None
+
+    mock_db.execute.side_effect = [mock_sub_res, mock_cust_res]
+
+    async def override_get_db():
+        yield mock_db
+
+    from a2a_firewall.api.deps import get_current_account
+
+    async def override_get_current_account():
+        return mock_account
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_account] = override_get_current_account
+
+    try:
+        resp = client.post(
+            "/v1/billing/subscribe",
+            headers={"Authorization": "Bearer test_token"},
+            json={"tier": "team", "interval": "monthly"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "subscription_id" in data or "order_id" in data
+        assert data["tier"] == "team"
+        # If credentials are not live or fail, razorpay_key_id must be None to prevent broken popup
+        if data.get("is_simulated"):
+            assert data["razorpay_key_id"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_billing_verify_order_payment():
+    mock_db = AsyncMock()
+    mock_account = MagicMock(id=uuid.uuid4(), email="tester@example.com", tier="free")
+
+    # Mock DB find subscription
+    mock_sub = MagicMock(razorpay_subscription_id="order_123456", tier="team", status="created")
+    mock_find_res = MagicMock()
+    mock_find_res.scalar_one_or_none.return_value = mock_sub
+    mock_db.execute.return_value = mock_find_res
+
+    async def override_get_db():
+        yield mock_db
+
+    from a2a_firewall.api.deps import get_current_account
+
+    async def override_get_current_account():
+        return mock_account
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_account] = override_get_current_account
+
+    try:
+        resp = client.post(
+            "/v1/billing/verify",
+            headers={"Authorization": "Bearer test_token"},
+            json={
+                "razorpay_order_id": "order_123456",
+                "razorpay_payment_id": "pay_987654",
+                "razorpay_signature": "mock_sig",
+                "tier": "team",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["tier"] == "team"
+        assert mock_account.tier == "team"
+        assert mock_sub.status == "active"
+    finally:
+        app.dependency_overrides.clear()
+
+
+

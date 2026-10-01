@@ -171,6 +171,23 @@ function LoginFormContent() {
             })}
           </div>
 
+          {/* Showcase Credentials Callout */}
+          <div className="mb-4 rounded-xl border border-accent/30 bg-accent/10 p-3.5 text-[12px]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-semibold text-ink-primary flex items-center gap-1.5">
+                <Lock size={13} className="text-accent" />
+                Live Showcase Admin Credential
+              </span>
+              <span className="font-mono text-[10px] text-accent uppercase font-bold tracking-wider rounded bg-accent/20 px-1.5 py-0.5">
+                Full Enterprise
+              </span>
+            </div>
+            <div className="font-mono text-[11.5px] text-ink-secondary space-y-1">
+              <div>Email: <span className="text-accent font-semibold selection:bg-accent/30">admin@a2afirewall.dev</span></div>
+              <div>Password: <span className="text-accent font-semibold selection:bg-accent/30">admin12345</span> <span className="text-ink-muted">(or click Admin below)</span></div>
+            </div>
+          </div>
+
           <div className="material-panel rounded-2xl p-6 shadow-popover">
             {tab === "signin" && (
               <form onSubmit={handleSignIn} className="space-y-4">

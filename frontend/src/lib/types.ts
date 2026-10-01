@@ -173,12 +173,15 @@ export interface BillingSubscriptionResponse {
 }
 
 export interface SubscribeResponse {
-  subscription_id: string;
+  subscription_id?: string;
+  order_id?: string;
+  amount?: number;
   short_url?: string;
   status: string;
-  razorpay_key_id?: string;
+  razorpay_key_id?: string | null;
   tier?: string;
   message?: string;
+  is_simulated?: boolean;
 }
 
 export interface WorkspaceRegisterResponse {

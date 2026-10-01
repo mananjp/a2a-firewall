@@ -96,6 +96,9 @@ html {
   font-optical-sizing: auto;
   background-color: var(--color-bg-base);
   color: var(--color-ink-primary);
+  min-height: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
 }
 
 body {
@@ -103,7 +106,9 @@ body {
   color: var(--color-ink-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  min-height: 100%;
+  overflow-x: clip;
+  overflow-y: visible;
   position: relative;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePolling } from "@/hooks/use-polling";
 import { billing } from "@/lib/api";
 import type { BillingSubscriptionResponse, BillingConfig } from "@/lib/types";
@@ -53,9 +54,11 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
-export default function BillingPage() {
+function BillingPageContent() {
   const { toast } = useToast();
-  const [cycle, setCycle] = useState<"monthly" | "annual">("monthly");
+  const searchParams = useSearchParams();
+  const initialCycle = searchParams.get("cycle") === "annual" ? "annual" : "monthly";
+  const [cycle, setCycle] = useState<"monthly" | "annual">(initialCycle);
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [hostedUrl, setHostedUrl] = useState<string | null>(null);
 
@@ -76,6 +79,11 @@ export default function BillingPage() {
 
   useEffect(() => {
     loadRazorpayScript();
+    // Safety: ensure scroll is never stuck on mount or unmount
+    document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   const currentTier = (subData?.tier || "free").toLowerCase();
@@ -100,18 +108,26 @@ export default function BillingPage() {
 
       const razorpayKey = subRes.razorpay_key_id || config?.razorpay_key_id;
 
-      if (scriptReady && window.Razorpay && razorpayKey) {
-        const rzp = new window.Razorpay({
+      // Only attempt real Razorpay popup if keys exist, response is not simulated, and we have an ID
+      if (
+        scriptReady &&
+        window.Razorpay &&
+        razorpayKey &&
+        !subRes.is_simulated &&
+        (subRes.subscription_id || subRes.order_id)
+      ) {
+        const checkoutOptions: any = {
           key: razorpayKey,
-          subscription_id: subRes.subscription_id,
           name: "A2A Firewall",
           description: `${tier.toUpperCase()} Subscription (${cycle})`,
           image: "/a2a-logo.png",
           handler: async function (response: any) {
+            document.body.style.overflow = "";
             try {
               await billing.verify({
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_subscription_id: response.razorpay_subscription_id,
+                razorpay_subscription_id: response.razorpay_subscription_id || subRes.subscription_id,
+                razorpay_order_id: response.razorpay_order_id || subRes.order_id,
                 razorpay_signature: response.razorpay_signature,
                 tier,
               });
@@ -128,14 +144,34 @@ export default function BillingPage() {
                 variant: "info",
               });
               refresh();
+            } finally {
+              setUpgrading(null);
             }
           },
+          modal: {
+            ondismiss: function () {
+              document.body.style.overflow = "";
+              setUpgrading(null);
+            },
+          },
           theme: { color: "#6366f1" },
-        });
+        };
+
+        if (subRes.subscription_id && !subRes.order_id) {
+          checkoutOptions.subscription_id = subRes.subscription_id;
+        } else if (subRes.order_id) {
+          checkoutOptions.order_id = subRes.order_id;
+          checkoutOptions.amount = subRes.amount;
+          checkoutOptions.currency = "INR";
+        }
+
+        const rzp = new window.Razorpay(checkoutOptions);
 
         rzp.on("payment.failed", function (response: any) {
+          document.body.style.overflow = "";
+          setUpgrading(null);
           toast({
-            title: "Payment Cancelled or Failed",
+            title: "Payment Incomplete or Cancelled",
             description: response.error?.description || "Payment attempt incomplete.",
             variant: "error",
           });
@@ -146,7 +182,7 @@ export default function BillingPage() {
         // If popup script is blocked or key requires hosted checkout
         window.open(subRes.short_url, "_blank");
       } else {
-        // Instant simulated activation for testing if keys are not live yet
+        // Instant simulated activation for testing if keys are not configured or live call failed
         await billing.demoUpgrade(tier);
         toast({
           title: "Demo Plan Activated",
@@ -156,6 +192,7 @@ export default function BillingPage() {
         refresh();
       }
     } catch (err) {
+      document.body.style.overflow = "";
       toast({
         title: "Checkout Error",
         description: err instanceof Error ? err.message : "Failed to launch Razorpay checkout.",
@@ -163,6 +200,7 @@ export default function BillingPage() {
       });
     } finally {
       setUpgrading(null);
+      document.body.style.overflow = "";
     }
   }
 
@@ -634,5 +672,19 @@ export default function BillingPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        </div>
+      }
+    >
+      <BillingPageContent />
+    </Suspense>
   );
 }

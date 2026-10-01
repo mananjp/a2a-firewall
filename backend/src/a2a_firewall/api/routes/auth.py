@@ -27,7 +27,7 @@ from a2a_firewall.core.config import settings
 from a2a_firewall.core.jwt_auth import create_access_token
 from a2a_firewall.core.security import generate_api_key
 from a2a_firewall.db.database import get_db
-from a2a_firewall.db.models import Account, AccountWorkspace, Workspace
+from a2a_firewall.db.models import Account, AccountWorkspace, Agent, Workspace
 
 router = APIRouter()
 _ph = PasswordHasher()
@@ -237,12 +237,49 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
                 name="Admin Demo Mesh",
                 admin_email=clean_email,
                 api_key_hash=new_hash,
+                password_hash=_hash_password("admin12345"),
             )
             db.add(ws)
             await db.flush()
         else:
             new_raw, new_hash = generate_api_key("ws")
             ws.api_key_hash = new_hash
+            if not ws.password_hash:
+                ws.password_hash = _hash_password("admin12345")
+
+        # Ensure default demo agents exist so Agent Mesh, SOC, & Simulation have live data immediately
+        agent_check = await db.execute(select(Agent).where(Agent.workspace_id == ws.id))
+        existing_agents = agent_check.scalars().all()
+        if not existing_agents:
+            demo_agents = [
+                Agent(
+                    workspace_id=ws.id,
+                    name="ResearchAssistant",
+                    description="Autonomous web research & document analysis agent",
+                    api_key_hash=generate_api_key("ag")[1],
+                    capabilities=["research", "web_search", "summarize"],
+                    status="active",
+                ),
+                Agent(
+                    workspace_id=ws.id,
+                    name="CustomerSupportBot",
+                    description="Frontline customer support and query responder",
+                    api_key_hash=generate_api_key("ag")[1],
+                    capabilities=["chat", "orders", "tickets"],
+                    status="active",
+                ),
+                Agent(
+                    workspace_id=ws.id,
+                    name="DataSyncService",
+                    description="Internal ETL microservice and data synchronization pipeline",
+                    api_key_hash=generate_api_key("ag")[1],
+                    capabilities=["database", "etl", "export"],
+                    status="active",
+                ),
+            ]
+            for ag in demo_agents:
+                db.add(ag)
+            await db.flush()
 
         account, session_token = await _ensure_account_and_link(
             db, clean_email, ws, full_name="Security Admin"

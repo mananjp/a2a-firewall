@@ -44,13 +44,98 @@ class SubscribeRequest(BaseModel):
 
 class VerifySubscriptionRequest(BaseModel):
     razorpay_payment_id: str
-    razorpay_subscription_id: str
+    razorpay_subscription_id: str | None = None
+    razorpay_order_id: str | None = None
     razorpay_signature: str
     tier: str | None = "pro"
 
 
 class DemoUpgradeRequest(BaseModel):
     tier: str  # free | pro | team | enterprise
+
+
+PLAN_METADATA: dict[str, dict[str, Any]] = {
+    "pro_monthly": {
+        "name": "A2A Firewall Pro (Monthly)",
+        "amount": 1499,
+        "amount_in_paise": 149900,
+        "period": "monthly",
+        "interval": 1,
+        "description": "Pro Tier Monthly Plan",
+        "env_attr": "RAZORPAY_PLAN_PRO_MONTHLY",
+    },
+    "pro_annual": {
+        "name": "A2A Firewall Pro (Annual)",
+        "amount": 14990,
+        "amount_in_paise": 1499000,
+        "period": "yearly",
+        "interval": 1,
+        "description": "Pro Tier Annual Plan",
+        "env_attr": "RAZORPAY_PLAN_PRO_ANNUAL",
+    },
+    "team_monthly": {
+        "name": "A2A Firewall Team (Monthly)",
+        "amount": 4999,
+        "amount_in_paise": 499900,
+        "period": "monthly",
+        "interval": 1,
+        "description": "Team Tier Monthly Plan",
+        "env_attr": "RAZORPAY_PLAN_TEAM_MONTHLY",
+    },
+    "team_annual": {
+        "name": "A2A Firewall Team (Annual)",
+        "amount": 49990,
+        "amount_in_paise": 4999000,
+        "period": "yearly",
+        "interval": 1,
+        "description": "Team Tier Annual Plan",
+        "env_attr": "RAZORPAY_PLAN_TEAM_ANNUAL",
+    },
+}
+
+_DYNAMIC_PLAN_CACHE: dict[str, str] = {}
+
+
+async def _resolve_or_create_plan_id(plan_key: str) -> str | None:
+    """Resolve a real Razorpay plan ID from settings, cache, or auto-create via Razorpay API."""
+    meta = PLAN_METADATA.get(plan_key)
+    if not meta:
+        return None
+
+    # 1. Check settings
+    configured = getattr(settings, meta["env_attr"], None)
+    if (
+        configured
+        and configured.strip()
+        and not configured.startswith("plan_pro_")
+        and not configured.startswith("plan_team_")
+    ):
+        return configured.strip()
+
+    # 2. Check in-memory cache
+    if plan_key in _DYNAMIC_PLAN_CACHE:
+        return _DYNAMIC_PLAN_CACHE[plan_key]
+
+    # 3. Auto-create plan via Razorpay Plans API if credentials exist
+    if settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
+        try:
+            resp = await razorpay_client.create_plan(
+                name=meta["name"],
+                amount_in_paise=meta["amount_in_paise"],
+                period=meta["period"],
+                interval=meta["interval"],
+                currency="INR",
+                description=meta["description"],
+            )
+            created_id = resp.get("id")
+            if created_id:
+                _DYNAMIC_PLAN_CACHE[plan_key] = created_id
+                logger.info(f"Auto-created Razorpay plan {created_id} for {plan_key}")
+                return created_id
+        except Exception as e:
+            logger.warning(f"Could not auto-create Razorpay plan for {plan_key}: {e}")
+
+    return None
 
 
 @router.get("/config")
@@ -105,25 +190,11 @@ async def create_subscription(
     db: AsyncSession = Depends(get_db),
     current_account: Account = Depends(get_current_account),
 ) -> Any:
-    """Create a new Razorpay subscription for the user."""
-    # Resolve parameters from body or query params
-    req_tier = body.tier if body else tier
-    req_interval = body.interval if body else interval
-    resolved_plan_id = (body.plan_id if body and body.plan_id else None) or plan_id
-
-    if not resolved_plan_id:
-        if req_tier == "team":
-            resolved_plan_id = (
-                settings.RAZORPAY_PLAN_TEAM_ANNUAL
-                if req_interval == "annual"
-                else settings.RAZORPAY_PLAN_TEAM_MONTHLY
-            ) or f"plan_team_{req_interval}"
-        else:
-            resolved_plan_id = (
-                settings.RAZORPAY_PLAN_PRO_ANNUAL
-                if req_interval == "annual"
-                else settings.RAZORPAY_PLAN_PRO_MONTHLY
-            ) or f"plan_pro_{req_interval}"
+    """Create a new Razorpay subscription or order for the user."""
+    req_tier = (body.tier if body else tier).lower()
+    req_interval = (body.interval if body else interval).lower()
+    plan_key = f"{req_tier}_{req_interval}"
+    meta = PLAN_METADATA.get(plan_key, PLAN_METADATA["pro_monthly"])
 
     # Check if the user already has an active subscription for this plan
     stmt = select(BillingSubscription).where(
@@ -140,62 +211,122 @@ async def create_subscription(
             "message": "User is already subscribed to this tier.",
         }
 
-    # 1. Resolve or create Razorpay Customer
-    stmt_cust = select(BillingSubscription.razorpay_customer_id).where(
-        BillingSubscription.account_id == current_account.id,
-        BillingSubscription.razorpay_customer_id.isnot(None),
-    ).limit(1)
+    # Resolve customer ID
+    stmt_cust = (
+        select(BillingSubscription.razorpay_customer_id)
+        .where(
+            BillingSubscription.account_id == current_account.id,
+            BillingSubscription.razorpay_customer_id.isnot(None),
+        )
+        .limit(1)
+    )
     result_cust = await db.execute(stmt_cust)
     customer_id = result_cust.scalar_one_or_none()
 
-    sub_id: str
-    short_url: str | None = None
-    sub_status: str = "created"
-
     if settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
-        try:
-            if not customer_id:
-                customer_resp = await razorpay_client.create_customer(
+        # 1. Resolve or create Razorpay customer
+        if not customer_id:
+            try:
+                cust_resp = await razorpay_client.create_customer(
                     name=current_account.full_name or current_account.email,
                     email=current_account.email,
                 )
-                customer_id = customer_resp.get("id")
+                customer_id = cust_resp.get("id")
+            except Exception as e:
+                logger.warning(f"Could not create Razorpay customer: {e}")
 
-            sub_resp = await razorpay_client.create_subscription(
-                plan_id=resolved_plan_id,
-                customer_id=customer_id or f"cust_{current_account.id.hex[:10]}",
-            )
-            sub_id = sub_resp["id"]
-            short_url = sub_resp.get("short_url")
-            sub_status = sub_resp.get("status", "created")
-        except RazorpayClientError as e:
-            logger.warning(
-                f"Razorpay live subscription creation failed: {e}. Falling back to test subscription."
-            )
-            # Simulated fallback for demo/test environments
-            sub_id = f"sub_{uuid.uuid4().hex[:14]}"
-    else:
-        # Mock mode when keys are not configured
-        sub_id = f"sub_{uuid.uuid4().hex[:14]}"
+        # 2. Try Subscriptions API with real plan ID
+        real_plan_id = await _resolve_or_create_plan_id(plan_key)
+        if real_plan_id:
+            try:
+                total_count = 60 if req_interval == "monthly" else 5
+                sub_resp = await razorpay_client.create_subscription(
+                    plan_id=real_plan_id,
+                    customer_id=customer_id or f"cust_{current_account.id.hex[:10]}",
+                    total_count=total_count,
+                )
+                sub_id = sub_resp["id"]
+                short_url = sub_resp.get("short_url")
+                sub_status = sub_resp.get("status", "created")
 
-    # 2. Store subscription in database
+                new_sub = BillingSubscription(
+                    account_id=current_account.id,
+                    razorpay_customer_id=customer_id,
+                    razorpay_subscription_id=sub_id,
+                    plan_id=real_plan_id,
+                    tier=req_tier,
+                    status=sub_status,
+                )
+                db.add(new_sub)
+                await db.commit()
+
+                return {
+                    "subscription_id": sub_id,
+                    "short_url": short_url,
+                    "status": sub_status,
+                    "razorpay_key_id": settings.RAZORPAY_KEY_ID,
+                    "tier": req_tier,
+                }
+            except RazorpayClientError as e:
+                logger.warning(
+                    f"Razorpay subscription creation failed: {e}. Attempting Order checkout fallback."
+                )
+
+        # 3. Fallback: Create Razorpay Order (works universally without Subscriptions bank approval)
+        try:
+            order_resp = await razorpay_client.create_order(
+                amount_in_paise=meta["amount_in_paise"],
+                currency="INR",
+                receipt=f"rcpt_{current_account.id.hex[:8]}_{uuid.uuid4().hex[:6]}",
+                notes={
+                    "account_id": str(current_account.id),
+                    "tier": req_tier,
+                    "interval": req_interval,
+                },
+            )
+            order_id = order_resp["id"]
+            new_sub = BillingSubscription(
+                account_id=current_account.id,
+                razorpay_customer_id=customer_id,
+                razorpay_subscription_id=order_id,
+                plan_id=plan_key,
+                tier=req_tier,
+                status="created",
+            )
+            db.add(new_sub)
+            await db.commit()
+
+            return {
+                "order_id": order_id,
+                "amount": meta["amount_in_paise"],
+                "status": "created",
+                "razorpay_key_id": settings.RAZORPAY_KEY_ID,
+                "tier": req_tier,
+            }
+        except Exception as e_order:
+            logger.error(f"Razorpay live checkout failed: {e_order}. Falling back to demo mode.")
+
+    # 4. If credentials missing or live API calls failed, use simulated demo mode
+    # IMPORTANT: Do NOT return razorpay_key_id so frontend does not open broken Razorpay modal
+    demo_sub_id = f"sub_demo_{uuid.uuid4().hex[:12]}"
     new_sub = BillingSubscription(
         account_id=current_account.id,
-        razorpay_customer_id=customer_id,
-        razorpay_subscription_id=sub_id,
-        plan_id=resolved_plan_id,
+        razorpay_customer_id=None,
+        razorpay_subscription_id=demo_sub_id,
+        plan_id=plan_key,
         tier=req_tier,
-        status=sub_status,
+        status="created",
     )
     db.add(new_sub)
     await db.commit()
 
     return {
-        "subscription_id": sub_id,
-        "short_url": short_url,
-        "status": sub_status,
-        "razorpay_key_id": settings.RAZORPAY_KEY_ID,
+        "subscription_id": demo_sub_id,
+        "status": "created",
+        "razorpay_key_id": None,
+        "is_simulated": True,
         "tier": req_tier,
+        "message": "Demo simulation mode active.",
     }
 
 
@@ -205,21 +336,36 @@ async def verify_subscription(
     db: AsyncSession = Depends(get_db),
     current_account: Account = Depends(get_current_account),
 ) -> Any:
-    """Verify subscription payment signature from Razorpay checkout modal and activate tier."""
-    verified = True
-    if settings.RAZORPAY_KEY_SECRET and not body.razorpay_subscription_id.startswith("sub_demo_"):
-        verified = razorpay_client.verify_subscription_payment_signature(
+    """Verify subscription or order payment signature from Razorpay and activate tier."""
+    verified = False
+    sub_key = body.razorpay_order_id or body.razorpay_subscription_id or ""
+
+    if not settings.RAZORPAY_KEY_SECRET:
+        verified = True  # Mock mode
+    elif body.razorpay_order_id:
+        verified = razorpay_client.verify_order_payment_signature(
+            body.razorpay_order_id,
             body.razorpay_payment_id,
-            body.razorpay_subscription_id,
             body.razorpay_signature,
         )
+    elif body.razorpay_subscription_id:
+        if body.razorpay_subscription_id.startswith("sub_demo_"):
+            verified = True
+        else:
+            verified = razorpay_client.verify_subscription_payment_signature(
+                body.razorpay_payment_id,
+                body.razorpay_subscription_id,
+                body.razorpay_signature,
+            )
+    else:
+        verified = True
 
     if not verified:
         raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature.")
 
     # Find subscription record
     stmt = select(BillingSubscription).where(
-        BillingSubscription.razorpay_subscription_id == body.razorpay_subscription_id
+        BillingSubscription.razorpay_subscription_id == sub_key
     )
     result = await db.execute(stmt)
     sub = result.scalar_one_or_none()
@@ -234,7 +380,7 @@ async def verify_subscription(
     await db.commit()
 
     logger.info(
-        f"Subscription {body.razorpay_subscription_id} verified. Account {current_account.email} upgraded to {resolved_tier}."
+        f"Payment {sub_key} verified. Account {current_account.email} upgraded to {resolved_tier}."
     )
     return {"status": "active", "tier": current_account.tier}
 

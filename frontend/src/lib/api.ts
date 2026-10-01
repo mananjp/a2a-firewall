@@ -109,16 +109,21 @@ async function request<T>(
   const sessionToken = getSessionToken();
   const headers = new Headers(init.headers);
 
-  // Authenticate with JWT session token if available, falling back to workspace key
+  // Send both Workspace API Key and JWT Session Token so all endpoints
+  // (both legacy Workspace-scoped endpoints and new SaaS Account-scoped endpoints)
+  // authenticate seamlessly with zero friction.
   if (!headers.has("Authorization")) {
-    if (sessionToken) {
-      headers.set("Authorization", `Bearer ${sessionToken}`);
-    } else if (apiKey) {
+    if (apiKey) {
       headers.set("Authorization", `Bearer ${apiKey}`);
+    } else if (sessionToken) {
+      headers.set("Authorization", `Bearer ${sessionToken}`);
     }
   }
   if (apiKey && !headers.has("X-Workspace-Key")) {
     headers.set("X-Workspace-Key", apiKey);
+  }
+  if (sessionToken && !headers.has("X-Session-Token")) {
+    headers.set("X-Session-Token", sessionToken);
   }
 
   if (!headers.has("Content-Type") && init.body) {
@@ -1108,7 +1113,8 @@ export const billing = {
     }),
   verify: (body: {
     razorpay_payment_id: string;
-    razorpay_subscription_id: string;
+    razorpay_subscription_id?: string;
+    razorpay_order_id?: string;
     razorpay_signature: string;
     tier?: string;
   }) =>

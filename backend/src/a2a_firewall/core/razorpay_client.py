@@ -53,6 +53,48 @@ class RazorpayClient:
         """Fetch an existing customer from Razorpay."""
         return await self._request("GET", f"/customers/{customer_id}")
 
+    async def create_plan(
+        self,
+        name: str,
+        amount_in_paise: int,
+        period: str = "monthly",  # daily | weekly | monthly | yearly
+        interval: int = 1,
+        currency: str = "INR",
+        description: str | None = None,
+    ) -> Any:
+        """Create a subscription plan in Razorpay."""
+        payload: dict[str, Any] = {
+            "period": period,
+            "interval": interval,
+            "item": {
+                "name": name,
+                "amount": amount_in_paise,
+                "currency": currency,
+                "description": description or name,
+            },
+        }
+        return await self._request("POST", "/plans", json=payload)
+
+    async def get_plan(self, plan_id: str) -> Any:
+        """Fetch plan details from Razorpay."""
+        return await self._request("GET", f"/plans/{plan_id}")
+
+    async def create_order(
+        self,
+        amount_in_paise: int,
+        currency: str = "INR",
+        receipt: str | None = None,
+        notes: dict[str, Any] | None = None,
+    ) -> Any:
+        """Create a standard one-time checkout order in Razorpay."""
+        payload: dict[str, Any] = {
+            "amount": amount_in_paise,
+            "currency": currency,
+            "receipt": receipt or f"rcpt_{uuid.uuid4().hex[:10]}",
+            "notes": notes or {},
+        }
+        return await self._request("POST", "/orders", json=payload)
+
     async def create_subscription(
         self,
         plan_id: str,
@@ -61,20 +103,16 @@ class RazorpayClient:
     ) -> Any:
         """Create a subscription for a customer.
 
-        The billing period is defined by the Razorpay ``plan_id`` (monthly or
-        annual), so it is deliberately not duplicated here. ``total_count`` is
-        left unset by default, which makes the subscription renew on its own
-        until cancelled. Passing an explicit count caps the number of billing
-        cycles — for example ``12`` on a monthly plan bills 12 months up front
-        and then stops.
+        The billing period is defined by the Razorpay ``plan_id``. In the Razorpay
+        Subscriptions API, ``total_count`` is required (representing max billing cycles).
+        Defaults to 60 (5 years) if omitted.
         """
         payload: dict[str, Any] = {
             "plan_id": plan_id,
             "customer_id": customer_id,
             "customer_notify": 1,
+            "total_count": total_count if total_count is not None else 60,
         }
-        if total_count is not None:
-            payload["total_count"] = total_count
         return await self._request("POST", "/subscriptions", json=payload)
 
     async def get_subscription(self, subscription_id: str) -> Any:
@@ -106,6 +144,18 @@ class RazorpayClient:
         if not settings.RAZORPAY_KEY_SECRET:
             return False
         msg = f"{razorpay_payment_id}|{razorpay_subscription_id}"
+        expected = hmac.new(
+            settings.RAZORPAY_KEY_SECRET.encode(), msg.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, razorpay_signature)
+
+    def verify_order_payment_signature(
+        self, razorpay_order_id: str, razorpay_payment_id: str, razorpay_signature: str
+    ) -> bool:
+        """Verify payment signature for a standard order checkout callback."""
+        if not settings.RAZORPAY_KEY_SECRET:
+            return False
+        msg = f"{razorpay_order_id}|{razorpay_payment_id}"
         expected = hmac.new(
             settings.RAZORPAY_KEY_SECRET.encode(), msg.encode(), hashlib.sha256
         ).hexdigest()

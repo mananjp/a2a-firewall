@@ -31,78 +31,85 @@ async def get_current_agent(
 
 async def get_current_workspace(
     authorization: str = Header(...),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
     x_workspace_key: str | None = Header(None, alias="X-Workspace-Key"),
     x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
     db: AsyncSession = Depends(get_db),
 ) -> Workspace:
-    """Resolve active workspace via JWT session token, X-Workspace-Key, or Bearer API key."""
+    """Resolve active workspace via Bearer API key, X-Workspace-Key, or JWT session token."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid auth header")
     raw_token = authorization.removeprefix("Bearer ").strip()
 
-    # 1. Try decoding as JWT session token
-    payload = decode_access_token(raw_token)
-    if payload and ("sub" in payload or "email" in payload or "workspace_id" in payload):
-        # 1a. Explicit workspace_id from JWT payload
-        if "workspace_id" in payload and payload["workspace_id"]:
-            try:
-                ws_id = uuid.UUID(payload["workspace_id"])
-                ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_id))
-                ws = ws_res.scalar_one_or_none()
-                if ws:
-                    return ws
-            except (ValueError, TypeError):
-                pass
-
-        # 1b. Explicit X-Workspace-Id header
-        if x_workspace_id:
-            try:
-                ws_uuid = uuid.UUID(x_workspace_id)
-                ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
-                ws = ws_res.scalar_one_or_none()
-                if ws:
-                    return ws
-            except (ValueError, TypeError):
-                pass
-
-        # 1c. Join via AccountWorkspace
-        if "sub" in payload and payload["sub"]:
-            try:
-                account_id = uuid.UUID(payload["sub"])
-                result = await db.execute(
-                    select(Workspace)
-                    .join(AccountWorkspace, AccountWorkspace.workspace_id == Workspace.id)
-                    .where(AccountWorkspace.account_id == account_id)
-                    .order_by(AccountWorkspace.created_at.asc())
-                )
-                ws = result.scalars().first()
-                if ws:
-                    return ws
-            except (ValueError, TypeError):
-                pass
-
-        # 1d. Lookup by admin_email
-        email = payload.get("email")
-        if email:
-            acc_by_email = await db.execute(select(Workspace).where(Workspace.admin_email == email))
-            ws = acc_by_email.scalar_one_or_none()
-            if ws:
-                return ws
-
-    # 2. Try X-Workspace-Key if provided
-    if x_workspace_key:
-        key_hash = hash_api_key(x_workspace_key.strip())
-        result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
-        ws = result.scalar_one_or_none()
-        if ws:
-            return ws
-
-    # 3. Try raw_token as legacy Workspace API key
+    # 1. Try raw_token as legacy/primary Workspace API key (fastest & most reliable)
     key_hash = hash_api_key(raw_token)
     result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
     ws = result.scalar_one_or_none()
     if ws:
         return ws
+
+    # 2. Try X-Workspace-Key if provided
+    if x_workspace_key:
+        x_hash = hash_api_key(x_workspace_key.strip())
+        result = await db.execute(select(Workspace).where(Workspace.api_key_hash == x_hash))
+        ws = result.scalar_one_or_none()
+        if ws:
+            return ws
+
+    # 3. Try decoding JWT session token (from X-Session-Token or raw_token)
+    tokens_to_decode = []
+    if x_session_token:
+        tokens_to_decode.append(x_session_token.removeprefix("Bearer ").strip())
+    tokens_to_decode.append(raw_token)
+
+    for tok in tokens_to_decode:
+        payload = decode_access_token(tok)
+        if payload and ("sub" in payload or "email" in payload or "workspace_id" in payload):
+            # 3a. Explicit workspace_id from JWT payload
+            if "workspace_id" in payload and payload["workspace_id"]:
+                try:
+                    ws_id = uuid.UUID(payload["workspace_id"])
+                    ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_id))
+                    ws = ws_res.scalar_one_or_none()
+                    if ws:
+                        return ws
+                except (ValueError, TypeError):
+                    pass
+
+            # 3b. Explicit X-Workspace-Id header
+            if x_workspace_id:
+                try:
+                    ws_uuid = uuid.UUID(x_workspace_id)
+                    ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
+                    ws = ws_res.scalar_one_or_none()
+                    if ws:
+                        return ws
+                except (ValueError, TypeError):
+                    pass
+
+            # 3c. Join via AccountWorkspace
+            if "sub" in payload and payload["sub"]:
+                try:
+                    account_id = uuid.UUID(payload["sub"])
+                    result = await db.execute(
+                        select(Workspace)
+                        .join(AccountWorkspace, AccountWorkspace.workspace_id == Workspace.id)
+                        .where(AccountWorkspace.account_id == account_id)
+                        .order_by(AccountWorkspace.created_at.asc())
+                    )
+                    ws = result.scalars().first()
+                    if ws:
+                        return ws
+                except (ValueError, TypeError):
+                    pass
+
+            # 3d. Lookup by admin_email
+            email = payload.get("email")
+            if email:
+                acc_by_email = await db.execute(select(Workspace).where(Workspace.admin_email == email))
+                ws = acc_by_email.scalar_one_or_none()
+                if ws:
+                    return ws
 
     # 4. Try fine-grained APIKeyRecord
     result_key = await db.execute(
@@ -138,6 +145,7 @@ async def get_current_workspace(
 
 async def get_current_account(
     authorization: str = Header(...),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
     x_workspace_key: str | None = Header(None, alias="X-Workspace-Key"),
     db: AsyncSession = Depends(get_db),
 ) -> Account:
@@ -146,34 +154,40 @@ async def get_current_account(
         raise HTTPException(status_code=401, detail="Invalid auth header")
     token = authorization.removeprefix("Bearer ").strip()
 
-    # 1. Try decoding as JWT session token
-    payload = decode_access_token(token)
-    if payload and ("sub" in payload or "email" in payload):
-        if "sub" in payload and payload["sub"]:
-            try:
-                account_id = uuid.UUID(payload["sub"])
-                result = await db.execute(select(Account).where(Account.id == account_id))
-                account = result.scalar_one_or_none()
+    # 1. Try decoding as JWT session token from X-Session-Token or Authorization header
+    tokens_to_decode = []
+    if x_session_token:
+        tokens_to_decode.append(x_session_token.removeprefix("Bearer ").strip())
+    tokens_to_decode.append(token)
+
+    for tok in tokens_to_decode:
+        payload = decode_access_token(tok)
+        if payload and ("sub" in payload or "email" in payload):
+            if "sub" in payload and payload["sub"]:
+                try:
+                    account_id = uuid.UUID(payload["sub"])
+                    result = await db.execute(select(Account).where(Account.id == account_id))
+                    account = result.scalar_one_or_none()
+                    if account:
+                        return account
+                except (ValueError, TypeError):
+                    pass
+
+            email = payload.get("email")
+            if email:
+                acc_by_email = await db.execute(select(Account).where(Account.email == email))
+                account = acc_by_email.scalar_one_or_none()
                 if account:
                     return account
-            except (ValueError, TypeError):
-                pass
-
-        email = payload.get("email")
-        if email:
-            acc_by_email = await db.execute(select(Account).where(Account.email == email))
-            account = acc_by_email.scalar_one_or_none()
-            if account:
-                return account
-            if email == "admin@a2afirewall.dev":
-                account = Account(
-                    email="admin@a2afirewall.dev",
-                    full_name="Security Admin",
-                    tier="enterprise",
-                )
-                db.add(account)
-                await db.commit()
-                return account
+                if email == "admin@a2afirewall.dev":
+                    account = Account(
+                        email="admin@a2afirewall.dev",
+                        full_name="Security Admin",
+                        tier="enterprise",
+                    )
+                    db.add(account)
+                    await db.commit()
+                    return account
 
     # 2. Try looking up workspace by API key (token or x_workspace_key) and resolving linked account
     keys_to_try = [token]
