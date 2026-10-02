@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from a2a_firewall.core.config import settings
 
 logger = logging.getLogger("a2a_firewall")
+
+if TYPE_CHECKING:
+    from sentry_sdk.types import Event, Hint
 
 
 def setup_sentry() -> bool:
@@ -23,7 +26,7 @@ def setup_sentry() -> bool:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
 
-    def before_send(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+    def before_send(event: Event, hint: Hint) -> Event | None:
         """Filter out benign asyncpg/SQLAlchemy connection teardown errors."""
         if "exc_info" in hint and hint["exc_info"]:
             _, exc_val, _ = hint["exc_info"]
@@ -32,7 +35,8 @@ def setup_sentry() -> bool:
                 if "Event loop is closed" in msg or "loop is closed" in msg.lower():
                     return None
 
-        logentry = event.get("logentry", {}).get("message", "")
+        logentry_obj: Any = event.get("logentry", {})
+        logentry = str(logentry_obj.get("message", ""))
         if "Event loop is closed" in logentry or (
             "terminating connection" in logentry.lower() and "closed" in logentry.lower()
         ):
