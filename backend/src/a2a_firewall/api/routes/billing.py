@@ -103,7 +103,7 @@ async def _resolve_or_create_plan_id(plan_key: str) -> str | None:
         return None
 
     # 1. Check settings
-    configured = getattr(settings, meta["env_attr"], None)
+    configured: str | None = getattr(settings, meta["env_attr"], None)
     if (
         configured
         and configured.strip()
@@ -127,7 +127,7 @@ async def _resolve_or_create_plan_id(plan_key: str) -> str | None:
                 currency="INR",
                 description=meta["description"],
             )
-            created_id = resp.get("id")
+            created_id: str | None = resp.get("id")
             if created_id:
                 _DYNAMIC_PLAN_CACHE[plan_key] = created_id
                 logger.info(f"Auto-created Razorpay plan {created_id} for {plan_key}")
@@ -370,7 +370,7 @@ async def verify_subscription(
     result = await db.execute(stmt)
     sub = result.scalar_one_or_none()
 
-    resolved_tier = body.tier or (sub.tier if sub else "pro")
+    resolved_tier: str = body.tier or (sub.tier if sub else "pro") or "pro"
 
     if sub:
         sub.status = "active"

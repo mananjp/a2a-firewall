@@ -106,7 +106,9 @@ async def get_current_workspace(
             # 3d. Lookup by admin_email
             email = payload.get("email")
             if email:
-                acc_by_email = await db.execute(select(Workspace).where(Workspace.admin_email == email))
+                acc_by_email = await db.execute(
+                    select(Workspace).where(Workspace.admin_email == email)
+                )
                 ws = acc_by_email.scalar_one_or_none()
                 if ws:
                     return ws
@@ -124,7 +126,9 @@ async def get_current_workspace(
             raise HTTPException(status_code=401, detail="API key has expired")
         api_key_record.last_used_at = datetime.now(UTC)
         await db.commit()
-        ws_res = await db.execute(select(Workspace).where(Workspace.id == api_key_record.workspace_id))
+        ws_res = await db.execute(
+            select(Workspace).where(Workspace.id == api_key_record.workspace_id)
+        )
         ws = ws_res.scalar_one_or_none()
         if ws:
             return ws

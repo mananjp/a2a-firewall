@@ -305,7 +305,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
         }
 
     # ── OTHER DEMO PERSONAS ──
-    if clean_email in ("auditor@a2afirewall.dev", "trial@a2afirewall.dev", "traffic@a2afirewall.dev"):
+    if clean_email in (
+        "auditor@a2afirewall.dev",
+        "trial@a2afirewall.dev",
+        "traffic@a2afirewall.dev",
+    ):
         target_tier = "team" if clean_email.startswith("auditor") else "pro"
         result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
         ws = result.scalar_one_or_none()

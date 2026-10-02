@@ -455,15 +455,20 @@ def test_billing_demo_upgrade_endpoint():
 async def test_get_current_workspace_with_jwt_token():
     mock_db = AsyncMock()
     ws_id = uuid.uuid4()
-    ws = Workspace(id=ws_id, name="JWT Workspace", admin_email="admin@a2afirewall.dev", api_key_hash="hash")
+    ws = Workspace(
+        id=ws_id, name="JWT Workspace", admin_email="admin@a2afirewall.dev", api_key_hash="hash"
+    )
 
     mock_ws_result = MagicMock()
     mock_ws_result.scalar_one_or_none.return_value = ws
     mock_db.execute.return_value = mock_ws_result
 
-    token = create_access_token({"sub": str(uuid.uuid4()), "email": "admin@a2afirewall.dev", "workspace_id": str(ws_id)})
+    token = create_access_token(
+        {"sub": str(uuid.uuid4()), "email": "admin@a2afirewall.dev", "workspace_id": str(ws_id)}
+    )
 
     from a2a_firewall.api.deps import get_current_workspace
+
     resolved_ws = await get_current_workspace(
         authorization=f"Bearer {token}",
         x_workspace_key=None,
@@ -476,7 +481,9 @@ async def test_get_current_workspace_with_jwt_token():
 
 def test_billing_subscribe_simulation_fallback():
     mock_db = AsyncMock()
-    mock_account = MagicMock(id=uuid.uuid4(), email="tester@example.com", tier="free", full_name="Tester")
+    mock_account = MagicMock(
+        id=uuid.uuid4(), email="tester@example.com", tier="free", full_name="Tester"
+    )
 
     # Mock execute for existing active subscription check (returns None) and customer lookup (returns None)
     mock_sub_res = MagicMock()
@@ -554,6 +561,3 @@ def test_billing_verify_order_payment():
         assert mock_sub.status == "active"
     finally:
         app.dependency_overrides.clear()
-
-
-
