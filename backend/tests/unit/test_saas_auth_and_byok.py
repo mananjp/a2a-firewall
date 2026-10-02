@@ -61,6 +61,7 @@ def test_jwt_invalid_token():
 @pytest.mark.asyncio
 async def test_ensure_account_and_link():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_account_result = MagicMock()
     mock_account_result.scalar_one_or_none.return_value = None
     mock_link_result = MagicMock()
@@ -306,6 +307,7 @@ def test_llm_settings_crud():
 
 def test_api_keys_crud():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     ws_id = uuid.uuid4()
     ws = Workspace(id=ws_id, name="Test WS", admin_email="admin@test.com", api_key_hash="hash")
 
@@ -380,6 +382,7 @@ def test_api_keys_crud():
 @pytest.mark.asyncio
 async def test_admin_persona_granted_enterprise_tier():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_account_result = MagicMock()
     mock_account_result.scalar_one_or_none.return_value = None
     mock_link_result = MagicMock()
@@ -423,6 +426,7 @@ def test_billing_config_endpoint():
 
 def test_billing_demo_upgrade_endpoint():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_account = MagicMock(id=uuid.uuid4(), email="demo@example.com", tier="free")
 
     async def override_get_db():
@@ -481,6 +485,7 @@ async def test_get_current_workspace_with_jwt_token():
 
 def test_billing_subscribe_simulation_fallback():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_account = MagicMock(
         id=uuid.uuid4(), email="tester@example.com", tier="free", full_name="Tester"
     )
@@ -523,6 +528,7 @@ def test_billing_subscribe_simulation_fallback():
 
 def test_billing_verify_order_payment():
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
     mock_account = MagicMock(id=uuid.uuid4(), email="tester@example.com", tier="free")
 
     # Mock DB find subscription

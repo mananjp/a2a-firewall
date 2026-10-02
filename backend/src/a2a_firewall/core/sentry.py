@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from a2a_firewall.core.config import settings
 
@@ -22,6 +23,23 @@ def setup_sentry() -> bool:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
 
+    def before_send(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+        """Filter out benign asyncpg/SQLAlchemy connection teardown errors."""
+        if "exc_info" in hint and hint["exc_info"]:
+            _, exc_val, _ = hint["exc_info"]
+            if exc_val is not None:
+                msg = str(exc_val)
+                if "Event loop is closed" in msg or "loop is closed" in msg.lower():
+                    return None
+
+        logentry = event.get("logentry", {}).get("message", "")
+        if "Event loop is closed" in logentry or (
+            "terminating connection" in logentry.lower() and "closed" in logentry.lower()
+        ):
+            return None
+
+        return event
+
     try:
         sentry_sdk.init(
             dsn=dsn,
@@ -34,6 +52,7 @@ def setup_sentry() -> bool:
                 ),
                 LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
             ],
+            before_send=before_send,
             send_default_pii=False,
             release=None,  # set via SENTRY_RELEASE env/git-build hook if desired
         )
@@ -48,4 +67,4 @@ def setup_sentry() -> bool:
 def _explicitly_disabled() -> bool:
     import os
 
-    return os.environ.get("SENTRY_DISABLED", "").lower() == "true"
+    return os.environ.get("SENTRY_DISABLED", "").lower() in ("true", "1")

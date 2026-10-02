@@ -1,11 +1,12 @@
-from __future__ import annotations
-
+import os
 import ssl
+import sys
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from a2a_firewall.core.config import settings
 
@@ -40,8 +41,15 @@ _engine_kwargs: dict[str, Any] = {
     "pool_recycle": settings.DATABASE_POOL_RECYCLE_SECONDS,
 }
 
-# QueuePool-specific options (not applicable to NullPool or SQLite memory)
-if not settings.DATABASE_URL.startswith("sqlite"):
+_is_testing = (
+    os.environ.get("TESTING", "").lower() in ("1", "true")
+    or "pytest" in sys.modules
+    or "PYTEST_CURRENT_TEST" in os.environ
+)
+
+if _is_testing:
+    _engine_kwargs["poolclass"] = NullPool
+elif not settings.DATABASE_URL.startswith("sqlite"):
     _engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
     _engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
     _engine_kwargs["pool_timeout"] = settings.DATABASE_POOL_TIMEOUT_SECONDS
