@@ -23,7 +23,12 @@ from a2a_firewall.db.database import (
     execute_query_safe,
     is_db_disconnect_error,
 )
-from a2a_firewall.main import dbapi_exception_handler
+from a2a_firewall.main import (
+    connection_aborted_handler,
+    connection_reset_handler,
+    dbapi_exception_handler,
+    os_error_handler,
+)
 
 
 class TestIsDbDisconnectError:
@@ -185,6 +190,88 @@ class TestDbapiExceptionHandler:
 
         body = json.loads(response.body)
         assert body["error"]["code"] == "DATABASE_ERROR"
+
+
+@pytest.mark.asyncio
+class TestConnectionAbortedHandler:
+    """Tests for the ConnectionAbortedError handler (Sentry issue 151086544)."""
+
+    async def test_winerror_1236_returns_503(self):
+        """Exact reproduction of the reported Sentry error."""
+        exc = ConnectionAbortedError(
+            22, "The network connection was aborted by the local system", None, 1236, None
+        )
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/telemetry/summary"
+
+        response = await connection_aborted_handler(mock_request, exc)
+        assert response.status_code == 503
+        assert response.headers.get("retry-after") == "1"
+
+        import json
+
+        body = json.loads(response.body)
+        assert body["error"]["code"] == "DATABASE_UNAVAILABLE"
+
+    async def test_generic_connection_abort_returns_503(self):
+        exc = ConnectionAbortedError("Connection aborted")
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/agents"
+
+        response = await connection_aborted_handler(mock_request, exc)
+        assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+class TestConnectionResetHandler:
+    async def test_connection_reset_returns_503(self):
+        exc = ConnectionResetError("Connection reset by peer")
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/telemetry/events"
+
+        response = await connection_reset_handler(mock_request, exc)
+        assert response.status_code == 503
+        assert response.headers.get("retry-after") == "1"
+
+    async def test_winerror_10054_returns_503(self):
+        exc = ConnectionResetError(
+            10054, "An existing connection was forcibly closed by the remote host"
+        )
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "POST"
+        mock_request.url.path = "/v1/firewall/inspect"
+
+        response = await connection_reset_handler(mock_request, exc)
+        assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+class TestOsErrorHandler:
+    async def test_broken_pipe_returns_503(self):
+        exc = BrokenPipeError("Broken pipe")
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/stats"
+
+        response = await os_error_handler(mock_request, exc)
+        assert response.status_code == 503
+
+    async def test_unrelated_oserror_returns_500(self):
+        exc = OSError("No such file or directory")
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/stats"
+
+        response = await os_error_handler(mock_request, exc)
+        assert response.status_code == 500
+
+        import json
+
+        body = json.loads(response.body)
+        assert body["error"]["code"] == "INTERNAL_ERROR"
 
 
 class TestSentryBeforeSendFilter:

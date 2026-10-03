@@ -207,7 +207,25 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
                 },
             )
 
-    return await call_next(request)
+    try:
+        return await call_next(request)
+    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as exc:
+        logger.error(
+            "OS-level connection failure during downstream request processing (%s %s): %s",
+            request.method,
+            request.url.path,
+            exc,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "DATABASE_UNAVAILABLE",
+                    "message": "Database connection was temporarily interrupted. Please retry your request.",
+                }
+            },
+            headers={"Retry-After": "1"},
+        )
 
 
 app.add_middleware(
@@ -252,6 +270,88 @@ async def dbapi_exception_handler(request: Request, exc: DBAPIError) -> JSONResp
     return JSONResponse(
         status_code=500,
         content={"error": {"code": "DATABASE_ERROR", "message": "A database error occurred."}},
+    )
+
+
+@app.exception_handler(ConnectionAbortedError)
+async def connection_aborted_handler(request: Request, exc: ConnectionAbortedError) -> JSONResponse:
+    """Handle Windows WinError 1236 and similar OS-level connection aborts.
+
+    These bypass SQLAlchemy's DBAPIError wrapper when asyncpg fails during
+    SSL/socket-level connection establishment (common with Neon serverless).
+    """
+    logger.error(
+        "OS-level connection abort during request (%s %s): %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": "DATABASE_UNAVAILABLE",
+                "message": "Database connection was temporarily interrupted. Please retry your request.",
+            }
+        },
+        headers={"Retry-After": "1"},
+    )
+
+
+@app.exception_handler(ConnectionResetError)
+async def connection_reset_handler(request: Request, exc: ConnectionResetError) -> JSONResponse:
+    """Handle OS-level connection resets (WinError 10054, ECONNRESET)."""
+    logger.error(
+        "OS-level connection reset during request (%s %s): %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": "DATABASE_UNAVAILABLE",
+                "message": "Database connection was temporarily interrupted. Please retry your request.",
+            }
+        },
+        headers={"Retry-After": "1"},
+    )
+
+
+@app.exception_handler(OSError)
+async def os_error_handler(request: Request, exc: OSError) -> JSONResponse:
+    """Catch-all for remaining OS-level network errors (BrokenPipeError, etc.).
+
+    Only returns 503 if the error looks like a database disconnect; re-raises
+    other OSError subclasses as 500 to avoid masking unrelated I/O failures.
+    """
+    if is_db_disconnect_error(exc):
+        logger.error(
+            "OS-level network error during request (%s %s): %s",
+            request.method,
+            request.url.path,
+            exc,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "DATABASE_UNAVAILABLE",
+                    "message": "Database connection was temporarily interrupted. Please retry your request.",
+                }
+            },
+            headers={"Retry-After": "1"},
+        )
+    logger.exception(
+        "Unhandled OS error during request (%s %s): %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "INTERNAL_ERROR", "message": "An internal error occurred."}},
     )
 
 
