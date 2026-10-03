@@ -65,6 +65,13 @@ class TestIsDbDisconnectError:
         dbapi_err = DBAPIError("SELECT 1", [], orig)
         assert is_db_disconnect_error(dbapi_err) is True
 
+    def test_asyncpg_connection_does_not_exist_error(self):
+        """Exact reproduction of Sentry issue 151086578."""
+        from asyncpg.exceptions import ConnectionDoesNotExistError
+
+        exc = ConnectionDoesNotExistError("connection was closed in the middle of operation")
+        assert is_db_disconnect_error(exc) is True
+
     def test_unrelated_errors_return_false(self):
         assert is_db_disconnect_error(ValueError("Invalid argument")) is False
         assert is_db_disconnect_error(KeyError("missing_key")) is False

@@ -209,23 +209,29 @@ async def security_and_rate_limit_middleware(request: Request, call_next: Any) -
 
     try:
         return await call_next(request)
-    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as exc:
-        logger.error(
-            "OS-level connection failure during downstream request processing (%s %s): %s",
-            request.method,
-            request.url.path,
-            exc,
-        )
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": {
-                    "code": "DATABASE_UNAVAILABLE",
-                    "message": "Database connection was temporarily interrupted. Please retry your request.",
-                }
-            },
-            headers={"Retry-After": "1"},
-        )
+    except Exception as exc:
+        # Catch ALL database disconnect variants — asyncpg's
+        # ConnectionDoesNotExistError is not an OSError or DBAPIError,
+        # and Starlette BaseHTTPMiddleware re-raises app_exc before
+        # FastAPI's registered exception_handlers can intercept.
+        if is_db_disconnect_error(exc):
+            logger.error(
+                "Database connection failure during downstream request processing (%s %s): %s",
+                request.method,
+                request.url.path,
+                exc,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": {
+                        "code": "DATABASE_UNAVAILABLE",
+                        "message": "Database connection was temporarily interrupted. Please retry your request.",
+                    }
+                },
+                headers={"Retry-After": "1"},
+            )
+        raise
 
 
 app.add_middleware(

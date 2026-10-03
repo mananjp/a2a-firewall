@@ -40,6 +40,15 @@ def is_db_disconnect_error(exc: BaseException) -> bool:
     ):
         return True
 
+    # Direct asyncpg exception type check (avoids relying solely on string matching)
+    try:
+        from asyncpg.exceptions import ConnectionDoesNotExistError, InterfaceError
+
+        if isinstance(exc, (ConnectionDoesNotExistError, InterfaceError)):
+            return True
+    except ImportError:
+        pass
+
     # Check underlying DBAPI or driver cause if wrapped in SQLAlchemy error
     orig = getattr(exc, "orig", None)
     if orig is not None and is_db_disconnect_error(orig):
