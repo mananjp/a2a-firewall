@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.api.deps import get_current_workspace
-from a2a_firewall.db.database import get_db
+from a2a_firewall.db.database import execute_query_safe, get_db
 from a2a_firewall.db.models import TelemetryRow, Workspace
 
 router = APIRouter()
@@ -68,7 +68,7 @@ async def list_telemetry_events(
 
     query = query.order_by(TelemetryRow.created_at.desc()).limit(limit).offset(offset)
 
-    result = await db.execute(query)
+    result = await execute_query_safe(db, query)
     rows = result.scalars().all()
 
     return [
@@ -103,48 +103,53 @@ async def get_telemetry_summary(
 ) -> TelemetrySummaryResponse:
     """Get telemetry summary for correlation dashboard."""
     # Total events
-    total_result = await db.execute(
-        select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace.id)
+    total_result = await execute_query_safe(
+        db, select(func.count(TelemetryRow.id)).where(TelemetryRow.workspace_id == workspace.id)
     )
     total = total_result.scalar() or 0
 
     # Events by type
-    type_result = await db.execute(
+    type_result = await execute_query_safe(
+        db,
         select(TelemetryRow.event_type, func.count(TelemetryRow.id))
         .where(TelemetryRow.workspace_id == workspace.id)
-        .group_by(TelemetryRow.event_type)
+        .group_by(TelemetryRow.event_type),
     )
     events_by_type = {row[0]: row[1] for row in type_result.all()}
 
     # Events by decision
-    dec_result = await db.execute(
+    dec_result = await execute_query_safe(
+        db,
         select(TelemetryRow.decision, func.count(TelemetryRow.id))
         .where(TelemetryRow.workspace_id == workspace.id)
-        .group_by(TelemetryRow.decision)
+        .group_by(TelemetryRow.decision),
     )
     events_by_decision = {row[0] or "unknown": row[1] for row in dec_result.all()}
 
     # Average risk score
-    avg_result = await db.execute(
-        select(func.avg(TelemetryRow.risk_score)).where(TelemetryRow.workspace_id == workspace.id)
+    avg_result = await execute_query_safe(
+        db,
+        select(func.avg(TelemetryRow.risk_score)).where(TelemetryRow.workspace_id == workspace.id),
     )
     avg_risk = avg_result.scalar() or 0.0
 
     # Identity failures
-    id_fail_result = await db.execute(
+    id_fail_result = await execute_query_safe(
+        db,
         select(func.count(TelemetryRow.id)).where(
             TelemetryRow.workspace_id == workspace.id,
             TelemetryRow.event_type == "a2a.identity_failure",
-        )
+        ),
     )
     identity_failures = id_fail_result.scalar() or 0
 
     # Scope violations
-    scope_result = await db.execute(
+    scope_result = await execute_query_safe(
+        db,
         select(func.count(TelemetryRow.id)).where(
             TelemetryRow.workspace_id == workspace.id,
             TelemetryRow.event_type == "a2a.scope_violation",
-        )
+        ),
     )
     scope_violations = scope_result.scalar() or 0
 

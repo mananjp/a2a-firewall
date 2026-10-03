@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 import a2a_firewall.main as main_mod
+from a2a_firewall.core.config import settings
 from a2a_firewall.db.database import _connect_args, engine
 from a2a_firewall.main import app
 
@@ -10,7 +11,7 @@ from a2a_firewall.main import app
 def test_engine_has_pool_pre_ping_and_recycle() -> None:
     """Verify engine is configured with pessimistic disconnect handling."""
     assert engine.pool._pre_ping is True
-    assert engine.pool._recycle == 300
+    assert engine.pool._recycle == settings.DATABASE_POOL_RECYCLE_SECONDS
     assert _connect_args.get("statement_cache_size") == 0
     assert _connect_args.get("prepared_statement_cache_size") == 0
 

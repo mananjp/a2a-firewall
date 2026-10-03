@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.core.jwt_auth import decode_access_token
 from a2a_firewall.core.security import generate_api_key, hash_api_key
-from a2a_firewall.db.database import get_db
+from a2a_firewall.db.database import execute_query_safe, get_db
 from a2a_firewall.db.models import Account, AccountWorkspace, Agent, APIKeyRecord, Workspace
 
 
@@ -114,17 +114,21 @@ async def get_current_workspace(
 
     # 1. Try raw_token as legacy/primary Workspace API key (fastest & most reliable)
     key_hash = hash_api_key(raw_token)
-    result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
+    result = await execute_query_safe(
+        db, select(Workspace).where(Workspace.api_key_hash == key_hash)
+    )
     ws = result.scalar_one_or_none()
-    if ws:
+    if isinstance(ws, Workspace):
         return ws
 
     # 2. Try X-Workspace-Key if provided
     if x_workspace_key:
         x_hash = hash_api_key(x_workspace_key.strip())
-        result = await db.execute(select(Workspace).where(Workspace.api_key_hash == x_hash))
+        result = await execute_query_safe(
+            db, select(Workspace).where(Workspace.api_key_hash == x_hash)
+        )
         ws = result.scalar_one_or_none()
-        if ws:
+        if isinstance(ws, Workspace):
             return ws
 
     # 3. Try decoding JWT session token (from X-Session-Token or raw_token)
@@ -169,7 +173,7 @@ async def get_current_workspace(
                         .order_by(AccountWorkspace.created_at.asc())
                     )
                     ws = result.scalars().first()
-                    if ws:
+                    if isinstance(ws, Workspace):
                         return ws
                 except (ValueError, TypeError):
                     pass

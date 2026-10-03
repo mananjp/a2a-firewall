@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 
 from a2a_firewall.api.routes import (
     agents,
@@ -56,7 +57,7 @@ from a2a_firewall.core.rate_limit import configure as configure_rate_limit
 from a2a_firewall.core.security import hash_api_key
 from a2a_firewall.core.sentry import setup_sentry
 from a2a_firewall.core.telemetry import setup_telemetry
-from a2a_firewall.db.database import AsyncSessionLocal, engine
+from a2a_firewall.db.database import AsyncSessionLocal, engine, is_db_disconnect_error
 from a2a_firewall.db.models import Agent, APIKeyRecord, Workspace
 
 logger = logging.getLogger("a2a_firewall")
@@ -221,6 +222,38 @@ setup_telemetry(app)
 
 # Error tracking (Sentry, free tier) — no-op unless SENTRY_DSN is configured.
 setup_sentry()
+
+
+@app.exception_handler(DBAPIError)
+async def dbapi_exception_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    if is_db_disconnect_error(exc):
+        logger.error(
+            "Database connection closed/dropped during request (%s %s): %s",
+            request.method,
+            request.url.path,
+            exc,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "DATABASE_UNAVAILABLE",
+                    "message": "Database connection was temporarily interrupted while the database was reconnecting. Please retry your request.",
+                }
+            },
+            headers={"Retry-After": "1"},
+        )
+    logger.exception(
+        "Database error occurred during request (%s %s): %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "DATABASE_ERROR", "message": "A database error occurred."}},
+    )
+
 
 # Startup status logging
 _otel_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() == "true"

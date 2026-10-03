@@ -28,17 +28,27 @@ def setup_sentry() -> bool:
 
     def before_send(event: Event, hint: Hint) -> Event | None:
         """Filter out benign asyncpg/SQLAlchemy connection teardown errors."""
+        from a2a_firewall.db.database import is_db_disconnect_error
+
         if "exc_info" in hint and hint["exc_info"]:
             _, exc_val, _ = hint["exc_info"]
             if exc_val is not None:
                 msg = str(exc_val)
                 if "Event loop is closed" in msg or "loop is closed" in msg.lower():
                     return None
+                if is_db_disconnect_error(exc_val):
+                    return None
 
         logentry_obj: Any = event.get("logentry", {})
-        logentry = str(logentry_obj.get("message", ""))
-        if "Event loop is closed" in logentry or (
-            "terminating connection" in logentry.lower() and "closed" in logentry.lower()
+        logentry = str(logentry_obj.get("message", "")).lower()
+        if "event loop is closed" in logentry or (
+            "terminating connection" in logentry and "closed" in logentry
+        ):
+            return None
+        if (
+            "connection was closed in the middle of operation" in logentry
+            or "connectiondoesnotexisterror" in logentry
+            or "winerror 1236" in logentry
         ):
             return None
 

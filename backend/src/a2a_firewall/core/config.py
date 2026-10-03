@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Database connection pool settings (resilience against idle drops, serverless suspend & bouncers)
     DATABASE_POOL_PRE_PING: bool = True
-    DATABASE_POOL_RECYCLE_SECONDS: int = 300
+    DATABASE_POOL_RECYCLE_SECONDS: int = 120
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_POOL_TIMEOUT_SECONDS: int = 30
