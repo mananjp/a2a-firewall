@@ -340,6 +340,32 @@ class TestSentryBeforeSendFilter:
             filtered_log = before_send_fn(log_event, {})
             assert filtered_log is None
 
+            # Test OpenTelemetry logger event is filtered (Sentry 151086542)
+            otel_event = {
+                "logger": "opentelemetry.sdk.trace.export",
+                "logentry": {"message": "Exception while exporting Span batch."},
+            }
+            assert before_send_fn(otel_event, {}) is None
+
+            # Test OTLP ReadTimeout exc_info is filtered
+            otlp_timeout_exc = TimeoutError("HTTPSConnectionPool(host='otlp-gateway-prod-ap-south-1.grafana.net', port=443): Read timed out. (read timeout=10)")
+            otlp_hint = {"exc_info": (type(otlp_timeout_exc), otlp_timeout_exc, None)}
+            assert before_send_fn({"message": "error"}, otlp_hint) is None
+
+            # Test exception values payload with span batch export failure
+            otel_payload_event = {
+                "exception": {
+                    "values": [
+                        {
+                            "type": "ReadTimeout",
+                            "value": "HTTPSConnectionPool(host='otlp-gateway-prod-ap-south-1.grafana.net', port=443): Read timed out. (read timeout=10)",
+                            "module": "requests.exceptions",
+                        }
+                    ]
+                }
+            }
+            assert before_send_fn(otel_payload_event, {}) is None
+
             # Test standard unrelated error is preserved
             normal_exc = ValueError("Invalid parameter value")
             normal_hint = {"exc_info": (type(normal_exc), normal_exc, None)}

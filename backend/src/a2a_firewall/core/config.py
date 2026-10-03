@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_BACKEND: str = "memory"  # "memory" | "postgres"
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4318"
     OTEL_EXPORTER_OTLP_HEADERS: str = ""
+    OTEL_EXPORTER_OTLP_TIMEOUT: int = 15
     OTEL_SERVICE_NAME: str = "a2a-firewall"
 
     # Error tracking (Sentry, free tier). Leave SENTRY_DSN empty to disable.

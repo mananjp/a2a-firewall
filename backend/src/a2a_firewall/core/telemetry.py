@@ -68,8 +68,14 @@ def setup_telemetry(app: FastAPI) -> None:
         exporter = OTLPSpanExporter(
             endpoint=f"{settings.OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces",
             headers=_headers or None,
+            timeout=settings.OTEL_EXPORTER_OTLP_TIMEOUT,
         )
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        provider.add_span_processor(
+            BatchSpanProcessor(
+                exporter,
+                export_timeout_millis=max(30000.0, float(settings.OTEL_EXPORTER_OTLP_TIMEOUT * 1000)),
+            )
+        )
     except Exception:
         pass  # OTLP endpoint unreachable at startup; continue without export.
 
