@@ -5,8 +5,9 @@ from collections.abc import AsyncGenerator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-# Ensure Sentry is disabled and test mode is flagged during pytest runs
+# Ensure Sentry is disabled, OTEL SDK is disabled, and test mode is flagged during pytest runs
 os.environ["SENTRY_DISABLED"] = "true"
+os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["TESTING"] = "1"
 
 from a2a_firewall.db.database import engine  # noqa: E402

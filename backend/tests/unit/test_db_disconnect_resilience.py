@@ -175,7 +175,9 @@ class TestDatabaseExports:
 
 @pytest.mark.asyncio
 class TestExecuteQuerySafe:
-    async def test_safe_query_recovers_with_fresh_session(self):
+    async def test_safe_query_recovers_with_fresh_session(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         mock_dead_session = AsyncMock(spec=AsyncSession)
         mock_dead_session.execute.side_effect = DBAPIError(
             "SELECT 1",
@@ -184,11 +186,28 @@ class TestExecuteQuerySafe:
         )
         mock_dead_session.close = AsyncMock()
 
+        mock_fresh_session = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 789
+        mock_fresh_session.execute.return_value = mock_result
+
+        class MockSessionContextManager:
+            async def __aenter__(self) -> AsyncMock:
+                return mock_fresh_session
+
+            async def __aexit__(self, *args: object) -> None:
+                pass
+
+        import a2a_firewall.db.database as db_mod
+
+        monkeypatch.setattr(db_mod, "AsyncSessionLocal", MockSessionContextManager)
+
         # Should execute safely by falling back to a fresh session from AsyncSessionLocal
         stmt = text("SELECT 789 as answer")
         res = await execute_query_safe(mock_dead_session, stmt, retry_delay=0.01)
         assert res.scalar() == 789
         assert mock_dead_session.close.called
+        assert mock_fresh_session.execute.called
 
 
 @pytest.mark.asyncio

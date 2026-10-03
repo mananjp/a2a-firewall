@@ -49,6 +49,8 @@ jobs:
 
       - name: pytest unit + coverage
         run: .venv/bin/pytest tests/unit -v --cov=src/a2a_firewall --cov-report=xml --cov-report=term
+        env:
+          OTEL_SDK_DISABLED: "true"
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
