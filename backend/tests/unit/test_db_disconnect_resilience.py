@@ -86,6 +86,7 @@ class TestIsDbDisconnectError:
 @pytest.mark.asyncio
 class TestResilientAsyncSession:
     async def test_normal_query_succeeds(self):
+        pytest.importorskip("aiosqlite")
         engine = create_async_engine("sqlite+aiosqlite:///:memory:", pool_pre_ping=True)
         session_factory = async_sessionmaker(
             engine, class_=ResilientAsyncSession, expire_on_commit=False
@@ -98,6 +99,7 @@ class TestResilientAsyncSession:
         await engine.dispose()
 
     async def test_transient_disconnect_recovers_and_retries(self):
+        pytest.importorskip("aiosqlite")
         engine = create_async_engine("sqlite+aiosqlite:///:memory:", pool_pre_ping=True)
 
         class BaseFailingSession(AsyncSession):
@@ -131,6 +133,7 @@ class TestResilientAsyncSession:
         await engine.dispose()
 
     async def test_non_disconnect_error_is_not_retried(self):
+        pytest.importorskip("aiosqlite")
         engine = create_async_engine("sqlite+aiosqlite:///:memory:", pool_pre_ping=True)
         session_factory = async_sessionmaker(
             engine, class_=ResilientAsyncSession, expire_on_commit=False
@@ -141,6 +144,22 @@ class TestResilientAsyncSession:
                 await session.execute(text("SELECT INVALID SQL SYNTAX !!!"))
 
         await engine.dispose()
+
+
+class TestDatabaseExports:
+    """Verify that database symbols expected by scripts, tests, and workers are exported."""
+
+    def test_async_session_maker_exported_from_database_module(self):
+        from a2a_firewall.db.database import AsyncSessionLocal, async_session_maker
+
+        assert async_session_maker is AsyncSessionLocal
+        assert callable(async_session_maker)
+
+    def test_async_session_maker_exported_from_db_package(self):
+        from a2a_firewall.db import AsyncSessionLocal, async_session_maker
+
+        assert async_session_maker is AsyncSessionLocal
+        assert callable(async_session_maker)
 
 
 @pytest.mark.asyncio

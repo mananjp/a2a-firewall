@@ -226,6 +226,18 @@ engine = create_async_engine(
     **_engine_kwargs,
 )
 AsyncSessionLocal = async_sessionmaker(engine, class_=ResilientAsyncSession, expire_on_commit=False)
+async_session_maker = AsyncSessionLocal
+
+__all__ = [
+    "Base",
+    "is_db_disconnect_error",
+    "ResilientAsyncSession",
+    "execute_query_safe",
+    "engine",
+    "AsyncSessionLocal",
+    "async_session_maker",
+    "get_db",
+]
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
