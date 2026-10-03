@@ -10,6 +10,7 @@ Verifies:
 
 from __future__ import annotations
 
+import socket
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -27,6 +28,7 @@ from a2a_firewall.main import (
     connection_aborted_handler,
     connection_reset_handler,
     dbapi_exception_handler,
+    gaierror_handler,
     os_error_handler,
 )
 
@@ -70,6 +72,15 @@ class TestIsDbDisconnectError:
         from asyncpg.exceptions import ConnectionDoesNotExistError
 
         exc = ConnectionDoesNotExistError("connection was closed in the middle of operation")
+        assert is_db_disconnect_error(exc) is True
+
+    def test_socket_gaierror_getaddrinfo_failed(self):
+        """Exact reproduction of Sentry issue 151080159: DNS lookup failure for DB pooler."""
+        exc = socket.gaierror(11001, "getaddrinfo failed")
+        assert is_db_disconnect_error(exc) is True
+
+    def test_connection_refused_error(self):
+        exc = ConnectionRefusedError("Connection refused")
         assert is_db_disconnect_error(exc) is True
 
     def test_unrelated_errors_return_false(self):
@@ -275,6 +286,23 @@ class TestConnectionResetHandler:
 
 
 @pytest.mark.asyncio
+class TestGaierrorHandler:
+    async def test_gaierror_returns_503(self):
+        exc = socket.gaierror(11001, "getaddrinfo failed")
+        mock_request = MagicMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/v1/telemetry/events"
+
+        response = await gaierror_handler(mock_request, exc)
+        assert response.status_code == 503
+        assert response.headers.get("retry-after") == "1"
+        import json
+
+        body = json.loads(response.body)
+        assert body["error"]["code"] == "DATABASE_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
 class TestOsErrorHandler:
     async def test_broken_pipe_returns_503(self):
         exc = BrokenPipeError("Broken pipe")
@@ -365,6 +393,24 @@ class TestSentryBeforeSendFilter:
                 }
             }
             assert before_send_fn(otel_payload_event, {}) is None
+
+            # Test gaierror DNS failure is filtered (Sentry 151080159)
+            gai_exc = socket.gaierror(11001, "getaddrinfo failed")
+            gai_hint = {"exc_info": (type(gai_exc), gai_exc, None)}
+            assert before_send_fn({"message": "error"}, gai_hint) is None
+
+            gai_payload_event = {
+                "exception": {
+                    "values": [
+                        {
+                            "type": "gaierror",
+                            "value": "[Errno 11001] getaddrinfo failed",
+                            "module": "socket",
+                        }
+                    ]
+                }
+            }
+            assert before_send_fn(gai_payload_event, {}) is None
 
             # Test standard unrelated error is preserved
             normal_exc = ValueError("Invalid parameter value")

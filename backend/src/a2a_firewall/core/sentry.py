@@ -71,6 +71,9 @@ def setup_sentry() -> bool:
             "connection was closed in the middle of operation" in combined_log
             or "connectiondoesnotexisterror" in combined_log
             or "winerror 1236" in combined_log
+            or "winerror 10054" in combined_log
+            or "getaddrinfo failed" in combined_log
+            or "gaierror" in combined_log
         ):
             return None
         if (
@@ -90,7 +93,10 @@ def setup_sentry() -> bool:
         for exc_item in exc_values:
             val_str = str(exc_item.get("value", "")).lower()
             mod_str = str(exc_item.get("module", "")).lower()
+            type_str = str(exc_item.get("type", "")).lower()
             if "opentelemetry" in mod_str:
+                return None
+            if "gaierror" in type_str or "getaddrinfo failed" in val_str:
                 return None
             if (
                 "read timed out" in val_str

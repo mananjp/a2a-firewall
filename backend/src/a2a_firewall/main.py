@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from importlib.metadata import version as _pkg_version
@@ -319,6 +320,27 @@ async def connection_reset_handler(request: Request, exc: ConnectionResetError) 
             "error": {
                 "code": "DATABASE_UNAVAILABLE",
                 "message": "Database connection was temporarily interrupted. Please retry your request.",
+            }
+        },
+        headers={"Retry-After": "1"},
+    )
+
+
+@app.exception_handler(socket.gaierror)
+async def gaierror_handler(request: Request, exc: socket.gaierror) -> JSONResponse:
+    """Handle DNS resolution failures when connecting to remote database poolers (e.g. Neon, AWS RDS)."""
+    logger.error(
+        "DNS resolution failure during request (%s %s): %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": "DATABASE_UNAVAILABLE",
+                "message": "Database host resolution was temporarily interrupted. Please retry your request.",
             }
         },
         headers={"Retry-After": "1"},

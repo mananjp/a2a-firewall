@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import socket
 import ssl
 import sys
 from collections.abc import AsyncGenerator, Mapping
@@ -28,7 +29,8 @@ def is_db_disconnect_error(exc: BaseException) -> bool:
     """Return True if the exception indicates a dropped, aborted, or closed DB connection.
 
     Handles asyncpg ConnectionDoesNotExistError, Windows WinError 1236/10054 network aborts,
-    and serverless database (Neon, AWS RDS, PgBouncer) connection drops.
+    DNS lookup failures (socket.gaierror Errno 11001), and serverless database (Neon, AWS RDS,
+    PgBouncer) connection drops.
     """
     if isinstance(
         exc,
@@ -36,6 +38,9 @@ def is_db_disconnect_error(exc: BaseException) -> bool:
             ConnectionResetError,
             ConnectionAbortedError,
             BrokenPipeError,
+            ConnectionRefusedError,
+            socket.gaierror,
+            socket.herror,
         ),
     ):
         return True
@@ -66,12 +71,19 @@ def is_db_disconnect_error(exc: BaseException) -> bool:
         "the network connection was aborted",
         "connection is closed",
         "connection reset",
+        "connection refused",
         "server closed the connection unexpectedly",
         "terminating connection due to administrator command",
         "cannot connect now",
         "winerror 1236",
         "winerror 10054",
+        "winerror 10061",
         "remaining connection slots are reserved",
+        "getaddrinfo failed",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "nodename nor servname provided",
+        "gaierror",
     )
     return any(marker in msg for marker in disconnect_markers)
 
