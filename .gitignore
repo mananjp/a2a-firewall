@@ -29,3 +29,7 @@ uv.lock
 .idea/
 *.swp
 *.swo
+
+# Next.js agent files
+frontend/AGENTS.md
+frontend/CLAUDE.md

@@ -12,9 +12,11 @@ from a2a_firewall.db.models import PolicyRule
 
 INJECTION_PATTERNS: list[str] = [
     r"ignore (all |your )?(previous |prior )?instructions",
+    r"forget (all |your )?(previous |prior )?instructions",
     r"you are now",
     r"act as",
     r"forget your",
+    r"disregard (all |your )?(previous |prior )?instructions",
     r"disregard",
     r"new task:",
     r"system:",

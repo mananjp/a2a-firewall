@@ -42,9 +42,12 @@ export default function DlpPage() {
   // Sandbox state
   const [sandboxText, setSandboxText] = useState("");
   const [sandboxDest, setSandboxDest] = useState<string>("external");
-  const [sandboxMode, setSandboxMode] = useState<"inspect" | "classify">("inspect");
+  const [sandboxMode, setSandboxMode] = useState<"tokenize" | "inspect" | "classify">("tokenize");
   const [sandboxLoading, setSandboxLoading] = useState(false);
   const [sandboxResult, setSandboxResult] = useState<DlpInspectResult | null>(null);
+  const [detokenizing, setDetokenizing] = useState(false);
+  const [detokenizedText, setDetokenizedText] = useState<string | null>(null);
+  const [detokenizePurpose, setDetokenizePurpose] = useState("audit_review");
 
   const loadPolicy = useCallback(async () => {
     try {
@@ -106,8 +109,12 @@ export default function DlpPage() {
     if (!sandboxText.trim()) return;
     try {
       setSandboxLoading(true);
-      if (sandboxMode === "inspect") {
+      setDetokenizedText(null);
+      if (sandboxMode === "tokenize") {
         const res = await dlpApi.inspect(sandboxText, sandboxDest, undefined, true);
+        setSandboxResult(res);
+      } else if (sandboxMode === "inspect") {
+        const res = await dlpApi.inspect(sandboxText, sandboxDest, undefined, false);
         setSandboxResult(res);
       } else {
         const res = await dlpApi.classify(sandboxText, sandboxDest);
@@ -117,6 +124,19 @@ export default function DlpPage() {
       console.error("DLP test run failed:", err);
     } finally {
       setSandboxLoading(false);
+    }
+  };
+
+  const handleDetokenize = async () => {
+    if (!sandboxResult?.transformed_text) return;
+    try {
+      setDetokenizing(true);
+      const res = await dlpApi.detokenize(sandboxResult.transformed_text, detokenizePurpose);
+      setDetokenizedText(res.text);
+    } catch (err) {
+      console.error("Detokenization failed:", err);
+    } finally {
+      setDetokenizing(false);
     }
   };
 
@@ -373,6 +393,7 @@ export default function DlpPage() {
                     onClick={() => {
                       setSandboxText(tpl.text);
                       setSandboxResult(null);
+                      setDetokenizedText(null);
                     }}
                   >
                     {tpl.name}
@@ -411,7 +432,8 @@ export default function DlpPage() {
                     value={sandboxMode}
                     onChange={(e) => setSandboxMode(e.target.value as any)}
                   >
-                    <option value="inspect">Transform (Tokenize / Redact)</option>
+                    <option value="tokenize">Tokenize with Vault (Cryptographic HMAC)</option>
+                    <option value="inspect">Transform by Policy (Default Rules)</option>
                     <option value="classify">Classify Only (Preview)</option>
                   </select>
                 </div>
@@ -465,12 +487,48 @@ export default function DlpPage() {
                   {/* Transformed Output */}
                   <div>
                     <div className="text-xs font-mono text-ink-muted uppercase tracking-wider mb-1.5">
-                      Transformed Payload ({sandboxMode === "inspect" ? "Safe for Egress" : "Preview Mode"})
+                      Transformed Payload ({sandboxMode === "classify" ? "Preview Mode" : "Safe for Egress"})
                     </div>
-                    <pre className="p-3 rounded-lg bg-surface-elevated border border-hairline text-xs font-mono text-ink-primary whitespace-pre-wrap leading-relaxed">
+                    <pre className="p-3 rounded-lg bg-surface-elevated border border-hairline text-xs font-mono text-ink-primary whitespace-pre-wrap leading-relaxed break-all">
                       {sandboxResult.transformed_text || "No modification needed."}
                     </pre>
                   </div>
+
+                  {/* Reversible Detokenization Proof */}
+                  {sandboxResult.transformed_text?.includes("tok_") && (
+                    <div className="p-3 rounded-lg border border-accent/30 bg-accent/5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono font-medium text-accent flex items-center gap-1.5">
+                          <Key className="w-3.5 h-3.5" />
+                          Reversible HMAC Tokenization Vault
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleDetokenize}
+                          disabled={detokenizing}
+                        >
+                          <Lock className="w-3 h-3 mr-1 text-allow" />
+                          {detokenizing ? "Detokenizing..." : "Test Reversible Detokenization"}
+                        </Button>
+                      </div>
+                      <p className="text-[11px] text-ink-muted">
+                        Cryptographic surrogate tokens can be securely reversed back to plaintext PII by authorized backend services with verified business purpose.
+                      </p>
+                      {detokenizedText && (
+                        <div className="mt-2 pt-2 border-t border-hairline space-y-1">
+                          <div className="text-[10px] font-mono text-allow uppercase tracking-wider flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-allow" />
+                            Plaintext Restored via Vault Lookup (Purpose: {detokenizePurpose})
+                          </div>
+                          <pre className="p-2.5 rounded bg-surface border border-hairline text-xs font-mono text-ink-primary whitespace-pre-wrap break-all">
+                            {detokenizedText}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Findings Breakdown */}
                   {sandboxResult.findings.length > 0 && (
@@ -479,36 +537,41 @@ export default function DlpPage() {
                         Detected Entity Spans
                       </div>
                       <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                        {sandboxResult.findings.map((finding, idx) => (
-                          <div
-                            key={idx}
-                            className="p-2.5 rounded border border-hairline bg-surface/70 text-xs font-mono flex items-center justify-between"
-                          >
-                            <div>
-                              <span className="font-bold text-ink-primary">
-                                {finding.pattern_type.toUpperCase()}
-                              </span>
-                              <span className="text-ink-muted ml-2">
-                                (Confidence: {(finding.confidence * 100).toFixed(0)}%)
-                              </span>
-                              {finding.span && (
-                                <span className="text-[10px] text-ink-muted ml-2">
-                                  [{finding.span[0]}:{finding.span[1]}]
+                        {sandboxResult.findings.map((finding, idx) => {
+                          const patternType = finding.pattern_type || (finding as any).violation_type || "PII";
+                          const conf = finding.confidence !== undefined ? (finding.confidence * 100).toFixed(0) : "95";
+                          const span = finding.span || (finding as any).details?.span;
+                          return (
+                            <div
+                              key={idx}
+                              className="p-2.5 rounded border border-hairline bg-surface/70 text-xs font-mono flex items-center justify-between"
+                            >
+                              <div>
+                                <span className="font-bold text-ink-primary">
+                                  {patternType.toUpperCase()}
                                 </span>
-                              )}
-                            </div>
-                            <div className="flex gap-1">
-                              {finding.framework_tags?.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface-elevated text-accent border border-hairline"
-                                >
-                                  {tag}
+                                <span className="text-ink-muted ml-2">
+                                  (Confidence: {conf}%)
                                 </span>
-                              ))}
+                                {span && (
+                                  <span className="text-[10px] text-ink-muted ml-2">
+                                    [{span[0]}:{span[1]}]
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex gap-1">
+                                {finding.framework_tags?.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface-elevated text-accent border border-hairline"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

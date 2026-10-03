@@ -8,24 +8,95 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.core.jwt_auth import decode_access_token
-from a2a_firewall.core.security import hash_api_key
+from a2a_firewall.core.security import generate_api_key, hash_api_key
 from a2a_firewall.db.database import get_db
 from a2a_firewall.db.models import Account, AccountWorkspace, Agent, APIKeyRecord, Workspace
 
 
 async def get_current_agent(
-    authorization: str = Header(...), db: AsyncSession = Depends(get_db)
+    authorization: str = Header(...),
+    x_session_token: str | None = Header(None, alias="X-Session-Token"),
+    x_workspace_key: str | None = Header(None, alias="X-Workspace-Key"),
+    x_workspace_id: str | None = Header(None, alias="X-Workspace-Id"),
+    x_agent_id: str | None = Header(None, alias="X-Agent-Id"),
+    db: AsyncSession = Depends(get_db),
 ) -> Agent:
+    """Resolve active agent via direct agent key, or fallback to workspace / session auth.
+
+    This enables both:
+    1. Direct autonomous AI agents calling inspection routes via their Agent API key (agt_...).
+    2. Dashboard playground / sandbox / integrations calling inspection routes via
+       Workspace API key (ws_...) or JWT session token.
+    """
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid auth header")
     raw_key = authorization.removeprefix("Bearer ").strip()
     key_hash = hash_api_key(raw_key)
+
+    # 1. Direct Agent API key lookup (fast path for agents & SDK)
     result = await db.execute(select(Agent).where(Agent.api_key_hash == key_hash))
     agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    if agent.status == "suspended":
-        raise HTTPException(status_code=403, detail="Agent suspended")
+    if agent:
+        if agent.status == "suspended":
+            raise HTTPException(status_code=403, detail="Agent suspended")
+        return agent
+
+    # Normalize optional headers for direct function calls and tests
+    tok_session = x_session_token if isinstance(x_session_token, str) else None
+    key_workspace = x_workspace_key if isinstance(x_workspace_key, str) else None
+    id_workspace = x_workspace_id if isinstance(x_workspace_id, str) else None
+    id_agent = x_agent_id if isinstance(x_agent_id, str) else None
+
+    # 2. Flexible resolution via Workspace or JWT session token (for Dashboard & Integrations)
+    try:
+        ws = await get_current_workspace(
+            authorization=authorization,
+            x_session_token=tok_session,
+            x_workspace_key=key_workspace,
+            x_workspace_id=id_workspace,
+            db=db,
+        )
+    except HTTPException:
+        raise HTTPException(status_code=401, detail="Invalid API key") from None
+
+    # 2a. If a specific agent was requested via X-Agent-Id
+    if id_agent:
+        try:
+            ag_uuid = uuid.UUID(id_agent)
+            ag_res = await db.execute(
+                select(Agent).where(Agent.id == ag_uuid, Agent.workspace_id == ws.id)
+            )
+            specific = ag_res.scalar_one_or_none()
+            if specific:
+                if specific.status == "suspended":
+                    raise HTTPException(status_code=403, detail="Agent suspended")
+                return specific
+        except (ValueError, TypeError):
+            pass
+
+    # 2b. Use first active agent in this workspace
+    agent_res = await db.execute(
+        select(Agent)
+        .where(Agent.workspace_id == ws.id, Agent.status != "suspended")
+        .order_by(Agent.created_at.asc())
+    )
+    agent = agent_res.scalars().first()
+    if agent:
+        return agent
+
+    # 2c. Auto-provision a default agent if the workspace doesn't have one yet
+    _, auto_hash = generate_api_key("ag")
+    agent = Agent(
+        workspace_id=ws.id,
+        name="WorkspaceDefaultAgent",
+        description="Auto-provisioned default agent for workspace & dashboard operations",
+        api_key_hash=auto_hash,
+        capabilities=["all"],
+        status="active",
+    )
+    db.add(agent)
+    await db.commit()
+    await db.refresh(agent)
     return agent
 
 

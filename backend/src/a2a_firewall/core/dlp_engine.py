@@ -90,10 +90,16 @@ class DLPEngine:
         rules: list[DlpRule] | None = None,
         token_vault: TokenVault | None = None,
         tracker: DerivedDataTracker | None = None,
+        workspace_id: str | None = None,
+        secure_vault: Any = None,
+        tokenize_mode: bool = False,
     ) -> None:
         self.rules = rules or []
         self.vault = token_vault or TokenVault()
         self.tracker = tracker or DerivedDataTracker()
+        self.workspace_id = workspace_id
+        self.secure_vault = secure_vault
+        self.tokenize_mode = tokenize_mode
 
     # -- policy helpers -----------------------------------------------------
     def _action_for(self, data_class: str, destination: str) -> str | None:
@@ -134,6 +140,11 @@ class DLPEngine:
                         "violation_type": "purpose_limitation",
                         "severity": "high",
                         "description": f"Purpose '{purpose}' not allowed for destination '{destination}'.",
+                        "pattern_type": "purpose_limitation",
+                        "matched_text": "",
+                        "confidence": 1.0,
+                        "framework_tags": ["GDPR", "DPDP"],
+                        "span": [0, 0],
                     }
                 ],
             )
@@ -158,13 +169,17 @@ class DLPEngine:
         actions_seen = self._evaluate_actions(representatives, destination)
         final_action = _resolve_action(actions_seen)
 
+        # If tokenize_mode was explicitly requested and the content isn't blocked, force tokenize
+        if self.tokenize_mode and final_action != "block" and occurrences:
+            final_action = "tokenize"
+
         if final_action == "block" or (derived and _is_block_when_derived(actions_seen)):
             return DlpDecision(
                 action="block",
                 blocked=True,
                 derived=derived,
                 source_digest=source_digest,
-                findings=self._findings_for(matches, destination, derived),
+                findings=self._findings_for(matches, destination, derived, text),
             )
 
         transformed = text
@@ -174,7 +189,32 @@ class DLPEngine:
             elif final_action == "hash":
                 transformed = "".join(_replace_with_hashes(text, occurrences))
             else:
-                transformed = tokenize_spans(text, occurrences, self.vault)
+                if self.secure_vault and self.workspace_id:
+                    ordered = sorted(occurrences, key=lambda o: o.start)
+                    out: list[str] = []
+                    cursor = 0
+                    start_to_match = {m.start: m for m in representatives}
+                    for occ in ordered:
+                        if occ.end <= cursor or occ.start < cursor:
+                            if occ.end > cursor:
+                                continue
+                            continue
+                        out.append(text[cursor : occ.start])
+                        m = start_to_match.get(occ.start)
+                        data_class = m.data_class if m else "sensitive"
+                        tok = self.secure_vault.tokenize(
+                            workspace_id=self.workspace_id,
+                            entity_type=data_class,
+                            value=occ.value,
+                            classification=data_class,
+                            actor=f"ws:{self.workspace_id}",
+                        )
+                        out.append(tok)
+                        cursor = occ.end
+                    out.append(text[cursor:])
+                    transformed = "".join(out)
+                else:
+                    transformed = tokenize_spans(text, occurrences, self.vault)
 
         # Register the matched raw values as known-sensitive sources so that
         # reformatted derivatives are still classified later.
@@ -193,7 +233,7 @@ class DLPEngine:
             transformed_text=transformed,
             derived=derived,
             source_digest=source_digest,
-            findings=self._findings_for(matches, destination, derived),
+            findings=self._findings_for(matches, destination, derived, text),
         )
 
     def _representative_matches(self, text: str, matches: list[PIIMatch]) -> list[PIIMatch]:
@@ -216,20 +256,33 @@ class DLPEngine:
         return [a for a in (self._action_for(c, destination) for c in data_classes) if a]
 
     def _findings_for(
-        self, matches: list[PIIMatch], destination: str, derived: bool
+        self, matches: list[PIIMatch], destination: str, derived: bool, text: str = ""
     ) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         if derived:
             findings.append(
                 {
+                    "pattern_type": "derived_data",
+                    "matched_text": "[DERIVED]",
+                    "confidence": 0.8,
+                    "framework_tags": ["GDPR", "DPDP"],
+                    "data_class": "sensitive",
+                    "span": [0, len(text)] if text else [0, 0],
                     "violation_type": "sensitive_derived_data",
                     "severity": "medium",
                     "description": "Content derives from previously-classified sensitive data.",
+                    "details": {},
                 }
             )
         for m in matches:
             findings.append(
                 {
+                    "pattern_type": m.pattern_type,
+                    "matched_text": m.matched_text,
+                    "confidence": m.confidence,
+                    "framework_tags": m.framework_tags,
+                    "data_class": m.data_class,
+                    "span": [m.start, m.end],
                     "violation_type": f"dlp_{m.data_class}_{m.pattern_type}",
                     "severity": "high" if m.confidence >= 0.85 else "medium",
                     "description": f"{m.pattern_type} ({m.data_class}) destined for '{destination}'.",

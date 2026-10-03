@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from a2a_firewall.api.deps import get_current_workspace, get_current_workspace_flexible
+from a2a_firewall.api.deps import get_current_workspace_flexible
 from a2a_firewall.core.dlp_engine import DLPEngine, DlpRule
 from a2a_firewall.core.vault import SecureTokenVault, create_dev_vault
 from a2a_firewall.db.database import get_db
@@ -76,7 +76,7 @@ def _to_rule(policy: DlpPolicy) -> DlpRule:
     )
 
 
-async def _load_engine(db: AsyncSession, ws: Workspace) -> DLPEngine:
+async def _load_engine(db: AsyncSession, ws: Workspace, tokenize_mode: bool = False) -> DLPEngine:
     result = await db.execute(
         select(DlpPolicy).where(
             DlpPolicy.workspace_id == ws.id,
@@ -84,7 +84,12 @@ async def _load_engine(db: AsyncSession, ws: Workspace) -> DLPEngine:
         )
     )
     rules = [_to_rule(p) for p in result.scalars().all()]
-    return DLPEngine(rules=rules)
+    return DLPEngine(
+        rules=rules,
+        workspace_id=str(ws.id),
+        secure_vault=_get_vault(),
+        tokenize_mode=tokenize_mode,
+    )
 
 
 @router.post("/inspect", response_model=InspectResponse)
@@ -94,7 +99,7 @@ async def inspect_payload(
     db: AsyncSession = Depends(get_db),
 ) -> InspectResponse:
     """Classify and transform ``text`` for ``destination`` under tenant DLP rules."""
-    engine = await _load_engine(db, ws)
+    engine = await _load_engine(db, ws, tokenize_mode=body.tokenize)
     decision = engine.inspect(
         body.text,
         destination=body.destination,
@@ -121,7 +126,7 @@ async def classify_payload(
     Mirrors ``inspect`` but returns the would-be action and findings while
     leaving the source text untouched for safe preview/audit.
     """
-    engine = await _load_engine(db, ws)
+    engine = await _load_engine(db, ws, tokenize_mode=False)
     decision = engine.inspect(
         body.text,
         destination=body.destination,
@@ -286,7 +291,7 @@ async def tokenize_text(
 @router.post("/detokenize", response_model=DetokenizeResponse)
 async def detokenize_text(
     body: DetokenizeRequest,
-    ws: Workspace = Depends(get_current_workspace),
+    ws: Workspace = Depends(get_current_workspace_flexible),
 ) -> DetokenizeResponse:
     """Detokenize vault tokens in ``text`` back to their original values.
 

@@ -567,3 +567,105 @@ def test_billing_verify_order_payment():
         assert mock_sub.status == "active"
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_current_agent_with_agent_key():
+    from a2a_firewall.api.deps import get_current_agent
+    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.db.models import Agent
+
+    mock_db = AsyncMock()
+    agent_id = uuid.uuid4()
+    ws_id = uuid.uuid4()
+    raw_key = "agt_testagentkey123"
+    key_hash = hash_api_key(raw_key)
+
+    agent = Agent(
+        id=agent_id,
+        workspace_id=ws_id,
+        name="TestAgent",
+        api_key_hash=key_hash,
+        status="active",
+        capabilities=["research"],
+    )
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = agent
+    mock_db.execute.return_value = mock_res
+
+    resolved = await get_current_agent(
+        authorization=f"Bearer {raw_key}",
+        db=mock_db,
+    )
+    assert resolved.id == agent_id
+    assert resolved.name == "TestAgent"
+
+
+@pytest.mark.asyncio
+async def test_get_current_agent_with_workspace_key():
+    from a2a_firewall.api.deps import get_current_agent
+    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.db.models import Agent, Workspace
+
+    mock_db = AsyncMock()
+    ws_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    ws_raw_key = "ws_testworkspacekey123"
+    ws_hash = hash_api_key(ws_raw_key)
+
+    ws = Workspace(
+        id=ws_id,
+        name="Test Workspace",
+        admin_email="admin@test.dev",
+        api_key_hash=ws_hash,
+    )
+    agent = Agent(
+        id=agent_id,
+        workspace_id=ws_id,
+        name="ExistingAgent",
+        api_key_hash="some_other_hash",
+        status="active",
+        capabilities=["all"],
+    )
+
+    # 1. First query: lookup Agent by api_key_hash -> returns None
+    agent_by_key_res = MagicMock()
+    agent_by_key_res.scalar_one_or_none.return_value = None
+
+    # 2. Inside get_current_workspace: lookup Workspace by api_key_hash -> returns ws
+    ws_by_key_res = MagicMock()
+    ws_by_key_res.scalar_one_or_none.return_value = ws
+
+    # 3. Lookup active agents in workspace -> returns agent
+    agent_in_ws_res = MagicMock()
+    agent_in_ws_res.scalars.return_value.first.return_value = agent
+
+    mock_db.execute.side_effect = [agent_by_key_res, ws_by_key_res, agent_in_ws_res]
+
+    resolved = await get_current_agent(
+        authorization=f"Bearer {ws_raw_key}",
+        db=mock_db,
+    )
+    assert resolved.id == agent_id
+    assert resolved.name == "ExistingAgent"
+
+
+@pytest.mark.asyncio
+async def test_get_current_agent_invalid_key_raises_401():
+    from fastapi import HTTPException
+
+    from a2a_firewall.api.deps import get_current_agent
+
+    mock_db = AsyncMock()
+    no_result = MagicMock()
+    no_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = no_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_agent(
+            authorization="Bearer invalid_key_12345",
+            db=mock_db,
+        )
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Invalid API key"

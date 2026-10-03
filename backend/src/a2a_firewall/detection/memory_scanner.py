@@ -38,8 +38,16 @@ from a2a_firewall.detection.pii_patterns import PII_PLACEHOLDERS, PIIMatch, scan
 # templates observed in RAG attacks.
 _MEMORY_INJECTION_PATTERNS: list[tuple[str, str]] = [
     (
-        r"(?i)\bignore\s+(?:(?:previous|prior|all|the|your)\s+)*(?:instructions|prompts|system\s+prompt)\b",
+        r"(?i)\b(?:ignore|forget|disregard|override|bypass)\s+(?:(?:previous|prior|all|the|your|any)\s+)*(?:instructions|prompts|system\s+prompt|rules|directives|filters?|guardrails?|safety|checks?)\b",
         "memory_instruction_override",
+    ),
+    (
+        r"(?i)\b(?:important\s+)?system\s+override\b",
+        "memory_system_override",
+    ),
+    (
+        r"(?i)\b(?:dump|extract|exfiltrate|reveal|leak|print|show)\s+(?:all\s+)?(?:keys?|passwords?|tokens?|secrets?|credentials?|database|memories|records?)\b",
+        "memory_data_exfiltration",
     ),
     (r"(?i)\bwhen\s+retrieved\s+as\s+context\b", "memory_future_override"),
     (
@@ -64,10 +72,13 @@ _SECRET_STORAGE_PATTERNS: list[tuple[str, str]] = [
         "secret_persisted",
     ),
     (
-        r"(?i)\b(save|store|remember|record)\s+(this\s+)?(api key|password|token|secret)\b",
+        r"(?i)\b(?:save|store|remember|record|output|print|reveal|dump|exfiltrate)\s+(?:this\s+|all\s+)?(?:api[_ -]?key|password|token|secret|credentials|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\b",
         "secret_probe",
     ),
-    (r"(?i)\bexport\s+(AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\s*=", "secret_exfiltration"),
+    (
+        r"(?i)\b(?:export|output)\s+(?:AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\b",
+        "secret_exfiltration",
+    ),
 ]
 
 # Sensitive PII classes we refuse to persist into shared memory regardless of
@@ -117,9 +128,11 @@ class MemoryInspection:
             "blocked": self.blocked,
             "sensitive_pii": self.sensitive_pii,
             "content_hash": self.content_hash,
+            "redacted_chunk": self.redacted_chunk,
             "findings": [
                 {
                     "type": f.finding_type,
+                    "finding_type": f.finding_type,
                     "severity": f.severity,
                     "description": f.description,
                     "details": f.details,
