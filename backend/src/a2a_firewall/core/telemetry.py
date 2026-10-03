@@ -73,7 +73,9 @@ def setup_telemetry(app: FastAPI) -> None:
         provider.add_span_processor(
             BatchSpanProcessor(
                 exporter,
-                export_timeout_millis=max(30000.0, float(settings.OTEL_EXPORTER_OTLP_TIMEOUT * 1000)),
+                export_timeout_millis=max(
+                    30000.0, float(settings.OTEL_EXPORTER_OTLP_TIMEOUT * 1000)
+                ),
             )
         )
     except Exception:

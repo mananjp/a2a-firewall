@@ -51,9 +51,8 @@ def setup_sentry() -> bool:
                     return None
                 if is_db_disconnect_error(exc_val):
                     return None
-                if (
-                    "read timed out" in msg.lower()
-                    and ("otlp" in msg.lower() or "grafana" in msg.lower() or "trace" in msg.lower())
+                if "read timed out" in msg.lower() and (
+                    "otlp" in msg.lower() or "grafana" in msg.lower() or "trace" in msg.lower()
                 ):
                     return None
                 if "exporting span batch" in msg.lower():
