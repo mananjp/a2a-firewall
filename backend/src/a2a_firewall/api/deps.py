@@ -251,12 +251,12 @@ async def get_current_workspace(
             # 3d. Lookup by admin_email
             email = payload.get("email")
             if email:
-                acc_by_email = await db.execute(
+                ws_by_email = await db.execute(
                     select(Workspace).where(Workspace.admin_email == email)
                 )
-                ws = acc_by_email.scalar_one_or_none()
-                if ws:
-                    return ws
+                ws_obj = ws_by_email.scalar_one_or_none()
+                if isinstance(ws_obj, Workspace):
+                    return ws_obj
 
     # 4. Try fine-grained APIKeyRecord
     result_key = await db.execute(

@@ -273,15 +273,15 @@ def test_workspace_a_jwt_cannot_access_workspace_b_via_x_workspace_id() -> None:
             "/v1/auth/register",
             json={"email": email, "password": "Password123!Secure", "full_name": "Tenant A User"},
         )
-        if reg_r.status_code == 200:
-            token = reg_r.json()["access_token"]
-            r = c.get(
-                "/v1/policies",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "X-Workspace-Id": ws_b["workspace_id"],
-                },
-            )
-            assert r.status_code == 403, (
-                f"Expected 403 Forbidden for cross-tenant access, got {r.status_code}: {r.text}"
-            )
+        assert reg_r.status_code == 200, f"Register failed: {reg_r.text}"
+        token = reg_r.json().get("session_token") or reg_r.json().get("access_token")
+        r = c.get(
+            "/v1/policies",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Workspace-Id": ws_b["workspace_id"],
+            },
+        )
+        assert r.status_code == 403, (
+            f"Expected 403 Forbidden for cross-tenant access, got {r.status_code}: {r.text}"
+        )
