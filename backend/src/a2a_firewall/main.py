@@ -72,6 +72,42 @@ except Exception:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Production and non-debug security check: fail-closed if default secrets are in use
+    is_production = (
+        getattr(settings, "SENTRY_ENVIRONMENT", "").lower() == "production"
+        or os.environ.get("ENVIRONMENT", "").lower() == "production"
+    )
+    is_testing = os.environ.get("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ
+
+    if is_production and settings.ENABLE_DEMO_PERSONAS and not is_testing:
+        msg = (
+            "FATAL: ENABLE_DEMO_PERSONAS is enabled in production. "
+            "Demo personas must only be enabled in local development or demo environments."
+        )
+        logger.critical(msg)
+        raise RuntimeError(msg)
+
+    insecure_defaults = []
+    if settings.SECRET_KEY in ("test-secret-key", "change-me", "secret", ""):
+        insecure_defaults.append("SECRET_KEY")
+    if settings.API_KEY_SALT in ("test-salt", "change-this-salt-too", "salt", ""):
+        insecure_defaults.append("API_KEY_SALT")
+
+    if insecure_defaults:
+        if is_production or (not settings.DEBUG and not is_testing):
+            env_name = "production" if is_production else "non-debug environment"
+            msg = (
+                f"FATAL: Insecure default credentials detected in {env_name}: "
+                f"{', '.join(insecure_defaults)}. Set strong, random values in your environment."
+            )
+            logger.critical(msg)
+            raise RuntimeError(msg)
+        else:
+            logger.warning(
+                "Running with default test SECRET_KEY / API_KEY_SALT (%s). "
+                "Do not use these defaults in production or non-debug environments!",
+                ", ".join(insecure_defaults),
+            )
     yield
     # Clean up database connection pool on shutdown before event loop closes
     try:

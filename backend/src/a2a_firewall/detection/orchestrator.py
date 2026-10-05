@@ -295,9 +295,9 @@ async def run_inspection(
                 token_from_compact,
                 verify_token,
             )
-            from a2a_firewall.core.security import hash_api_key
+            from a2a_firewall.core.security import derive_workspace_signing_seed
 
-            root_key = hash_api_key(str(workspace.id)).encode()[:32]
+            root_key = derive_workspace_signing_seed(str(workspace.id))
             token = token_from_compact(delegation_token_compact)
             verification = verify_token(token, root_key)
             if not verification.valid:

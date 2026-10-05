@@ -623,9 +623,9 @@ async def demo_run_delegation(
         mint_token,
         token_to_compact,
     )
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+    root_key = derive_workspace_signing_seed(str(workspace.id))
 
     initial_caveats: list[str] = scenario["initial_caveats"]
     root_token = mint_token(

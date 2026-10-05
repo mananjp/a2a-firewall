@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
 
+    # Demo personas (admin@a2afirewall.dev, auditor@, etc.)
+    ENABLE_DEMO_PERSONAS: bool = False
+
     # OAuth / Self-serve Settings
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""

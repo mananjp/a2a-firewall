@@ -7,6 +7,7 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_firewall.core.config import settings
 from a2a_firewall.core.jwt_auth import decode_access_token
 from a2a_firewall.core.security import generate_api_key, hash_api_key
 from a2a_firewall.db.database import execute_query_safe, get_db
@@ -119,6 +120,16 @@ async def get_current_workspace(
     )
     ws = result.scalar_one_or_none()
     if isinstance(ws, Workspace):
+        if x_workspace_id:
+            try:
+                if ws.id != uuid.UUID(x_workspace_id):
+                    raise HTTPException(
+                        status_code=403, detail="Workspace API key does not match X-Workspace-Id"
+                    )
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Invalid X-Workspace-Id header format"
+                ) from None
         return ws
 
     # 2. Try X-Workspace-Key if provided
@@ -129,6 +140,17 @@ async def get_current_workspace(
         )
         ws = result.scalar_one_or_none()
         if isinstance(ws, Workspace):
+            if x_workspace_id:
+                try:
+                    if ws.id != uuid.UUID(x_workspace_id):
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Workspace API key does not match X-Workspace-Id",
+                        )
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
             return ws
 
     # 3. Try decoding JWT session token (from X-Session-Token or raw_token)
@@ -140,32 +162,80 @@ async def get_current_workspace(
     for tok in tokens_to_decode:
         payload = decode_access_token(tok)
         if payload and ("sub" in payload or "email" in payload or "workspace_id" in payload):
-            # 3a. Explicit workspace_id from JWT payload
-            if "workspace_id" in payload and payload["workspace_id"]:
+            account_id: uuid.UUID | None = None
+            if "sub" in payload and payload["sub"]:
                 try:
-                    ws_id = uuid.UUID(payload["workspace_id"])
-                    ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_id))
-                    ws = ws_res.scalar_one_or_none()
-                    if ws:
-                        return ws
+                    account_id = uuid.UUID(payload["sub"])
                 except (ValueError, TypeError):
-                    pass
+                    account_id = None
 
-            # 3b. Explicit X-Workspace-Id header
+            if not account_id and payload.get("email"):
+                acc_by_email = await db.execute(
+                    select(Account).where(Account.email == payload["email"])
+                )
+                acc_obj = acc_by_email.scalar_one_or_none()
+                if acc_obj:
+                    account_id = acc_obj.id
+
+            # 3a. Explicit X-Workspace-Id header (scoped and validated to membership)
             if x_workspace_id:
                 try:
                     ws_uuid = uuid.UUID(x_workspace_id)
+                except (ValueError, TypeError):
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
+
+                if account_id:
+                    mem = await db.execute(
+                        select(AccountWorkspace).where(
+                            AccountWorkspace.account_id == account_id,
+                            AccountWorkspace.workspace_id == ws_uuid,
+                        )
+                    )
+                    if not mem.scalar_one_or_none():
+                        raise HTTPException(
+                            status_code=403, detail="Account does not belong to this workspace"
+                        )
                     ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
                     ws = ws_res.scalar_one_or_none()
                     if ws:
                         return ws
+                    raise HTTPException(status_code=404, detail="Workspace not found")
+                else:
+                    raise HTTPException(
+                        status_code=403, detail="Account does not belong to this workspace"
+                    )
+
+            # 3b. Explicit workspace_id from JWT payload (verified against AccountWorkspace)
+            if "workspace_id" in payload and payload["workspace_id"]:
+                try:
+                    ws_id = uuid.UUID(payload["workspace_id"])
+                    if account_id:
+                        mem = await db.execute(
+                            select(AccountWorkspace).where(
+                                AccountWorkspace.account_id == account_id,
+                                AccountWorkspace.workspace_id == ws_id,
+                            )
+                        )
+                        if mem.scalar_one_or_none():
+                            ws_res = await db.execute(
+                                select(Workspace).where(Workspace.id == ws_id)
+                            )
+                            ws = ws_res.scalar_one_or_none()
+                            if ws:
+                                return ws
+                    else:
+                        ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_id))
+                        ws = ws_res.scalar_one_or_none()
+                        if ws:
+                            return ws
                 except (ValueError, TypeError):
                     pass
 
-            # 3c. Join via AccountWorkspace
-            if "sub" in payload and payload["sub"]:
+            # 3c. Join via AccountWorkspace (fallback to first owned/joined workspace)
+            if account_id:
                 try:
-                    account_id = uuid.UUID(payload["sub"])
                     result = await db.execute(
                         select(Workspace)
                         .join(AccountWorkspace, AccountWorkspace.workspace_id == Workspace.id)
@@ -206,6 +276,16 @@ async def get_current_workspace(
         )
         ws = ws_res.scalar_one_or_none()
         if ws:
+            if x_workspace_id:
+                try:
+                    if ws.id != uuid.UUID(x_workspace_id):
+                        raise HTTPException(
+                            status_code=403, detail="API key does not match X-Workspace-Id"
+                        )
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
             return ws
 
     # 5. Try Agent API key
@@ -217,6 +297,16 @@ async def get_current_workspace(
         ws_res = await db.execute(select(Workspace).where(Workspace.id == agent.workspace_id))
         ws = ws_res.scalar_one_or_none()
         if ws:
+            if x_workspace_id:
+                try:
+                    if ws.id != uuid.UUID(x_workspace_id):
+                        raise HTTPException(
+                            status_code=403, detail="Agent key does not match X-Workspace-Id"
+                        )
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
             return ws
 
     raise HTTPException(status_code=401, detail="Invalid workspace key")
@@ -258,7 +348,7 @@ async def get_current_account(
                 account = acc_by_email.scalar_one_or_none()
                 if account:
                     return account
-                if email == "admin@a2afirewall.dev":
+                if email == "admin@a2afirewall.dev" and settings.ENABLE_DEMO_PERSONAS:
                     account = Account(
                         email="admin@a2afirewall.dev",
                         full_name="Security Admin",
@@ -296,7 +386,11 @@ async def get_current_account(
                 return account
 
             # Auto-create account for this workspace admin if none exists yet
-            tier = "enterprise" if ws.admin_email == "admin@a2afirewall.dev" else "free"
+            tier = (
+                "enterprise"
+                if (ws.admin_email == "admin@a2afirewall.dev" and settings.ENABLE_DEMO_PERSONAS)
+                else "free"
+            )
             account = Account(
                 email=ws.admin_email,
                 full_name=ws.admin_email.split("@")[0],
@@ -372,19 +466,24 @@ async def get_current_workspace_flexible(
                 try:
                     ws_uuid = uuid.UUID(x_workspace_id)
                 except ValueError:
-                    ws_uuid = None
-                if ws_uuid:
-                    mem = await db.execute(
-                        select(AccountWorkspace).where(
-                            AccountWorkspace.account_id == account_id,
-                            AccountWorkspace.workspace_id == ws_uuid,
-                        )
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
+                mem = await db.execute(
+                    select(AccountWorkspace).where(
+                        AccountWorkspace.account_id == account_id,
+                        AccountWorkspace.workspace_id == ws_uuid,
                     )
-                    if mem.scalar_one_or_none():
-                        ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
-                        ws = ws_res.scalar_one_or_none()
-                        if ws:
-                            return ws
+                )
+                if mem.scalar_one_or_none():
+                    ws_res = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
+                    ws = ws_res.scalar_one_or_none()
+                    if ws:
+                        return ws
+                    raise HTTPException(status_code=404, detail="Workspace not found")
+                raise HTTPException(
+                    status_code=403, detail="Account does not belong to this workspace"
+                )
             # Fall back to first workspace
             result = await db.execute(
                 select(Workspace)
@@ -395,6 +494,8 @@ async def get_current_workspace_flexible(
             ws = result.scalars().first()
             if ws:
                 return ws
+        except HTTPException:
+            raise
         except Exception:
             pass
 
@@ -404,6 +505,16 @@ async def get_current_workspace_flexible(
     result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
     ws = result.scalar_one_or_none()
     if ws:
+        if x_workspace_id:
+            try:
+                if ws.id != uuid.UUID(x_workspace_id):
+                    raise HTTPException(
+                        status_code=403, detail="Workspace API key does not match X-Workspace-Id"
+                    )
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Invalid X-Workspace-Id header format"
+                ) from None
         return ws
 
     # 3. Try fine-grained APIKeyRecord
@@ -426,6 +537,16 @@ async def get_current_workspace_flexible(
         )
         ws = ws_res.scalar_one_or_none()
         if ws:
+            if x_workspace_id:
+                try:
+                    if ws.id != uuid.UUID(x_workspace_id):
+                        raise HTTPException(
+                            status_code=403, detail="API key does not match X-Workspace-Id"
+                        )
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
             return ws
 
     # 4. Try Agent API key
@@ -437,6 +558,16 @@ async def get_current_workspace_flexible(
         ws_res = await db.execute(select(Workspace).where(Workspace.id == agent.workspace_id))
         ws = ws_res.scalar_one_or_none()
         if ws:
+            if x_workspace_id:
+                try:
+                    if ws.id != uuid.UUID(x_workspace_id):
+                        raise HTTPException(
+                            status_code=403, detail="Agent key does not match X-Workspace-Id"
+                        )
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid X-Workspace-Id header format"
+                    ) from None
             return ws
 
     raise HTTPException(status_code=401, detail="Invalid workspace, API, or session key")

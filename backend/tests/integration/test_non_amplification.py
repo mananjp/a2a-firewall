@@ -132,13 +132,13 @@ def _mint_parent_token(workspace_id: str, caveats: list[str]) -> str:
     """Mint a delegation token with the same root key the orchestrator derives.
 
     The orchestrator at ``detection/orchestrator.py`` derives
-    ``root_key = hash_api_key(str(workspace.id)).encode()[:32]``. We mirror
+    ``root_key = derive_workspace_signing_seed(str(workspace.id))``. We mirror
     that here so the token verifies.
     """
     from a2a_firewall.core.delegation import mint_token, token_to_compact
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(workspace_id).encode()[:32]
+    root_key = derive_workspace_signing_seed(workspace_id)
     assert len(root_key) == 32
     token = mint_token(root_key, workspace_id, "delegated-agent", caveats)
     return token_to_compact(token)

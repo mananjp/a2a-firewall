@@ -89,9 +89,9 @@ async def mint_delegation_token(
         raise HTTPException(status_code=404, detail="Agent not found in workspace")
 
     # Generate root key for this workspace (in production, retrieve from HSM/vault)
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+    root_key = derive_workspace_signing_seed(str(workspace.id))
 
     initial = body.initial_caveats or [f"workspace_id={workspace.id}"]
     token = mint_token(root_key, str(workspace.id), body.agent_id, initial)
@@ -112,9 +112,9 @@ async def attenuate_delegation_token(
 
     Each delegation hop can only restrict, never widen, the token's capabilities.
     """
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+    root_key = derive_workspace_signing_seed(str(workspace.id))
 
     parent_token = token_from_compact(body.token_compact)
 
@@ -140,9 +140,9 @@ async def verify_delegation_token(
     workspace: Workspace = Depends(get_current_workspace),
 ) -> VerifyTokenResponse:
     """Verify a delegation token's signature and check expiry."""
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+    root_key = derive_workspace_signing_seed(str(workspace.id))
 
     token = token_from_compact(body.token_compact)
     result = verify_token(token, root_key)
@@ -161,9 +161,9 @@ async def check_token_capability(
     workspace: Workspace = Depends(get_current_workspace),
 ) -> CheckCapabilityResponse:
     """Check if a delegation token grants a specific capability."""
-    from a2a_firewall.core.security import hash_api_key
+    from a2a_firewall.core.security import derive_workspace_signing_seed
 
-    root_key = hash_api_key(str(workspace.id)).encode()[:32]
+    root_key = derive_workspace_signing_seed(str(workspace.id))
 
     token = token_from_compact(body.token_compact)
     result = verify_token(token, root_key)

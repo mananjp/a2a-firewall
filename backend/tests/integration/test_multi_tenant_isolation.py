@@ -260,3 +260,28 @@ def test_workspace_b_stats_dont_include_workspace_a() -> None:
         assert r.status_code == 200
         stats = r.json()
         assert stats["total_tasks"] == 0, f"Workspace B stats include workspace A's tasks: {stats}"
+
+
+def test_workspace_a_jwt_cannot_access_workspace_b_via_x_workspace_id() -> None:
+    """A user authenticated via JWT cannot access another workspace via X-Workspace-Id."""
+    ws_a = _register_workspace_and_agent("a-jwt-iso")  # noqa: F841
+    ws_b = _register_workspace_and_agent("b-jwt-iso")
+
+    email = f"user-{int(time.time())}-{uuid.uuid4().hex[:6]}@tenant-a.com"
+    with httpx.Client(base_url=TEST_BACKEND_URL, timeout=10.0) as c:
+        reg_r = c.post(
+            "/v1/auth/register",
+            json={"email": email, "password": "Password123!Secure", "full_name": "Tenant A User"},
+        )
+        if reg_r.status_code == 200:
+            token = reg_r.json()["access_token"]
+            r = c.get(
+                "/v1/policies",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "X-Workspace-Id": ws_b["workspace_id"],
+                },
+            )
+            assert r.status_code == 403, (
+                f"Expected 403 Forbidden for cross-tenant access, got {r.status_code}: {r.text}"
+            )

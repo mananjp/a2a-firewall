@@ -227,8 +227,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
     clean_email = body.email.strip().lower()
 
     # ── ADMIN PERSONA (FULL ENTERPRISE DEMO ACCESS) ──
-    # admin@a2afirewall.dev provides instant, full-featured access to demo all capabilities
-    if clean_email == "admin@a2afirewall.dev":
+    # admin@a2afirewall.dev provides instant, full-featured access to demo all capabilities when enabled
+    if clean_email == "admin@a2afirewall.dev" and settings.ENABLE_DEMO_PERSONAS:
         result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
         ws = result.scalar_one_or_none()
         if not ws:
@@ -305,7 +305,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
         }
 
     # ── OTHER DEMO PERSONAS ──
-    if clean_email in (
+    if settings.ENABLE_DEMO_PERSONAS and clean_email in (
         "auditor@a2afirewall.dev",
         "trial@a2afirewall.dev",
         "traffic@a2afirewall.dev",
@@ -353,11 +353,22 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict[
     result = await db.execute(select(Workspace).where(Workspace.admin_email == clean_email))
     ws = result.scalar_one_or_none()
 
-    if ws and ws.password_hash and body.password:
-        if not _verify_password(ws.password_hash, body.password):
-            raise HTTPException(status_code=401, detail="Invalid email or password.")
-    elif not ws:
+    if ws:
+        if ws.password_hash:
+            if not body.password or not _verify_password(ws.password_hash, body.password):
+                raise HTTPException(status_code=401, detail="Invalid email or password.")
+        else:
+            acc_res = await db.execute(select(Account).where(Account.email == clean_email))
+            acc = acc_res.scalar_one_or_none()
+            if acc and acc.password_hash:
+                if not body.password or not _verify_password(acc.password_hash, body.password):
+                    raise HTTPException(status_code=401, detail="Invalid email or password.")
+            elif not settings.DEBUG and not body.password:
+                raise HTTPException(status_code=401, detail="Password is required.")
+    else:
         # Auto-provision new Free tier workspace and account
+        if not settings.DEBUG and not body.password:
+            raise HTTPException(status_code=401, detail="Password is required.")
         new_raw, new_hash = generate_api_key("ws")
         pw_hash = _hash_password(body.password) if body.password else None
         ws = Workspace(
