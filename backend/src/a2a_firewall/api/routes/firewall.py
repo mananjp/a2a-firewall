@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +36,28 @@ class InspectRequest(BaseModel):
     metadata: dict[str, Any] | None = None
     nonce: str | None = None
     timestamp: float | int | str | None = None
+
+    @field_validator("review_callback_url")
+    @classmethod
+    def validate_review_callback_url(cls, v: str | None) -> str | None:
+        if v:
+            from a2a_firewall.core.network_security import validate_callback_url
+
+            is_valid, reason = validate_callback_url(v)
+            if not is_valid:
+                raise ValueError(f"Invalid review_callback_url: {reason}")
+        return v
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if isinstance(v, dict) and "review_callback_url" in v and v["review_callback_url"]:
+            from a2a_firewall.core.network_security import validate_callback_url
+
+            is_valid, reason = validate_callback_url(str(v["review_callback_url"]))
+            if not is_valid:
+                raise ValueError(f"Invalid metadata.review_callback_url: {reason}")
+        return v
 
 
 class InspectResponseRequest(BaseModel):

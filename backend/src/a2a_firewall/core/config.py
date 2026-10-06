@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     # Demo personas (admin@a2afirewall.dev, auditor@, etc.)
     ENABLE_DEMO_PERSONAS: bool = False
 
+    # Review callback / webhook SSRF protection
+    REVIEW_CALLBACK_ALLOWLIST: str = ""  # Comma-separated allowed domain suffixes/hostnames, e.g. "n8n.example.com,hooks.slack.com"
+
     # OAuth / Self-serve Settings
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""

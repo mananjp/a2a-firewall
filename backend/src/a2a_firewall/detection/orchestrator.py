@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import secrets
 import time
 import uuid
@@ -40,6 +41,8 @@ from a2a_firewall.detection.layer4_groq import (
     groq_inspect,
 )
 from a2a_firewall.detection.layer5_decision import make_decision
+
+logger = logging.getLogger(__name__)
 
 
 async def run_inspection(
@@ -1115,9 +1118,21 @@ async def _save_and_return(
         )
 
     if decision == "review" and review_token:
+        from a2a_firewall.core.network_security import validate_callback_url
+
         callback_url = req.get("review_callback_url")
         if not callback_url and isinstance(req.get("metadata"), dict):
             callback_url = req["metadata"].get("review_callback_url")
+        if callback_url:
+            is_valid, reason = validate_callback_url(callback_url)
+            if not is_valid:
+                logger.warning(
+                    "Dropping unsafe review_callback_url '%s' for task %s: %s",
+                    callback_url,
+                    task_id,
+                    reason,
+                )
+                callback_url = None
         db.add(
             ReviewItem(
                 workspace_id=workspace.id,

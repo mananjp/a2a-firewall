@@ -69,25 +69,38 @@ async def decide_review(
     await db.commit()
 
     if item.review_callback_url:
-        try:
-            import httpx
+        from a2a_firewall.core.network_security import validate_callback_url
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
-                    item.review_callback_url,
-                    json={
-                        "decision": "approve" if body.action == "approve" else "reject",
-                        "reason": body.notes,
-                        "review_token": review_token,
-                        "task_id": str(item.task_id),
-                    },
-                )
-        except Exception as exc:
+        is_valid, reason = validate_callback_url(item.review_callback_url)
+        if not is_valid:
             import logging
 
             logging.getLogger(__name__).warning(
-                "Review callback to %s failed: %s", item.review_callback_url, exc
+                "Skipping review callback dispatch to unsafe URL '%s' for task %s: %s",
+                item.review_callback_url,
+                item.task_id,
+                reason,
             )
+        else:
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    await client.post(
+                        item.review_callback_url,
+                        json={
+                            "decision": "approve" if body.action == "approve" else "reject",
+                            "reason": body.notes,
+                            "review_token": review_token,
+                            "task_id": str(item.task_id),
+                        },
+                    )
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "Review callback to %s failed: %s", item.review_callback_url, exc
+                )
 
     return {"status": item.status, "decided_at": str(item.decided_at)}
 
