@@ -203,9 +203,7 @@ def mitre_technique_to_attack_pattern(
         ],
     )
     if tactic:
-        obj["kill_chain_phases"] = [
-            {"kill_chain_name": "mitre-attack", "phase_name": tactic}
-        ]
+        obj["kill_chain_phases"] = [{"kill_chain_name": "mitre-attack", "phase_name": tactic}]
     return obj
 
 
@@ -489,26 +487,19 @@ def violations_to_stix_bundle(
         if mitre and mitre.startswith("T"):
             ap = mitre_technique_to_attack_pattern(mitre)
             objects.append(ap)
-            objects.append(
-                relationship(indicator["id"], "indicates", ap["id"])
-            )
+            objects.append(relationship(indicator["id"], "indicates", ap["id"]))
 
         # Malware object for injection/exfil types
         if any(kw in v_type for kw in ("injection", "exfil", "jailbreak")):
             mal = injection_to_malware(violation, task_data.get("task_id"))
             objects.append(mal)
-            objects.append(
-                relationship(indicator["id"], "indicates", mal["id"])
-            )
+            objects.append(relationship(indicator["id"], "indicates", mal["id"]))
 
         # CVE vulnerability
         cve_id = details.get("cve_id")
         if cve_id:
             vuln = cve_to_vulnerability(details)
             objects.append(vuln)
-            objects.append(
-                relationship(indicator["id"], "indicates", vuln["id"])
-            )
+            objects.append(relationship(indicator["id"], "indicates", vuln["id"]))
 
     return create_bundle(objects)
-

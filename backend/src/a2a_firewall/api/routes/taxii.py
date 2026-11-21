@@ -145,9 +145,7 @@ async def add_collection_objects(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     """TAXII 2.1 Add Objects — add STIX objects to a collection."""
-    result = await add_objects(
-        ws.id, collection_id, body.objects, db, source="taxii-api"
-    )
+    result = await add_objects(ws.id, collection_id, body.objects, db, source="taxii-api")
 
     # Also apply indicators to the IPS engine for immediate effect
     indicators = [o for o in body.objects if o.get("type") == "indicator"]
@@ -337,9 +335,7 @@ async def list_feeds(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all configured external TAXII feeds."""
-    result = await db.execute(
-        select(ThreatFeed).where(ThreatFeed.workspace_id == ws.id)
-    )
+    result = await db.execute(select(ThreatFeed).where(ThreatFeed.workspace_id == ws.id))
     feeds = result.scalars().all()
     return [
         {
@@ -497,9 +493,7 @@ async def taxii_status(
     total_objects = obj_count_result.scalar() or 0
 
     # Feed counts
-    feed_result = await db.execute(
-        select(ThreatFeed).where(ThreatFeed.workspace_id == ws.id)
-    )
+    feed_result = await db.execute(select(ThreatFeed).where(ThreatFeed.workspace_id == ws.id))
     feeds = feed_result.scalars().all()
 
     # IPS signature stats
@@ -515,9 +509,7 @@ async def taxii_status(
         "feeds": {
             "total": len(feeds),
             "enabled": sum(1 for f in feeds if f.enabled),
-            "last_poll_status": {
-                f.name: f.last_poll_status for f in feeds if f.last_poll_status
-            },
+            "last_poll_status": {f.name: f.last_poll_status for f in feeds if f.last_poll_status},
         },
         "ips_integration": {
             "total_signatures": total_sigs,
@@ -525,4 +517,3 @@ async def taxii_status(
             "builtin_signatures": total_sigs - external_sigs,
         },
     }
-

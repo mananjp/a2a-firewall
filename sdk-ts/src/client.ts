@@ -448,6 +448,110 @@ export class A2AFirewall {
     return res.json();
   }
 
+  // ── STIX / TAXII 2.1 Threat Intelligence ──
+
+  async getTaxiiDiscovery(): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/discovery`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getTaxiiDiscovery failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async getTaxiiApiRoot(): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/api-root`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getTaxiiApiRoot failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async listTaxiiCollections(): Promise<any[]> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/collections`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`listTaxiiCollections failed with status ${res.status}`);
+    const data = (await res.json()) as any;
+    return Array.isArray(data?.collections) ? data.collections : [];
+  }
+
+  async getTaxiiCollection(collectionId: string): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/collections/${collectionId}`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getTaxiiCollection failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async getTaxiiObjects(
+    collectionId: string,
+    options?: { matchType?: string; addedAfter?: string; limit?: number },
+  ): Promise<any> {
+    const url = new URL(`${this.config.firewallUrl}/v1/taxii/collections/${collectionId}/objects`);
+    if (options?.limit) url.searchParams.set('limit', String(options.limit));
+    if (options?.matchType) url.searchParams.set('match[type]', options.matchType);
+    if (options?.addedAfter) url.searchParams.set('added_after', options.addedAfter);
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getTaxiiObjects failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async addTaxiiObjects(collectionId: string, objects: any[]): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/collections/${collectionId}/objects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.agentApiKey}`,
+      },
+      body: JSON.stringify({ objects }),
+    });
+    if (!res.ok) throw new Error(`addTaxiiObjects failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async exportStixViolations(limit: number = 50, severity?: string): Promise<any> {
+    const url = new URL(`${this.config.firewallUrl}/v1/taxii/export/violations`);
+    url.searchParams.set('limit', String(limit));
+    if (severity) url.searchParams.set('severity', severity);
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`exportStixViolations failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async exportStixIpsSignatures(): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/export/ips-signatures`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`exportStixIpsSignatures failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async exportStixSocAlerts(limit: number = 50, severity?: string): Promise<any> {
+    const url = new URL(`${this.config.firewallUrl}/v1/taxii/export/soc-alerts`);
+    url.searchParams.set('limit', String(limit));
+    if (severity) url.searchParams.set('severity', severity);
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`exportStixSocAlerts failed with status ${res.status}`);
+    return res.json();
+  }
+
+  async getThreatIntelStatus(): Promise<any> {
+    const res = await fetch(`${this.config.firewallUrl}/v1/taxii/status`, {
+      headers: { Authorization: `Bearer ${this.config.agentApiKey}` },
+    });
+    if (!res.ok) throw new Error(`getThreatIntelStatus failed with status ${res.status}`);
+    return res.json();
+  }
+
   static generateKeypair = generateEd25519Keypair;
 }
 

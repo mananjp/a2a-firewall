@@ -86,7 +86,9 @@ def test_ips_signature_to_indicator():
 
 
 def test_mitre_technique_to_attack_pattern():
-    ap = mitre_technique_to_attack_pattern("T1059", "Command and Scripting Interpreter", "Execution")
+    ap = mitre_technique_to_attack_pattern(
+        "T1059", "Command and Scripting Interpreter", "Execution"
+    )
     assert ap["type"] == "attack-pattern"
     assert ap["name"] == "Command and Scripting Interpreter"
     assert ap["external_references"][0]["external_id"] == "T1059"
@@ -142,12 +144,16 @@ def test_violation_to_sighting():
 
 
 def test_injection_to_malware():
-    malware = injection_to_malware({"violation_type": "prompt_injection", "severity": "critical"}, "task-1")
+    malware = injection_to_malware(
+        {"violation_type": "prompt_injection", "severity": "critical"}, "task-1"
+    )
     assert malware["type"] == "malware"
     assert "trojan" in malware["malware_types"]
     assert malware["x_a2a_violation_type"] == "prompt_injection"
 
-    exfil = injection_to_malware({"violation_type": "data_exfiltration", "severity": "high"}, "task-2")
+    exfil = injection_to_malware(
+        {"violation_type": "data_exfiltration", "severity": "high"}, "task-2"
+    )
     assert exfil["type"] == "malware"
     assert "spyware" in exfil["malware_types"]
 
@@ -170,7 +176,9 @@ def test_soc_alert_to_report():
 
 
 def test_relationship():
-    rel = relationship("indicator--1", "indicates", "malware--2", "Indicator signals malware presence")
+    rel = relationship(
+        "indicator--1", "indicates", "malware--2", "Indicator signals malware presence"
+    )
     assert rel["type"] == "relationship"
     assert rel["relationship_type"] == "indicates"
     assert rel["source_ref"] == "indicator--1"
@@ -265,7 +273,10 @@ def test_default_collections():
 
 
 def test_extract_pattern_value():
-    assert _extract_pattern_value("[x-a2a-payload:content MATCHES 'malicious_token']") == "malicious_token"
+    assert (
+        _extract_pattern_value("[x-a2a-payload:content MATCHES 'malicious_token']")
+        == "malicious_token"
+    )
     assert _extract_pattern_value("[file:name = 'payload.exe']") == "payload\\.exe"
     assert _extract_pattern_value("invalid pattern") is None
 
@@ -277,9 +288,7 @@ def test_stix_indicator_to_ips_signature():
         "pattern": "[x-a2a-payload:content MATCHES 'beacon_connect_auth']",
         "pattern_type": "stix",
         "labels": ["malicious-activity", "critical"],
-        "kill_chain_phases": [
-            {"kill_chain_name": "mitre-attack", "phase_name": "T1071"}
-        ],
+        "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "T1071"}],
     }
     sig = stix_indicator_to_ips_signature(indicator, source="us-cert-feed")
     assert sig is not None
@@ -311,5 +320,3 @@ def test_apply_stix_indicators_to_ips():
     matches = engine.scan("Notice: transfer payload contains compromised_agent_key_x99 inside.")
     matched_ids = [m["signature_id"] for m in matches]
     assert sig.id in matched_ids
-
-

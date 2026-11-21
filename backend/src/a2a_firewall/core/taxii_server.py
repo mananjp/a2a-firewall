@@ -121,9 +121,7 @@ async def ensure_default_collections(
 ) -> list[ThreatIntelCollection]:
     """Ensure default TAXII collections exist for a workspace, creating them if needed."""
     result = await db.execute(
-        select(ThreatIntelCollection).where(
-            ThreatIntelCollection.workspace_id == workspace_id
-        )
+        select(ThreatIntelCollection).where(ThreatIntelCollection.workspace_id == workspace_id)
     )
     existing = {str(c.collection_alias): c for c in result.scalars().all()}
 
@@ -380,7 +378,9 @@ async def get_manifest(
         return {"objects": [], "more": False}
 
     query = (
-        select(STIXObject.stix_id, STIXObject.stix_type, STIXObject.created_at, STIXObject.spec_version)
+        select(
+            STIXObject.stix_id, STIXObject.stix_type, STIXObject.created_at, STIXObject.spec_version
+        )
         .where(
             STIXObject.collection_id == coll_id,
             STIXObject.workspace_id == workspace_id,
@@ -411,4 +411,3 @@ async def get_manifest(
 
 def _now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-

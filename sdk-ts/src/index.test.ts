@@ -221,6 +221,33 @@ describe('A2AFirewall Client', () => {
       if (u.includes('/evidence/dec-1')) {
         return { ok: true, json: async () => ({ decision_id: 'dec-1', final_action: 'allow' }) } as any;
       }
+      if (u.includes('/taxii/discovery')) {
+        return { ok: true, json: async () => ({ title: 'A2A Firewall TAXII 2.1 Server' }) } as any;
+      }
+      if (u.includes('/taxii/api-root')) {
+        return { ok: true, json: async () => ({ title: 'Default API Root' }) } as any;
+      }
+      if (u.includes('/taxii/collections/col-1/objects')) {
+        return { ok: true, json: async () => ({ type: 'bundle', id: 'bundle--1' }) } as any;
+      }
+      if (u.includes('/taxii/collections/col-1')) {
+        return { ok: true, json: async () => ({ id: 'col-1', title: 'Violations' }) } as any;
+      }
+      if (u.includes('/taxii/collections')) {
+        return { ok: true, json: async () => ({ collections: [{ id: 'col-1', title: 'Violations' }] }) } as any;
+      }
+      if (u.includes('/taxii/export/violations')) {
+        return { ok: true, json: async () => ({ type: 'bundle', id: 'bundle--v' }) } as any;
+      }
+      if (u.includes('/taxii/export/ips-signatures')) {
+        return { ok: true, json: async () => ({ type: 'bundle', id: 'bundle--ips' }) } as any;
+      }
+      if (u.includes('/taxii/export/soc-alerts')) {
+        return { ok: true, json: async () => ({ type: 'bundle', id: 'bundle--soc' }) } as any;
+      }
+      if (u.includes('/taxii/status')) {
+        return { ok: true, json: async () => ({ status: 'healthy', feed_count: 1 }) } as any;
+      }
       return { ok: false, status: 404 } as any;
     };
 
@@ -251,6 +278,36 @@ describe('A2AFirewall Client', () => {
 
       const ver = await fw.verifyEvidence('dec-1');
       expect(ver.valid).toBe(true);
+
+      const discovery = await fw.getTaxiiDiscovery();
+      expect(discovery.title).toBe('A2A Firewall TAXII 2.1 Server');
+
+      const apiRoot = await fw.getTaxiiApiRoot();
+      expect(apiRoot.title).toBe('Default API Root');
+
+      const collections = await fw.listTaxiiCollections();
+      expect(collections).toHaveLength(1);
+
+      const collection = await fw.getTaxiiCollection('col-1');
+      expect(collection.title).toBe('Violations');
+
+      const objects = await fw.getTaxiiObjects('col-1', { matchType: 'indicator' });
+      expect(objects.type).toBe('bundle');
+
+      const addRes = await fw.addTaxiiObjects('col-1', [{ type: 'indicator' }]);
+      expect(addRes.type).toBe('bundle');
+
+      const violations = await fw.exportStixViolations(10);
+      expect(violations.type).toBe('bundle');
+
+      const ips = await fw.exportStixIpsSignatures();
+      expect(ips.type).toBe('bundle');
+
+      const alerts = await fw.exportStixSocAlerts(10);
+      expect(alerts.type).toBe('bundle');
+
+      const status = await fw.getThreatIntelStatus();
+      expect(status.status).toBe('healthy');
     } finally {
       global.fetch = origFetch;
     }

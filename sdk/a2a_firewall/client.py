@@ -634,6 +634,103 @@ class A2AFirewall:
         resp.raise_for_status()
         return resp.json()
 
+    # -- STIX / TAXII 2.1 Threat Intelligence --
+
+    def get_taxii_discovery(self) -> dict[str, Any]:
+        """Fetch TAXII 2.1 Server Discovery details."""
+        resp = self._http.get("/v1/taxii/discovery")
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_taxii_api_root(self) -> dict[str, Any]:
+        """Fetch TAXII 2.1 API Root information."""
+        resp = self._http.get("/v1/taxii/api-root")
+        resp.raise_for_status()
+        return resp.json()
+
+    def list_taxii_collections(self) -> list[dict[str, Any]]:
+        """List TAXII 2.1 collections in the current workspace."""
+        resp = self._http.get("/v1/taxii/collections")
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("collections", []) if isinstance(data, dict) else []
+
+    def get_taxii_collection(self, collection_id: str) -> dict[str, Any]:
+        """Get TAXII 2.1 collection metadata by ID."""
+        resp = self._http.get(f"/v1/taxii/collections/{collection_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_taxii_objects(
+        self,
+        collection_id: str,
+        stix_type: str | None = None,
+        added_after: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Query STIX 2.1 objects from a TAXII collection."""
+        params: dict[str, Any] = {"limit": limit}
+        if stix_type:
+            params["match[type]"] = stix_type
+        if added_after:
+            params["added_after"] = added_after
+        resp = self._http.get(
+            f"/v1/taxii/collections/{collection_id}/objects", params=params
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def add_taxii_objects(
+        self,
+        collection_id: str,
+        objects: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Post a STIX 2.1 bundle of objects to a TAXII collection."""
+        resp = self._http.post(
+            f"/v1/taxii/collections/{collection_id}/objects",
+            json={"objects": objects},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def export_stix_violations(
+        self,
+        limit: int = 50,
+        severity: str | None = None,
+    ) -> dict[str, Any]:
+        """Export firewall security violations formatted as a STIX 2.1 Bundle."""
+        params: dict[str, Any] = {"limit": limit}
+        if severity:
+            params["severity"] = severity
+        resp = self._http.get("/v1/taxii/export/violations", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def export_stix_ips_signatures(self) -> dict[str, Any]:
+        """Export active IPS signatures formatted as a STIX 2.1 Bundle."""
+        resp = self._http.get("/v1/taxii/export/ips-signatures")
+        resp.raise_for_status()
+        return resp.json()
+
+    def export_stix_soc_alerts(
+        self,
+        limit: int = 50,
+        severity: str | None = None,
+    ) -> dict[str, Any]:
+        """Export SOC alerts formatted as a STIX 2.1 Bundle."""
+        params: dict[str, Any] = {"limit": limit}
+        if severity:
+            params["severity"] = severity
+        resp = self._http.get("/v1/taxii/export/soc-alerts", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_threat_intel_status(self) -> dict[str, Any]:
+        """Fetch threat intelligence feeds synchronization status."""
+        resp = self._http.get("/v1/taxii/status")
+        resp.raise_for_status()
+        return resp.json()
+
     # -- Utility --
 
     def get_delegation_chain(self) -> list[str]:

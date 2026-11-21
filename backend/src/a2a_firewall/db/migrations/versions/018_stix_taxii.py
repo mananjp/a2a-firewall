@@ -26,8 +26,18 @@ def upgrade() -> None:
     # -- TAXII Collections --
     op.create_table(
         "threat_intel_collections",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("workspace_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "workspace_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("collection_alias", sa.String, nullable=False),
         sa.Column("title", sa.String, nullable=False),
         sa.Column("description", sa.Text, nullable=True),
@@ -35,14 +45,34 @@ def upgrade() -> None:
         sa.Column("can_write", sa.Boolean, nullable=False, server_default=sa.text("false")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("idx_tic_workspace_alias", "threat_intel_collections", ["workspace_id", "collection_alias"], unique=True)
+    op.create_index(
+        "idx_tic_workspace_alias",
+        "threat_intel_collections",
+        ["workspace_id", "collection_alias"],
+        unique=True,
+    )
 
     # -- STIX Objects --
     op.create_table(
         "stix_objects",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("workspace_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("collection_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("threat_intel_collections.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "workspace_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "collection_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("threat_intel_collections.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("stix_id", sa.String, nullable=False),
         sa.Column("stix_type", sa.String, nullable=False),
         sa.Column("spec_version", sa.String, nullable=False, server_default="2.1"),
@@ -59,8 +89,18 @@ def upgrade() -> None:
     # -- External Threat Feeds --
     op.create_table(
         "threat_feeds",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("workspace_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "workspace_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("name", sa.String, nullable=False),
         sa.Column("taxii_url", sa.String, nullable=False),
         sa.Column("api_root", sa.String, nullable=False),
@@ -82,4 +122,3 @@ def downgrade() -> None:
     op.drop_table("threat_feeds")
     op.drop_table("stix_objects")
     op.drop_table("threat_intel_collections")
-

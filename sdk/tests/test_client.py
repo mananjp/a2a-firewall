@@ -320,3 +320,56 @@ def test_tokenize_and_detokenize():
 
     assert tok_res["tokenized_text"] == "Patient tok_ssn_1234"
     assert detok_res["text"] == "Patient 999-88-7777"
+
+
+def test_taxii_and_stix_methods():
+    fw = make_fw()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "title": "A2A Firewall TAXII 2.1 Server",
+        "description": "TAXII 2.1 threat intelligence endpoint",
+        "collections": [{"id": "col-1", "title": "Firewall Violations"}],
+        "type": "bundle",
+        "id": "bundle--123",
+        "objects": [{"type": "indicator", "id": "indicator--abc"}],
+        "status": "healthy",
+        "feed_count": 2,
+    }
+    mock_resp.raise_for_status = lambda: None
+
+    with (
+        patch.object(fw._http, "get", return_value=mock_resp),
+        patch.object(fw._http, "post", return_value=mock_resp),
+    ):
+        discovery = fw.get_taxii_discovery()
+        assert "title" in discovery
+
+        api_root = fw.get_taxii_api_root()
+        assert "title" in api_root
+
+        collections = fw.list_taxii_collections()
+        assert len(collections) == 1
+
+        collection = fw.get_taxii_collection("col-1")
+        assert "title" in collection
+
+        objects = fw.get_taxii_objects("col-1", stix_type="indicator", limit=10)
+        assert objects["type"] == "bundle"
+
+        add_res = fw.add_taxii_objects(
+            "col-1", [{"type": "indicator", "id": "indicator--new"}]
+        )
+        assert "objects" in add_res
+
+        violations = fw.export_stix_violations(limit=10, severity="high")
+        assert violations["type"] == "bundle"
+
+        ips_bundle = fw.export_stix_ips_signatures()
+        assert ips_bundle["type"] == "bundle"
+
+        alerts_bundle = fw.export_stix_soc_alerts(limit=5)
+        assert alerts_bundle["type"] == "bundle"
+
+        status = fw.get_threat_intel_status()
+        assert status["status"] == "healthy"
+

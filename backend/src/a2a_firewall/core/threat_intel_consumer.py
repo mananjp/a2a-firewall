@@ -200,9 +200,12 @@ async def poll_taxii_feed(
         data = resp.json()
 
         # TAXII response has objects at top level or in an envelope
-        objects = data.get("objects", [])
-        if not objects and isinstance(data, list):
-            objects = data
+        raw_objects = (
+            data.get("objects", [])
+            if isinstance(data, dict)
+            else (data if isinstance(data, list) else [])
+        )
+        objects: list[dict[str, Any]] = [obj for obj in raw_objects if isinstance(obj, dict)]
 
         logger.info(
             "Polled TAXII feed %s: %d objects received",
@@ -274,4 +277,3 @@ async def poll_and_apply_feed(feed: ThreatFeedConfig) -> dict[str, Any]:
         "signature_ids": [s.id for s in signatures],
         "polled_at": datetime.now(UTC).isoformat(),
     }
-
