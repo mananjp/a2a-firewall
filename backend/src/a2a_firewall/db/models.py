@@ -1033,3 +1033,77 @@ class UsageMeter(Base):
     updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# STIX/TAXII Threat Intelligence
+# ---------------------------------------------------------------------------
+
+
+class ThreatIntelCollection(Base):
+    """TAXII 2.1 collection storing STIX objects per workspace."""
+
+    __tablename__ = "threat_intel_collections"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    collection_alias: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # e.g. "violations", "threat-intel"
+    title: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    description: Mapped[str | None] = Column(Text, nullable=True)  # type: ignore[assignment]
+    can_read: Mapped[bool] = Column(Boolean, default=True, nullable=False)  # type: ignore[assignment]
+    can_write: Mapped[bool] = Column(Boolean, default=False, nullable=False)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+
+
+class STIXObject(Base):
+    """Persisted STIX 2.1 object within a TAXII collection."""
+
+    __tablename__ = "stix_objects"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    collection_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True),
+        ForeignKey("threat_intel_collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stix_id: Mapped[str] = Column(String, nullable=False, index=True)  # type: ignore[assignment]  # e.g. "indicator--uuid"
+    stix_type: Mapped[str] = Column(String, nullable=False, index=True)  # type: ignore[assignment]  # e.g. "indicator"
+    spec_version: Mapped[str] = Column(String, default="2.1", nullable=False)  # type: ignore[assignment]
+    stix_data: Mapped[Any] = Column(JSONB, nullable=False)  # type: ignore[assignment]  # Full STIX JSON object
+    source: Mapped[str] = Column(String, default="internal", nullable=False)  # type: ignore[assignment]  # internal | taxii-api | external-feed
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
+
+
+class ThreatFeed(Base):
+    """Configuration for an external TAXII 2.1 feed to consume threat intelligence from."""
+
+    __tablename__ = "threat_feeds"
+    id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # type: ignore[assignment]
+    workspace_id: Mapped[uuid.UUID] = Column(  # type: ignore[assignment]
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    taxii_url: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # Discovery URL
+    api_root: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]
+    collection_id: Mapped[str] = Column(String, nullable=False)  # type: ignore[assignment]  # Remote collection UUID
+    auth_type: Mapped[str] = Column(String, default="none", nullable=False)  # type: ignore[assignment]  # none | basic | bearer
+    auth_credentials: Mapped[str | None] = Column(Text, nullable=True)  # type: ignore[assignment]  # Encrypted credentials
+    poll_interval_minutes: Mapped[int] = Column(Integer, default=60, nullable=False)  # type: ignore[assignment]
+    enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)  # type: ignore[assignment]
+    last_polled_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)  # type: ignore[assignment]
+    last_poll_status: Mapped[str | None] = Column(String, nullable=True)  # type: ignore[assignment]  # success | error | empty
+    objects_received: Mapped[int | None] = Column(Integer, default=0)  # type: ignore[assignment]
+    created_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime | None] = Column(  # type: ignore[assignment]
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )

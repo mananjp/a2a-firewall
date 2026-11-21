@@ -141,5 +141,11 @@ class Settings(BaseSettings):
     RAZORPAY_PLAN_TEAM_MONTHLY: str = ""
     RAZORPAY_PLAN_TEAM_ANNUAL: str = ""
 
+    # STIX/TAXII Threat Intelligence
+    TAXII_ENABLED: bool = True
+    TAXII_POLL_INTERVAL_MINUTES: int = 60
+    STIX_EXPORT_MAX_OBJECTS: int = 10000
+    TAXII_MAX_CONTENT_LENGTH: int = 10485760  # 10 MB
+
 
 settings = Settings()

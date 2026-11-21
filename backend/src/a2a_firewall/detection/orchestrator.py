@@ -1194,6 +1194,32 @@ async def _save_and_return(
     except Exception:
         evidence = None  # evidence failure must never break the decision path
 
+    # ---------- STIX / TAXII Auto-Publish (if violations present) ----------
+    if violations and getattr(settings, "TAXII_ENABLED", True):
+        try:
+            from a2a_firewall.core.stix_converter import violations_to_stix_bundle
+            from a2a_firewall.core.taxii_server import add_objects, ensure_default_collections
+
+            await ensure_default_collections(workspace.id, db)
+            bundle = violations_to_stix_bundle(
+                violations,
+                req,
+                decision,
+                risk_score,
+                str(workspace.id),
+                getattr(workspace, "name", ""),
+            )
+            await add_objects(
+                workspace.id,
+                "violations",
+                bundle.get("objects", []),
+                db,
+                source="firewall-inspection",
+                commit=False,
+            )
+        except Exception:
+            pass  # STIX auto-publish failure must never break the decision path
+
     await db.commit()
     return {
         "task_id": str(task_id),

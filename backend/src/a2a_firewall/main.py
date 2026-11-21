@@ -42,6 +42,7 @@ from a2a_firewall.api.routes import (
     spend,
     stats,
     tasks,
+    taxii,
     telemetry,
     violations,
     workflows,
@@ -460,6 +461,7 @@ app.include_router(dlp.router, prefix="/v1/dlp", tags=["dlp"])
 app.include_router(settings_routes.router, prefix="/v1/settings", tags=["settings"])
 app.include_router(api_keys.router, prefix="/v1/api-keys", tags=["api-keys"])
 app.include_router(billing.router, prefix="/v1/billing", tags=["billing"])
+app.include_router(taxii.router, prefix="/v1/taxii", tags=["taxii"])
 
 
 @app.get("/health")
