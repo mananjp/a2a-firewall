@@ -19,6 +19,7 @@ import {
   Siren,
   ScrollText,
   Shield,
+  Radio,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -60,6 +61,7 @@ export function CommandBar() {
     { id: "violations", title: "Security Violations", category: "Navigation", icon: ShieldAlert, href: "/dashboard/violations" },
     { id: "compliance", title: "Compliance Frameworks", category: "Navigation", icon: ScrollText, href: "/dashboard/compliance" },
     { id: "ips", title: "IPS Signatures & Containment", category: "Navigation", icon: Shield, href: "/dashboard/ips" },
+    { id: "threat-intel", title: "Threat Intelligence (STIX / TAXII 2.1)", category: "Navigation", icon: Radio, href: "/dashboard/threat-intel" },
     { id: "identity", title: "Agent Identities & Ed25519 Keys", category: "Navigation", icon: KeyRound, href: "/dashboard/identity" },
     { id: "agents", title: "Agent Registry & Matrix", category: "Navigation", icon: Bot, href: "/dashboard/agents" },
     { id: "policies", title: "Firewall Policies & Rules", category: "Navigation", icon: FileText, href: "/dashboard/policies" },

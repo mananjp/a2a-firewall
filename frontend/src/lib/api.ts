@@ -32,6 +32,10 @@ import type {
   BillingConfig,
   BillingSubscriptionResponse,
   SubscribeResponse,
+  TaxiiStatus,
+  TaxiiCollection,
+  ThreatFeed,
+  StixBundle,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -1132,3 +1136,58 @@ export const billing = {
       method: "POST",
     }),
 };
+
+export const threatIntelApi = {
+  getStatus: () => request<TaxiiStatus>("/v1/taxii/status"),
+  getDiscovery: () => request<Record<string, any>>("/v1/taxii/discovery"),
+  getApiRoot: () => request<Record<string, any>>("/v1/taxii/api-root"),
+  getCollections: () => request<{ collections: TaxiiCollection[] }>("/v1/taxii/collections"),
+  getCollection: (collectionId: string) =>
+    request<TaxiiCollection>(`/v1/taxii/collections/${collectionId}`),
+  getObjects: (collectionId: string, limit = 50, type?: string) => {
+    let url = `/v1/taxii/collections/${collectionId}/objects?limit=${limit}`;
+    if (type) url += `&match[type]=${encodeURIComponent(type)}`;
+    return request<StixBundle>(url);
+  },
+  getFeeds: () => request<ThreatFeed[]>("/v1/taxii/feeds"),
+  createFeed: (body: {
+    name: string;
+    taxii_url: string;
+    api_root: string;
+    collection_id: string;
+    auth_type?: string;
+    auth_credentials?: string;
+    poll_interval_minutes?: number;
+    enabled?: boolean;
+  }) =>
+    request<ThreatFeed>("/v1/taxii/feeds", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  pollFeed: (feedId: string) =>
+    request<{ feed_id: string; objects_received: number; signatures_created: number; status: string }>(
+      `/v1/taxii/feeds/${feedId}/poll`,
+      { method: "POST" }
+    ),
+  updateFeed: (feedId: string, body: Partial<ThreatFeed>) =>
+    request<ThreatFeed>(`/v1/taxii/feeds/${feedId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteFeed: (feedId: string) =>
+    request<{ status: string; id: string }>(`/v1/taxii/feeds/${feedId}`, {
+      method: "DELETE",
+    }),
+  exportViolations: (limit = 50, severity?: string) => {
+    let url = `/v1/taxii/export/violations?limit=${limit}`;
+    if (severity) url += `&severity=${severity}`;
+    return request<StixBundle>(url);
+  },
+  exportIpsSignatures: () => request<StixBundle>("/v1/taxii/export/ips-signatures"),
+  exportSocAlerts: (limit = 50, severity?: string) => {
+    let url = `/v1/taxii/export/soc-alerts?limit=${limit}`;
+    if (severity) url += `&severity=${severity}`;
+    return request<StixBundle>(url);
+  },
+};
+

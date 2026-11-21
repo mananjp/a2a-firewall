@@ -32,6 +32,7 @@ import {
   UserCheck,
   Workflow,
   CreditCard,
+  Radio,
 } from "lucide-react";
 import { useApiKey } from "@/hooks/use-api-key";
 
@@ -62,6 +63,7 @@ const SECTIONS: NavSection[] = [
       { href: "/dashboard/memory", label: "Memory / RAG Firewall", icon: Brain, badge: "v1.2" },
       { href: "/dashboard/workflows", label: "Multi-Agent Workflows", icon: GitMerge, badge: "v1.2" },
       { href: "/dashboard/dlp", label: "DLP & Tokenization", icon: Lock, badge: "v1.2" },
+      { href: "/dashboard/threat-intel", label: "Threat Intelligence", icon: Radio, badge: "STIX 2.1" },
       { href: "/dashboard/integrations/n8n", label: "n8n Cloud & Nodes", icon: Workflow, badge: "VERIFIED" },
     ],
   },

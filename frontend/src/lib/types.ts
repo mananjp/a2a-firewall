@@ -722,5 +722,54 @@ export interface DlpInspectResult {
   findings: DlpFindingItem[];
 }
 
+// ── STIX / TAXII 2.1 Threat Intelligence ──
+export interface TaxiiStatus {
+  taxii_version: string;
+  stix_version: string;
+  collections: number;
+  total_stix_objects: number;
+  feeds: {
+    total: number;
+    enabled: number;
+    last_poll_status: Record<string, string>;
+  };
+  ips_integration: {
+    total_signatures: number;
+    external_signatures: number;
+    builtin_signatures: number;
+  };
+}
+
+export interface TaxiiCollection {
+  id: string;
+  title: string;
+  description: string;
+  can_read: boolean;
+  can_write: boolean;
+  media_types: string[];
+}
+
+export interface ThreatFeed {
+  id: string;
+  name: string;
+  taxii_url: string;
+  api_root: string;
+  collection_id: string;
+  auth_type: string;
+  poll_interval_minutes: number;
+  enabled: boolean;
+  last_polled_at: string | null;
+  last_poll_status: string | null;
+  objects_received: number;
+  created_at: string;
+}
+
+export interface StixBundle {
+  type: "bundle";
+  id: string;
+  objects: Array<Record<string, any>>;
+}
+
+
 
 
