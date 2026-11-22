@@ -332,6 +332,7 @@ def test_apply_stix_indicators_to_ips():
 async def test_ensure_default_collections_concurrency():
     ws_id = uuid.uuid4()
     db = AsyncMock()
+    db.add = MagicMock()
 
     empty_result = MagicMock()
     empty_result.scalars.return_value.all.return_value = []
@@ -352,8 +353,10 @@ async def test_ensure_default_collections_concurrency():
     populated_result.scalars.return_value.all.return_value = existing_cols
 
     db.execute.side_effect = [empty_result, populated_result]
-    db.begin_nested.return_value.__aenter__.return_value = None
-    db.begin_nested.return_value.__aexit__.return_value = None
+    nested_cm = MagicMock()
+    nested_cm.__aenter__ = AsyncMock(return_value=None)
+    nested_cm.__aexit__ = AsyncMock(return_value=None)
+    db.begin_nested = MagicMock(return_value=nested_cm)
 
     cols = await ensure_default_collections(ws_id, db)
     assert len(cols) == len(DEFAULT_COLLECTIONS)
