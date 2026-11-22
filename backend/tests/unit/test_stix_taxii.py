@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from sqlalchemy.exc import IntegrityError
 
 from a2a_firewall.core.stix_converter import (
     A2A_IDENTITY_ID,
@@ -24,6 +28,7 @@ from a2a_firewall.core.stix_converter import (
 from a2a_firewall.core.taxii_server import (
     DEFAULT_COLLECTIONS,
     TAXII_CONTENT_TYPE,
+    ensure_default_collections,
     taxii_api_root,
     taxii_discovery,
 )
@@ -32,6 +37,7 @@ from a2a_firewall.core.threat_intel_consumer import (
     apply_stix_indicators_to_ips,
     stix_indicator_to_ips_signature,
 )
+from a2a_firewall.db.models import ThreatIntelCollection
 from a2a_firewall.detection.ips_signatures import get_engine
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -320,3 +326,43 @@ def test_apply_stix_indicators_to_ips():
     matches = engine.scan("Notice: transfer payload contains compromised_agent_key_x99 inside.")
     matched_ids = [m["signature_id"] for m in matches]
     assert sig.id in matched_ids
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_collections_concurrency():
+    ws_id = uuid.uuid4()
+    db = AsyncMock()
+
+    empty_result = MagicMock()
+    empty_result.scalars.return_value.all.return_value = []
+
+    existing_cols = [
+        ThreatIntelCollection(
+            id=uuid.uuid4(),
+            workspace_id=ws_id,
+            collection_alias=defn["id"],
+            title=defn["title"],
+            description=defn["description"],
+            can_read=defn["can_read"],
+            can_write=defn["can_write"],
+        )
+        for defn in DEFAULT_COLLECTIONS
+    ]
+    populated_result = MagicMock()
+    populated_result.scalars.return_value.all.return_value = existing_cols
+
+    db.execute.side_effect = [empty_result, populated_result]
+    db.begin_nested.return_value.__aenter__.return_value = None
+    db.begin_nested.return_value.__aexit__.return_value = None
+
+    cols = await ensure_default_collections(ws_id, db)
+    assert len(cols) == len(DEFAULT_COLLECTIONS)
+
+    # Test concurrent collision: simulated IntegrityError on flush
+    db.execute.side_effect = [empty_result, populated_result]
+    db.flush.side_effect = IntegrityError(
+        "duplicate key", params=None, orig=Exception("unique violation")
+    )
+
+    cols_after_race = await ensure_default_collections(ws_id, db)
+    assert len(cols_after_race) == len(DEFAULT_COLLECTIONS)

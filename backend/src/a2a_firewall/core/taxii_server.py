@@ -21,12 +21,16 @@ Content-Type: ``application/taxii+json;version=2.1``
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import desc, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from a2a_firewall.db.models import STIXObject, ThreatIntelCollection
@@ -125,27 +129,72 @@ async def ensure_default_collections(
     )
     existing = {str(c.collection_alias): c for c in result.scalars().all()}
 
-    created: list[ThreatIntelCollection] = []
-    for defn in DEFAULT_COLLECTIONS:
-        alias = defn["id"]
-        if alias not in existing:
-            coll = ThreatIntelCollection(
-                workspace_id=workspace_id,
-                collection_alias=alias,
-                title=defn["title"],
-                description=defn["description"],
-                can_read=defn["can_read"],
-                can_write=defn["can_write"],
-            )
-            db.add(coll)
-            created.append(coll)
-        else:
-            created.append(existing[alias])
+    missing_defs = [defn for defn in DEFAULT_COLLECTIONS if defn["id"] not in existing]
+    if not missing_defs:
+        return [existing[defn["id"]] for defn in DEFAULT_COLLECTIONS if defn["id"] in existing]
 
-    if any(c.id is None for c in created):
-        await db.flush()
+    # Detect database dialect for safe ON CONFLICT handling
+    dialect_name = ""
+    try:
+        bind = getattr(db, "bind", None) or getattr(db.sync_session, "bind", None)
+        if bind and hasattr(bind, "dialect"):
+            dialect_name = getattr(bind.dialect, "name", "")
+    except Exception:
+        pass
 
-    return created
+    now = datetime.now(UTC)
+    values = [
+        {
+            "id": uuid.uuid4(),
+            "workspace_id": workspace_id,
+            "collection_alias": defn["id"],
+            "title": defn["title"],
+            "description": defn["description"],
+            "can_read": defn["can_read"],
+            "can_write": defn["can_write"],
+            "created_at": now,
+        }
+        for defn in missing_defs
+    ]
+
+    try:
+        async with db.begin_nested():
+            if dialect_name == "postgresql" or not dialect_name:
+                pg_stmt = (
+                    pg_insert(ThreatIntelCollection)
+                    .values(values)
+                    .on_conflict_do_nothing(index_elements=["workspace_id", "collection_alias"])
+                )
+                await db.execute(pg_stmt)
+            elif dialect_name == "sqlite":
+                sqlite_stmt = (
+                    sqlite_insert(ThreatIntelCollection)
+                    .values(values)
+                    .on_conflict_do_nothing(index_elements=["workspace_id", "collection_alias"])
+                )
+                await db.execute(sqlite_stmt)
+            else:
+                for val in values:
+                    coll = ThreatIntelCollection(
+                        id=val["id"],
+                        workspace_id=val["workspace_id"],
+                        collection_alias=val["collection_alias"],
+                        title=val["title"],
+                        description=val["description"],
+                        can_read=val["can_read"],
+                        can_write=val["can_write"],
+                        created_at=val["created_at"],
+                    )
+                    db.add(coll)
+            await db.flush()
+    except IntegrityError:
+        # Concurrent request already inserted default collections; savepoint safely rolled back
+        pass
+
+    result = await db.execute(
+        select(ThreatIntelCollection).where(ThreatIntelCollection.workspace_id == workspace_id)
+    )
+    return list(result.scalars().all())
 
 
 async def list_collections(
@@ -154,7 +203,8 @@ async def list_collections(
 ) -> list[dict[str, Any]]:
     """List all TAXII collections for a workspace."""
     collections = await ensure_default_collections(workspace_id, db)
-    await db.commit()
+    with contextlib.suppress(Exception):
+        await db.commit()
     return [
         {
             "id": str(c.id),
@@ -194,6 +244,18 @@ async def get_collection(
         )
 
     coll = result.scalar_one_or_none()
+    if not coll and collection_id in {defn["id"] for defn in DEFAULT_COLLECTIONS}:
+        await ensure_default_collections(workspace_id, db)
+        with contextlib.suppress(Exception):
+            await db.commit()
+        result = await db.execute(
+            select(ThreatIntelCollection).where(
+                ThreatIntelCollection.collection_alias == collection_id,
+                ThreatIntelCollection.workspace_id == workspace_id,
+            )
+        )
+        coll = result.scalar_one_or_none()
+
     if not coll:
         return None
 
@@ -235,6 +297,17 @@ async def _resolve_collection_id(
             )
         )
     row = result.scalar_one_or_none()
+    if row is None and collection_id in {defn["id"] for defn in DEFAULT_COLLECTIONS}:
+        await ensure_default_collections(workspace_id, db)
+        with contextlib.suppress(Exception):
+            await db.commit()
+        result = await db.execute(
+            select(ThreatIntelCollection.id).where(
+                ThreatIntelCollection.collection_alias == collection_id,
+                ThreatIntelCollection.workspace_id == workspace_id,
+            )
+        )
+        row = result.scalar_one_or_none()
     return row
 
 
